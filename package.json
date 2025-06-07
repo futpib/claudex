@@ -20,6 +20,9 @@
     },
     "verbose": true
   },
+  "bin": {
+    "claudex": "./build/cli.js"
+  },
   "devDependencies": {
     "@ava/typescript": "^5.0.0",
     "@types/invariant": "^2",

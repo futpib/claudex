@@ -72,7 +72,7 @@ async function checkForClaudeCodeUpdate() {
 	await execaYarnHome('global', 'upgrade', '--latest', '@anthropic-ai/claude-code');
 }
 
-async function main() {
+export async function main() {
 	const claudeChildProcess = execa('claude', {
 		stdin: process.stdin,
 		stdout: process.stdout,
@@ -85,5 +85,3 @@ async function main() {
 		await checkForClaudeCodeUpdate();
 	}
 }
-
-await main();
