@@ -768,6 +768,8 @@ __metadata:
     typescript: "npm:^5.8.3"
     xo: "npm:^1.0.5"
     zod: "npm:^3.25.56"
+  bin:
+    claudex: ./build/cli.js
   languageName: unknown
   linkType: soft
 
