@@ -35,6 +35,7 @@
   },
   "packageManager": "yarn@4.9.2",
   "dependencies": {
+    "env-paths": "^3.0.0",
     "eslint-config-xo-typescript-overrides": "^2.0.2",
     "invariant": "^2.2.4",
     "zod": "^3.25.56"
