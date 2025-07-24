@@ -40,6 +40,21 @@ const readToolInputSchema = z.object({
 	limit: z.number().optional(),
 });
 
+const grepToolInputSchema = z.object({
+	pattern: z.string(),
+	path: z.string().optional(),
+	output_mode: z.string().optional(),
+	glob: z.string().optional(),
+	type: z.string().optional(),
+	head_limit: z.number().optional(),
+	multiline: z.boolean().optional(),
+	'-A': z.number().optional(),
+	'-B': z.number().optional(),
+	'-C': z.number().optional(),
+	'-i': z.boolean().optional(),
+	'-n': z.boolean().optional(),
+});
+
 const baseToolInputSchema = z.object({
 	session_id: z.string(),
 	transcript_path: z.string(),
@@ -51,6 +66,7 @@ const toolInputSchema = baseToolInputSchema.and(z.union([
 	z.object({ tool_name: z.literal('Write'), tool_input: writeToolInputSchema }),
 	z.object({ tool_name: z.literal('Bash'), tool_input: bashToolInputSchema }),
 	z.object({ tool_name: z.literal('Read'), tool_input: readToolInputSchema }),
+	z.object({ tool_name: z.literal('Grep'), tool_input: grepToolInputSchema }),
 	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
 	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
 ]));
