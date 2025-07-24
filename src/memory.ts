@@ -1,6 +1,7 @@
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import fsSync from 'node:fs';
 import envPaths from 'env-paths';
 import { isErrnoException } from './utils.js';
 
@@ -101,8 +102,7 @@ export async function createClaudeCodeMemory() {
 		for (const file of filesInMemoryDirectory) {
 			yield `# ${prettifyPath(file)}\n\n`;
 
-			const fileContent = await fs.readFile(file, 'utf8');
-			yield fileContent;
+			yield * fsSync.createReadStream(file, 'utf8');
 			yield '\n\n';
 		}
 	})());
