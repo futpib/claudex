@@ -38,12 +38,13 @@ const baseToolInputSchema = z.object({
 	transcript_path: z.string(),
 });
 
-const toolInputSchema = baseToolInputSchema.and(z.discriminatedUnion('tool_name', [
+const toolInputSchema = baseToolInputSchema.and(z.union([
 	z.object({ tool_name: z.literal('Edit'), tool_input: editToolInputSchema }),
 	z.object({ tool_name: z.literal('MultiEdit'), tool_input: multiEditToolInputSchema }),
 	z.object({ tool_name: z.literal('Write'), tool_input: writeToolInputSchema }),
 	z.object({ tool_name: z.literal('Bash'), tool_input: bashToolInputSchema }),
-	z.object({ tool_name: z.string(), tool_input: z.record(z.string(), z.unknown()) }),
+	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
+	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
 ]));
 
 type ToolInput = z.infer<typeof toolInputSchema>;
@@ -52,9 +53,7 @@ async function main() {
 	const input = await readStdin();
 	const toolInput = toolInputSchema.parse(parseJson(input));
 	const toolName = toolInput.tool_name ?? '';
-	const command = (toolInput.tool_name === 'Bash' && 'command' in toolInput.tool_input)
-		? toolInput.tool_input.command
-		: '';
+	const command = toolInput.tool_name === 'Bash' ? toolInput.tool_input.command : '';
 	const sessionId = toolInput.session_id ?? '';
 	const transcriptPath = toolInput.transcript_path ?? '';
 
