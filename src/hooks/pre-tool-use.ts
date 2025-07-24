@@ -34,6 +34,12 @@ const bashToolInputSchema = z.object({
 	timeout: z.number().optional(),
 });
 
+const readToolInputSchema = z.object({
+	file_path: z.string(),
+	offset: z.number().optional(),
+	limit: z.number().optional(),
+});
+
 const baseToolInputSchema = z.object({
 	session_id: z.string(),
 	transcript_path: z.string(),
@@ -44,6 +50,7 @@ const toolInputSchema = baseToolInputSchema.and(z.union([
 	z.object({ tool_name: z.literal('MultiEdit'), tool_input: multiEditToolInputSchema }),
 	z.object({ tool_name: z.literal('Write'), tool_input: writeToolInputSchema }),
 	z.object({ tool_name: z.literal('Bash'), tool_input: bashToolInputSchema }),
+	z.object({ tool_name: z.literal('Read'), tool_input: readToolInputSchema }),
 	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
 	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
 ]));
