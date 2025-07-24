@@ -2,13 +2,19 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { execa } from 'execa';
-
 import { isErrnoException } from './utils.js';
 
 type ClaudeSettings = {
 	includeCoAuthoredBy?: boolean;
 	hooks?: {
 		PreToolUse?: Array<{
+			matcher: string;
+			hooks: Array<{
+				type: string;
+				command: string;
+			}>;
+		}>;
+		UserPromptSubmit?: Array<{
 			matcher: string;
 			hooks: Array<{
 				type: string;
@@ -34,27 +40,66 @@ export async function ensureHookSetup() {
 		}
 	}
 
-	const result = await execa('which', [ 'claudex-hook-pre-tool-use' ]);
-	const hookPath = result.stdout.trim();
+	const hookPaths: { preToolUse?: string; userPromptSubmit?: string } = {};
 
-	settings.hooks ||= {};
+	try {
+		const result = await execa('which', [ 'claudex-hook-pre-tool-use' ]);
+		hookPaths.preToolUse = result.stdout.trim();
+	} catch {}
 
-	if (!settings.hooks.PreToolUse) {
-		settings.hooks.PreToolUse = [];
+	try {
+		const result = await execa('which', [ 'claudex-hook-user-prompt-submit' ]);
+		hookPaths.userPromptSubmit = result.stdout.trim();
+	} catch {}
+
+	if (!hookPaths.preToolUse && !hookPaths.userPromptSubmit) {
+		return;
 	}
 
-	const hasHook = settings.hooks.PreToolUse.some(entry =>
-		entry.hooks.some(hook => hook.command === hookPath));
+	settings.hooks ||= {};
+	let needsUpdate = false;
 
-	if (!hasHook) {
-		settings.hooks.PreToolUse.push({
-			matcher: '.*',
-			hooks: [ {
-				type: 'command',
-				command: hookPath,
-			} ],
-		});
+	if (hookPaths.preToolUse) {
+		if (!settings.hooks.PreToolUse) {
+			settings.hooks.PreToolUse = [];
+		}
 
+		const hasPreToolUseHook = settings.hooks.PreToolUse.some(entry =>
+			entry.hooks.some(hook => hook.command === hookPaths.preToolUse));
+
+		if (!hasPreToolUseHook) {
+			settings.hooks.PreToolUse.push({
+				matcher: '.*',
+				hooks: [ {
+					type: 'command',
+					command: hookPaths.preToolUse,
+				} ],
+			});
+			needsUpdate = true;
+		}
+	}
+
+	if (hookPaths.userPromptSubmit) {
+		if (!settings.hooks.UserPromptSubmit) {
+			settings.hooks.UserPromptSubmit = [];
+		}
+
+		const hasUserPromptSubmitHook = settings.hooks.UserPromptSubmit.some(entry =>
+			entry.hooks.some(hook => hook.command === hookPaths.userPromptSubmit));
+
+		if (!hasUserPromptSubmitHook) {
+			settings.hooks.UserPromptSubmit.push({
+				matcher: '.*',
+				hooks: [ {
+					type: 'command',
+					command: hookPaths.userPromptSubmit,
+				} ],
+			});
+			needsUpdate = true;
+		}
+	}
+
+	if (needsUpdate) {
 		await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
 	}
 }

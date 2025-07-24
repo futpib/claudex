@@ -22,7 +22,8 @@
   },
   "bin": {
     "claudex": "./build/cli.js",
-    "claudex-hook-pre-tool-use": "./build/hooks/pre-tool-use.js"
+    "claudex-hook-pre-tool-use": "./build/hooks/pre-tool-use.js",
+    "claudex-hook-user-prompt-submit": "./build/hooks/user-prompt-submit.js"
   },
   "devDependencies": {
     "@ava/typescript": "^5.0.0",

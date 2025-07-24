@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import process from 'node:process';
-import { execa } from 'execa';
+import { readStdin, formatTranscriptInfo, logMessage } from './shared.js';
 
 type EditToolInput = {
 	file_path: string;
@@ -36,21 +36,15 @@ type BaseToolInput = {
 };
 
 type ToolInput = BaseToolInput & (
-	| { tool_name: 'Edit'; tool_input: EditToolInput }
-	| { tool_name: 'MultiEdit'; tool_input: MultiEditToolInput }
-	| { tool_name: 'Write'; tool_input: WriteToolInput }
-	| { tool_name: 'Bash'; tool_input: BashToolInput }
-	| { tool_name: string; tool_input: Record<string, any> }
+	| {tool_name: 'Edit'; tool_input: EditToolInput}
+	| {tool_name: 'MultiEdit'; tool_input: MultiEditToolInput}
+	| {tool_name: 'Write'; tool_input: WriteToolInput}
+	| {tool_name: 'Bash'; tool_input: BashToolInput}
+	| {tool_name: string; tool_input: Record<string, any>}
 );
 
 async function main() {
-	let input = '';
-	process.stdin.setEncoding('utf8');
-
-	for await (const chunk of process.stdin) {
-		input += chunk;
-	}
-
+	const input = await readStdin();
 	const toolInput: ToolInput = JSON.parse(input);
 	const toolName = toolInput.tool_name || '';
 	const command = (toolInput as any).tool_input?.command || '';
@@ -66,16 +60,9 @@ async function main() {
 		const logInput = filteredInput.tool_input;
 
 		const toolInputString = JSON.stringify(logInput);
-		const transcriptInfo = transcriptPath.includes(sessionId) ? '' : `, Transcript: ${transcriptPath}`;
-		const logMessage = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
-
-		try {
-			await execa('systemd-cat', [ '-t', 'claude-code', '-p', 'info' ], {
-				input: logMessage,
-			});
-		} catch {
-			console.error(`[claude-code] ${logMessage}`);
-		}
+		const transcriptInfo = formatTranscriptInfo(sessionId, transcriptPath);
+		const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
+		await logMessage(message);
 	} catch {}
 
 	if (toolName === 'Bash' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
