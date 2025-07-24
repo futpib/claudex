@@ -2,6 +2,7 @@ import os from 'node:os';
 import { execa } from 'execa';
 import { z } from 'zod';
 import invariant from 'invariant';
+import { parseJson } from './utils.js';
 
 const claudeCodePackageName = '@anthropic-ai/claude-code';
 
@@ -22,20 +23,20 @@ async function execaYarnHome(...args: string[]) {
 	});
 }
 
-async function execaYarnHomeJson<T>(...args: string[]): Promise<T> {
+async function execaYarnHomeJson(...args: string[]): Promise<unknown> {
 	const result = await execa('yarn', [ '--json', ...args ], {
 		cwd: os.homedir(),
 	});
 
-	return JSON.parse(result.stdout);
+	return parseJson(result.stdout);
 }
 
-async function execaYarnHomeJsonLines<T>(...args: string[]): Promise<T[]> {
+async function execaYarnHomeJsonLines(...args: string[]): Promise<unknown[]> {
 	const result = await execa('yarn', [ '--json', ...args ], {
 		cwd: os.homedir(),
 	});
 
-	return result.stdout.split('\n').map(line => JSON.parse(line));
+	return result.stdout.split('\n').map(line => parseJson(line));
 }
 
 export async function checkForClaudeCodeUpdate() {

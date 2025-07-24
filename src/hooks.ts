@@ -1,28 +1,30 @@
+/* eslint-disable @typescript-eslint/naming-convention */
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { z } from 'zod';
 import { execa } from 'execa';
-import { isErrnoException } from './utils.js';
+import { isErrnoException, parseJson } from './utils.js';
 
-type ClaudeSettings = {
-	includeCoAuthoredBy?: boolean;
-	hooks?: {
-		PreToolUse?: Array<{
-			matcher: string;
-			hooks: Array<{
-				type: string;
-				command: string;
-			}>;
-		}>;
-		UserPromptSubmit?: Array<{
-			matcher: string;
-			hooks: Array<{
-				type: string;
-				command: string;
-			}>;
-		}>;
-	};
-};
+const hookEntrySchema = z.object({
+	type: z.string(),
+	command: z.string(),
+});
+
+const hookGroupSchema = z.object({
+	matcher: z.string(),
+	hooks: z.array(hookEntrySchema),
+});
+
+const claudeSettingsSchema = z.object({
+	includeCoAuthoredBy: z.boolean().optional(),
+	hooks: z.object({
+		PreToolUse: z.array(hookGroupSchema).optional(),
+		UserPromptSubmit: z.array(hookGroupSchema).optional(),
+	}).optional(),
+});
+
+type ClaudeSettings = z.infer<typeof claudeSettingsSchema>;
 
 async function findHookPath(command: string): Promise<string | undefined> {
 	try {
@@ -68,7 +70,7 @@ export async function ensureHookSetup() {
 	let settings: ClaudeSettings = {};
 	try {
 		const content = await fs.readFile(settingsPath, 'utf8');
-		settings = JSON.parse(content);
+		settings = claudeSettingsSchema.parse(parseJson(content));
 	} catch (error) {
 		if (!(isErrnoException(error) && error.code === 'ENOENT')) {
 			throw error;

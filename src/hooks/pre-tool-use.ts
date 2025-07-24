@@ -1,51 +1,56 @@
 #!/usr/bin/env node
+/* eslint-disable @typescript-eslint/naming-convention */
 
 import process from 'node:process';
+import { z } from 'zod';
+import { parseJson } from '../utils.js';
 import { readStdin, formatTranscriptInfo, logMessage } from './shared.js';
 
-type EditToolInput = {
-	file_path: string;
-	old_string: string;
-	new_string: string;
-	replace_all?: boolean;
-};
+const editToolInputSchema = z.object({
+	file_path: z.string(),
+	old_string: z.string(),
+	new_string: z.string(),
+	replace_all: z.boolean().optional(),
+});
 
-type MultiEditToolInput = {
-	file_path: string;
-	edits: Array<{
-		old_string: string;
-		new_string: string;
-		replace_all?: boolean;
-	}>;
-};
+const multiEditToolInputSchema = z.object({
+	file_path: z.string(),
+	edits: z.array(z.object({
+		old_string: z.string(),
+		new_string: z.string(),
+		replace_all: z.boolean().optional(),
+	})),
+});
 
-type WriteToolInput = {
-	file_path: string;
-	content: string;
-};
+const writeToolInputSchema = z.object({
+	file_path: z.string(),
+	content: z.string(),
+});
 
-type BashToolInput = {
-	command: string;
-	description?: string;
-	timeout?: number;
-};
+const bashToolInputSchema = z.object({
+	command: z.string(),
+	description: z.string().optional(),
+	timeout: z.number().optional(),
+});
 
-type BaseToolInput = {
-	session_id: string;
-	transcript_path: string;
-};
+const baseToolInputSchema = z.object({
+	session_id: z.string(),
+	transcript_path: z.string(),
+});
 
-type ToolInput = BaseToolInput & (
-	| { tool_name: 'Edit'; tool_input: EditToolInput }
-	| { tool_name: 'MultiEdit'; tool_input: MultiEditToolInput }
-	| { tool_name: 'Write'; tool_input: WriteToolInput }
-	| { tool_name: 'Bash'; tool_input: BashToolInput }
-	| { tool_name: string; tool_input: Record<string, any> }
-);
+const toolInputSchema = baseToolInputSchema.and(z.discriminatedUnion('tool_name', [
+	z.object({ tool_name: z.literal('Edit'), tool_input: editToolInputSchema }),
+	z.object({ tool_name: z.literal('MultiEdit'), tool_input: multiEditToolInputSchema }),
+	z.object({ tool_name: z.literal('Write'), tool_input: writeToolInputSchema }),
+	z.object({ tool_name: z.literal('Bash'), tool_input: bashToolInputSchema }),
+	z.object({ tool_name: z.string(), tool_input: z.record(z.unknown()) }),
+]));
+
+type ToolInput = z.infer<typeof toolInputSchema>;
 
 async function main() {
 	const input = await readStdin();
-	const toolInput: ToolInput = JSON.parse(input);
+	const toolInput = toolInputSchema.parse(parseJson(input));
 	const toolName = toolInput.tool_name ?? '';
 	const command = (toolInput as any).tool_input?.command ?? '';
 	const sessionId = toolInput.session_id ?? '';
