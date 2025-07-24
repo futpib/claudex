@@ -24,6 +24,41 @@ type ClaudeSettings = {
 	};
 };
 
+async function findHookPath(command: string): Promise<string | undefined> {
+	try {
+		const result = await execa('which', [ command ]);
+		return result.stdout.trim();
+	} catch {
+		return undefined;
+	}
+}
+
+async function setupHook(
+	settings: ClaudeSettings,
+	hookType: 'PreToolUse' | 'UserPromptSubmit',
+	hookPath: string,
+): Promise<boolean> {
+	if (!settings.hooks![hookType]) {
+		settings.hooks![hookType] = [];
+	}
+
+	const hasHook = settings.hooks![hookType].some(entry =>
+		entry.hooks.some(hook => hook.command === hookPath));
+
+	if (!hasHook) {
+		settings.hooks![hookType].push({
+			matcher: '.*',
+			hooks: [ {
+				type: 'command',
+				command: hookPath,
+			} ],
+		});
+		return true;
+	}
+
+	return false;
+}
+
 export async function ensureHookSetup() {
 	const claudeDir = path.join(os.homedir(), '.claude');
 	const settingsPath = path.join(claudeDir, 'settings.json');
@@ -40,63 +75,24 @@ export async function ensureHookSetup() {
 		}
 	}
 
-	const hookPaths: { preToolUse?: string; userPromptSubmit?: string } = {};
+	const [ preToolUsePath, userPromptSubmitPath ] = await Promise.all([
+		findHookPath('claudex-hook-pre-tool-use'),
+		findHookPath('claudex-hook-user-prompt-submit'),
+	]);
 
-	try {
-		const result = await execa('which', [ 'claudex-hook-pre-tool-use' ]);
-		hookPaths.preToolUse = result.stdout.trim();
-	} catch {}
-
-	try {
-		const result = await execa('which', [ 'claudex-hook-user-prompt-submit' ]);
-		hookPaths.userPromptSubmit = result.stdout.trim();
-	} catch {}
-
-	if (!hookPaths.preToolUse && !hookPaths.userPromptSubmit) {
+	if (!preToolUsePath && !userPromptSubmitPath) {
 		return;
 	}
 
 	settings.hooks ||= {};
 	let needsUpdate = false;
 
-	if (hookPaths.preToolUse) {
-		if (!settings.hooks.PreToolUse) {
-			settings.hooks.PreToolUse = [];
-		}
-
-		const hasPreToolUseHook = settings.hooks.PreToolUse.some(entry =>
-			entry.hooks.some(hook => hook.command === hookPaths.preToolUse));
-
-		if (!hasPreToolUseHook) {
-			settings.hooks.PreToolUse.push({
-				matcher: '.*',
-				hooks: [ {
-					type: 'command',
-					command: hookPaths.preToolUse,
-				} ],
-			});
-			needsUpdate = true;
-		}
+	if (preToolUsePath) {
+		needsUpdate = await setupHook(settings, 'PreToolUse', preToolUsePath) || needsUpdate;
 	}
 
-	if (hookPaths.userPromptSubmit) {
-		if (!settings.hooks.UserPromptSubmit) {
-			settings.hooks.UserPromptSubmit = [];
-		}
-
-		const hasUserPromptSubmitHook = settings.hooks.UserPromptSubmit.some(entry =>
-			entry.hooks.some(hook => hook.command === hookPaths.userPromptSubmit));
-
-		if (!hasUserPromptSubmitHook) {
-			settings.hooks.UserPromptSubmit.push({
-				matcher: '.*',
-				hooks: [ {
-					type: 'command',
-					command: hookPaths.userPromptSubmit,
-				} ],
-			});
-			needsUpdate = true;
-		}
+	if (userPromptSubmitPath) {
+		needsUpdate = await setupHook(settings, 'UserPromptSubmit', userPromptSubmitPath) || needsUpdate;
 	}
 
 	if (needsUpdate) {
