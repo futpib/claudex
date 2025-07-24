@@ -6,7 +6,7 @@ export async function readStdin(): Promise<string> {
 	process.stdin.setEncoding('utf8');
 
 	for await (const chunk of process.stdin) {
-		input += chunk;
+		input += String(chunk);
 	}
 
 	return input;

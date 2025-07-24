@@ -43,7 +43,7 @@ const toolInputSchema = baseToolInputSchema.and(z.discriminatedUnion('tool_name'
 	z.object({ tool_name: z.literal('MultiEdit'), tool_input: multiEditToolInputSchema }),
 	z.object({ tool_name: z.literal('Write'), tool_input: writeToolInputSchema }),
 	z.object({ tool_name: z.literal('Bash'), tool_input: bashToolInputSchema }),
-	z.object({ tool_name: z.string(), tool_input: z.record(z.unknown()) }),
+	z.object({ tool_name: z.string(), tool_input: z.record(z.string(), z.unknown()) }),
 ]));
 
 type ToolInput = z.infer<typeof toolInputSchema>;
@@ -52,7 +52,9 @@ async function main() {
 	const input = await readStdin();
 	const toolInput = toolInputSchema.parse(parseJson(input));
 	const toolName = toolInput.tool_name ?? '';
-	const command = (toolInput as any).tool_input?.command ?? '';
+	const command = (toolInput.tool_name === 'Bash' && 'command' in toolInput.tool_input)
+		? toolInput.tool_input.command
+		: '';
 	const sessionId = toolInput.session_id ?? '';
 	const transcriptPath = toolInput.transcript_path ?? '';
 
@@ -62,15 +64,14 @@ async function main() {
 
 	try {
 		const filteredInput = omitLongFields(toolInput);
-		const logInput = filteredInput.tool_input;
 
-		const toolInputString = JSON.stringify(logInput);
+		const toolInputString = JSON.stringify(filteredInput);
 		const transcriptInfo = formatTranscriptInfo(sessionId, transcriptPath);
 		const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
 		await logMessage(message);
 	} catch {}
 
-	if (toolName === 'Bash' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
+	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
 		const markerPattern = /x-claude-code-actually-co-authored:\s*\d{4}/i;
 		if (markerPattern.test(command)) {
 			process.exit(0);
@@ -89,7 +90,7 @@ async function main() {
 	process.exit(0);
 }
 
-function omitLongFields(input: ToolInput): ToolInput {
+function omitLongFields(input: ToolInput): unknown {
 	if (input.tool_name === 'Edit') {
 		return {
 			...input,
@@ -98,7 +99,7 @@ function omitLongFields(input: ToolInput): ToolInput {
 				old_string: '__OMITTED__',
 				new_string: '__OMITTED__',
 			},
-		} as any;
+		};
 	}
 
 	if (input.tool_name === 'MultiEdit') {
@@ -108,7 +109,7 @@ function omitLongFields(input: ToolInput): ToolInput {
 				...input.tool_input,
 				edits: '__OMITTED__',
 			},
-		} as any;
+		};
 	}
 
 	if (input.tool_name === 'Write') {
@@ -118,7 +119,7 @@ function omitLongFields(input: ToolInput): ToolInput {
 				...input.tool_input,
 				content: '__OMITTED__',
 			},
-		} as any;
+		};
 	}
 
 	return input;
