@@ -36,11 +36,11 @@ type BaseToolInput = {
 };
 
 type ToolInput = BaseToolInput & (
-	| {tool_name: 'Edit'; tool_input: EditToolInput}
-	| {tool_name: 'MultiEdit'; tool_input: MultiEditToolInput}
-	| {tool_name: 'Write'; tool_input: WriteToolInput}
-	| {tool_name: 'Bash'; tool_input: BashToolInput}
-	| {tool_name: string; tool_input: Record<string, any>}
+	| { tool_name: 'Edit'; tool_input: EditToolInput }
+	| { tool_name: 'MultiEdit'; tool_input: MultiEditToolInput }
+	| { tool_name: 'Write'; tool_input: WriteToolInput }
+	| { tool_name: 'Bash'; tool_input: BashToolInput }
+	| { tool_name: string; tool_input: Record<string, any> }
 );
 
 async function main() {
