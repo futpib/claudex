@@ -3,8 +3,9 @@
 
 import process from 'node:process';
 import { z } from 'zod';
-import { parseJson } from '../utils.js';
-import { readStdin, formatTranscriptInfo, logMessage } from './shared.js';
+import {
+	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
+} from './shared.js';
 
 const editToolInputSchema = z.object({
 	file_path: z.string(),
@@ -51,7 +52,7 @@ type ToolInput = z.infer<typeof toolInputSchema>;
 
 async function main() {
 	const input = await readStdin();
-	const toolInput = toolInputSchema.parse(parseJson(input));
+	const toolInput = parseJsonWithSchema(input, toolInputSchema);
 	const toolName = toolInput.tool_name ?? '';
 	const command = toolInput.tool_name === 'Bash' ? toolInput.tool_input.command : '';
 	const sessionId = toolInput.session_id ?? '';

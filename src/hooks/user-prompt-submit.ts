@@ -3,8 +3,9 @@
 
 import process from 'node:process';
 import { z } from 'zod';
-import { parseJson } from '../utils.js';
-import { readStdin, formatTranscriptInfo, logMessage } from './shared.js';
+import {
+	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema,
+} from './shared.js';
 
 const userPromptSubmitInputSchema = z.object({
 	session_id: z.string(),
@@ -16,7 +17,7 @@ const userPromptSubmitInputSchema = z.object({
 
 async function main() {
 	const input = await readStdin();
-	const hookInput = userPromptSubmitInputSchema.parse(parseJson(input));
+	const hookInput = parseJsonWithSchema(input, userPromptSubmitInputSchema);
 	const sessionId = hookInput.session_id || '';
 	const transcriptPath = hookInput.transcript_path || '';
 	const prompt = hookInput.prompt || '';
