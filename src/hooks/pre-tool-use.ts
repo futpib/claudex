@@ -55,6 +55,10 @@ const grepToolInputSchema = z.object({
 	'-n': z.boolean().optional(),
 });
 
+const exitPlanModeToolInputSchema = z.object({
+	plan: z.string(),
+});
+
 const baseToolInputSchema = z.object({
 	session_id: z.string(),
 	transcript_path: z.string(),
@@ -67,6 +71,7 @@ const toolInputSchema = baseToolInputSchema.and(z.union([
 	z.object({ tool_name: z.literal('Bash'), tool_input: bashToolInputSchema }),
 	z.object({ tool_name: z.literal('Read'), tool_input: readToolInputSchema }),
 	z.object({ tool_name: z.literal('Grep'), tool_input: grepToolInputSchema }),
+	z.object({ tool_name: z.literal('ExitPlanMode'), tool_input: exitPlanModeToolInputSchema }),
 	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
 	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
 ]));
