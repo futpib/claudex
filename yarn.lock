@@ -753,27 +753,6 @@ __metadata:
   languageName: node
   linkType: hard
 
-"TODO@workspace:.":
-  version: 0.0.0-use.local
-  resolution: "TODO@workspace:."
-  dependencies:
-    "@ava/typescript": "npm:^5.0.0"
-    "@types/invariant": "npm:^2"
-    "@types/node": "npm:^22.15.30"
-    ava: "npm:^6.3.0"
-    c8: "npm:^10.1.3"
-    coveralls: "npm:^3.1.1"
-    env-paths: "npm:^3.0.0"
-    eslint-config-xo-typescript-overrides: "npm:^2.0.2"
-    invariant: "npm:^2.2.4"
-    typescript: "npm:^5.8.3"
-    xo: "npm:^1.0.5"
-    zod: "npm:^3.25.56"
-  bin:
-    claudex: ./build/cli.js
-  languageName: unknown
-  linkType: soft
-
 "abbrev@npm:^3.0.0":
   version: 3.0.1
   resolution: "abbrev@npm:3.0.1"
@@ -1346,6 +1325,29 @@ __metadata:
   checksum: 10/ae859831f7e8e3585db731b8306c336616e37bd709dad1d7775ea4c0731aefd94741dabb48201edc6827d000008fd7fb72cb977967614ee2d99d6b499f0c35fe
   languageName: node
   linkType: hard
+
+"claudex@workspace:.":
+  version: 0.0.0-use.local
+  resolution: "claudex@workspace:."
+  dependencies:
+    "@ava/typescript": "npm:^5.0.0"
+    "@types/invariant": "npm:^2"
+    "@types/node": "npm:^22.15.30"
+    ava: "npm:^6.3.0"
+    c8: "npm:^10.1.3"
+    coveralls: "npm:^3.1.1"
+    env-paths: "npm:^3.0.0"
+    eslint-config-xo-typescript-overrides: "npm:^2.0.2"
+    execa: "npm:^9.6.0"
+    invariant: "npm:^2.2.4"
+    typescript: "npm:^5.8.3"
+    xo: "npm:^1.0.5"
+    zod: "npm:^3.25.56"
+  bin:
+    claudex: ./build/cli.js
+    claudex-hook-pre-tool-use: ./build/hooks/pre-tool-use.js
+  languageName: unknown
+  linkType: soft
 
 "clean-regexp@npm:^1.0.0":
   version: 1.0.0
@@ -2463,7 +2465,7 @@ __metadata:
   languageName: node
   linkType: hard
 
-"execa@npm:^9.3.0":
+"execa@npm:^9.3.0, execa@npm:^9.6.0":
   version: 9.6.0
   resolution: "execa@npm:9.6.0"
   dependencies:

@@ -1,8 +1,8 @@
 {
-  "name": "TODO",
+  "name": "claudex",
   "version": "1.0.0",
   "main": "build/index.js",
-  "license": "TODO",
+  "license": "claudex",
   "type": "module",
   "scripts": {
     "dev": "tsc --watch",
@@ -10,7 +10,7 @@
     "test": "xo && c8 ava",
     "prepack": "yarn build"
   },
-  "homepage": "https://github.com/futpib/TODO",
+  "homepage": "https://github.com/futpib/claudex",
   "ava": {
     "typescript": {
       "rewritePaths": {
@@ -21,7 +21,8 @@
     "verbose": true
   },
   "bin": {
-    "claudex": "./build/cli.js"
+    "claudex": "./build/cli.js",
+    "claudex-hook-pre-tool-use": "./build/hooks/pre-tool-use.js"
   },
   "devDependencies": {
     "@ava/typescript": "^5.0.0",
@@ -37,6 +38,7 @@
   "dependencies": {
     "env-paths": "^3.0.0",
     "eslint-config-xo-typescript-overrides": "^2.0.2",
+    "execa": "^9.6.0",
     "invariant": "^2.2.4",
     "zod": "^3.25.56"
   }

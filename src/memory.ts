@@ -1,7 +1,9 @@
-import envPaths from 'env-paths';
 import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
+import envPaths from 'env-paths';
+
+import { isErrnoException } from './utils.js';
 
 const paths = envPaths('claudex', {
 	suffix: '',
@@ -26,9 +28,6 @@ const DO_NOT_EDIT_THIS_FILE_MESSAGE = [
 	`Edit files in ${prettifyPath(claudexMemoryDirectoryPath)} instead.`,
 ].join('\n');
 
-function isErrnoException(error: unknown): error is NodeJS.ErrnoException {
-	return error instanceof Error && 'code' in error;
-}
 
 async function fileExists(filePath: string): Promise<boolean> {
 	try {
@@ -38,6 +37,7 @@ async function fileExists(filePath: string): Promise<boolean> {
 		if (isErrnoException(error) && error.code === 'ENOENT') {
 			return false;
 		}
+
 		throw error;
 	}
 }
@@ -52,9 +52,9 @@ async function getFilesInClaudexMemoryDirectory(): Promise<string[]> {
 			.filter(entry => (
 				(
 					entry.isFile()
-						|| entry.isSymbolicLink()
+					|| entry.isSymbolicLink()
 				)
-					&& entry.name.endsWith('.md')
+				&& entry.name.endsWith('.md')
 			))
 			.sort((a, b) => a.name.localeCompare(b.name))
 			.map(entry => path.join(entry.parentPath, entry.name))
@@ -71,6 +71,7 @@ async function shouldBackupClaudeCodeMemory(): Promise<boolean> {
 		if (isErrnoException(error) && error.code === 'ENOENT') {
 			return false;
 		}
+
 		throw error;
 	}
 }
@@ -79,7 +80,7 @@ async function backupClaudeCodeMemory(): Promise<void> {
 	const backupPath = path.join(path.dirname(claudeCodeMemoryPath), 'CLAUDE.md.bak');
 
 	if (await fileExists(backupPath)) {
-		const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+		const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
 		const timestampedBackupPath = `${backupPath}.${timestamp}`;
 		await fs.rename(claudeCodeMemoryPath, timestampedBackupPath);
 	} else {

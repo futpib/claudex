@@ -1,5 +1,4 @@
 import os from 'node:os';
-
 import { execa } from 'execa';
 import { z } from 'zod';
 import invariant from 'invariant';
@@ -52,7 +51,7 @@ export async function checkForClaudeCodeUpdate() {
 					return [];
 				}
 
-				return [safeParseResult.data];
+				return [ safeParseResult.data ];
 			})
 			.find(entry => entry.data.includes(CLAUDE_CODE_PACKAGE_NAME))
 	);
