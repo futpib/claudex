@@ -124,7 +124,4 @@ function omitLongFields(input: ToolInput): ToolInput {
 	return input;
 }
 
-main().catch((error: unknown) => {
-	console.error('Error in pre-tool-use hook:', error);
-	process.exit(1);
-});
+await main();

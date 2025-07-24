@@ -28,7 +28,4 @@ async function main() {
 	process.exit(0);
 }
 
-main().catch((error: unknown) => {
-	console.error('Error in user-prompt-submit hook:', error);
-	process.exit(1);
-});
+await main();
