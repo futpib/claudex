@@ -121,36 +121,27 @@ async function main() {
 function omitLongFields(input: ToolInput): unknown {
 	if (input.tool_name === 'Edit') {
 		return {
-			...input,
-			tool_input: {
-				...input.tool_input,
-				old_string: '__OMITTED__',
-				new_string: '__OMITTED__',
-			},
+			...input.tool_input,
+			old_string: '__OMITTED__',
+			new_string: '__OMITTED__',
 		};
 	}
 
 	if (input.tool_name === 'MultiEdit') {
 		return {
-			...input,
-			tool_input: {
-				...input.tool_input,
-				edits: '__OMITTED__',
-			},
+			...input.tool_input,
+			edits: '__OMITTED__',
 		};
 	}
 
 	if (input.tool_name === 'Write') {
 		return {
-			...input,
-			tool_input: {
-				...input.tool_input,
-				content: '__OMITTED__',
-			},
+			...input.tool_input,
+			content: '__OMITTED__',
 		};
 	}
 
-	return input;
+	return input.tool_input;
 }
 
 await main();
