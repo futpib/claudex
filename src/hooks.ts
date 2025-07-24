@@ -84,7 +84,7 @@ export async function ensureHookSetup() {
 		return;
 	}
 
-	settings.hooks ||= {};
+	settings.hooks ??= {};
 	let needsUpdate = false;
 
 	if (preToolUsePath) {

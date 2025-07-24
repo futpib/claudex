@@ -3,7 +3,7 @@ import { execa } from 'execa';
 import { z } from 'zod';
 import invariant from 'invariant';
 
-const CLAUDE_CODE_PACKAGE_NAME = '@anthropic-ai/claude-code';
+const claudeCodePackageName = '@anthropic-ai/claude-code';
 
 const yarnInspectSchema = z.object({
 	type: z.literal('inspect'),
@@ -40,7 +40,7 @@ async function execaYarnHomeJsonLines<T>(...args: string[]): Promise<T[]> {
 
 export async function checkForClaudeCodeUpdate() {
 	const globalListRaw = await execaYarnHomeJsonLines('global', 'list');
-	const infoVersionRaw = await execaYarnHomeJson('info', CLAUDE_CODE_PACKAGE_NAME, 'version');
+	const infoVersionRaw = await execaYarnHomeJson('info', claudeCodePackageName, 'version');
 
 	const globalListEntry = (
 		globalListRaw
@@ -53,12 +53,12 @@ export async function checkForClaudeCodeUpdate() {
 
 				return [ safeParseResult.data ];
 			})
-			.find(entry => entry.data.includes(CLAUDE_CODE_PACKAGE_NAME))
+			.find(entry => entry.data.includes(claudeCodePackageName))
 	);
 
 	const infoVersion = yarnInspectSchema.parse(infoVersionRaw);
 
-	invariant(globalListEntry, `Could not find global list entry for ${CLAUDE_CODE_PACKAGE_NAME}`);
+	invariant(globalListEntry, `Could not find global list entry for ${claudeCodePackageName}`);
 
 	const [ _, packageSpec ] = globalListEntry.data.split('"');
 	const packageVersion = packageSpec.split('@').at(-1);

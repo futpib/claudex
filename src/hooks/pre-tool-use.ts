@@ -46,10 +46,10 @@ type ToolInput = BaseToolInput & (
 async function main() {
 	const input = await readStdin();
 	const toolInput: ToolInput = JSON.parse(input);
-	const toolName = toolInput.tool_name || '';
-	const command = (toolInput as any).tool_input?.command || '';
-	const sessionId = toolInput.session_id || '';
-	const transcriptPath = toolInput.transcript_path || '';
+	const toolName = toolInput.tool_name ?? '';
+	const command = (toolInput as any).tool_input?.command ?? '';
+	const sessionId = toolInput.session_id ?? '';
+	const transcriptPath = toolInput.transcript_path ?? '';
 
 	if (toolName === 'TodoWrite' || toolName === 'Task') {
 		process.exit(0);
@@ -70,7 +70,7 @@ async function main() {
 		if (markerPattern.test(command)) {
 			process.exit(0);
 		} else {
-			const pin = Math.floor(1000 + Math.random() * 9000);
+			const pin = Math.floor(1000 + (Math.random() * 9000));
 			console.error('⚠️  This commit includes co-authorship. Claude Code should:');
 			console.error('1. Review the staged changes with \'git diff --cached -ub\'');
 			console.error('2. Check the session history to verify if you made these changes');
