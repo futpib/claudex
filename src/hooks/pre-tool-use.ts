@@ -104,7 +104,7 @@ async function main() {
 	const sessionId = toolInput.session_id ?? '';
 	const transcriptPath = toolInput.transcript_path ?? '';
 
-	if (toolName === 'TodoWrite' || toolName === 'Task') {
+	if (toolName === 'TodoWrite' || toolName === 'Task' || toolName === 'Grep' || toolName === 'LS' || toolName === 'WebFetch' || toolName === 'Glob') {
 		process.exit(0);
 	}
 
