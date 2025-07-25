@@ -64,6 +64,16 @@ const lsToolInputSchema = z.object({
 	ignore: z.array(z.string()).optional(),
 });
 
+const webFetchToolInputSchema = z.object({
+	url: z.string(),
+	prompt: z.string(),
+});
+
+const globToolInputSchema = z.object({
+	pattern: z.string(),
+	path: z.string().optional(),
+});
+
 const baseToolInputSchema = z.object({
 	session_id: z.string(),
 	transcript_path: z.string(),
@@ -78,6 +88,8 @@ const toolInputSchema = baseToolInputSchema.and(z.union([
 	z.object({ tool_name: z.literal('Grep'), tool_input: grepToolInputSchema }),
 	z.object({ tool_name: z.literal('ExitPlanMode'), tool_input: exitPlanModeToolInputSchema }),
 	z.object({ tool_name: z.literal('LS'), tool_input: lsToolInputSchema }),
+	z.object({ tool_name: z.literal('WebFetch'), tool_input: webFetchToolInputSchema }),
+	z.object({ tool_name: z.literal('Glob'), tool_input: globToolInputSchema }),
 	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
 	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
 ]));
