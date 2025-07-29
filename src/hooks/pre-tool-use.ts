@@ -74,6 +74,19 @@ const globToolInputSchema = z.object({
 	path: z.string().optional(),
 });
 
+const notebookReadToolInputSchema = z.object({
+	notebook_path: z.string(),
+	cell_id: z.string().optional(),
+});
+
+const notebookEditToolInputSchema = z.object({
+	notebook_path: z.string(),
+	new_source: z.string(),
+	cell_id: z.string().optional(),
+	cell_type: z.string().optional(),
+	edit_mode: z.string().optional(),
+});
+
 const baseToolInputSchema = z.object({
 	session_id: z.string(),
 	transcript_path: z.string(),
@@ -90,11 +103,17 @@ const toolInputSchema = baseToolInputSchema.and(z.union([
 	z.object({ tool_name: z.literal('LS'), tool_input: lsToolInputSchema }),
 	z.object({ tool_name: z.literal('WebFetch'), tool_input: webFetchToolInputSchema }),
 	z.object({ tool_name: z.literal('Glob'), tool_input: globToolInputSchema }),
+	z.object({ tool_name: z.literal('NotebookRead'), tool_input: notebookReadToolInputSchema }),
+	z.object({ tool_name: z.literal('NotebookEdit'), tool_input: notebookEditToolInputSchema }),
 	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
 	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
 ]));
 
 type ToolInput = z.infer<typeof toolInputSchema>;
+
+// Skip logging for read-only tools and internal tools
+const READ_ONLY_TOOLS = new Set(['Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead']);
+const INTERNAL_TOOLS = new Set(['TodoWrite', 'Task']);
 
 async function main() {
 	const input = await readStdin();
@@ -104,7 +123,7 @@ async function main() {
 	const sessionId = toolInput.session_id ?? '';
 	const transcriptPath = toolInput.transcript_path ?? '';
 
-	if (toolName === 'TodoWrite' || toolName === 'Task' || toolName === 'Grep' || toolName === 'LS' || toolName === 'WebFetch' || toolName === 'Glob' || toolName === 'Read') {
+	if (READ_ONLY_TOOLS.has(toolName) || INTERNAL_TOOLS.has(toolName)) {
 		process.exit(0);
 	}
 
