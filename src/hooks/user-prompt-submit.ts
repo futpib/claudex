@@ -23,7 +23,14 @@ async function main() {
 	const prompt = hookInput.prompt || '';
 
 	const transcriptInfo = formatTranscriptInfo(sessionId, transcriptPath);
-	const message = `Session: ${sessionId}${transcriptInfo}, Event: UserPromptSubmit, Prompt: ${prompt.slice(0, 200)}${prompt.length > 200 ? '...' : ''}`;
+
+	const filteredInput = {
+		prompt: prompt.slice(0, 200) + (prompt.length > 200 ? '...' : ''),
+		cwd: hookInput.cwd,
+	};
+
+	const inputString = JSON.stringify(filteredInput);
+	const message = `Session: ${sessionId}${transcriptInfo}, Event: UserPromptSubmit, Input: ${inputString}`;
 	await logMessage(message);
 
 	process.exit(0);
