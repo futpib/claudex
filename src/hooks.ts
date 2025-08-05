@@ -4,6 +4,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { z } from 'zod';
 import { execa } from 'execa';
+import invariant from 'invariant';
 import { isErrnoException, parseJson } from './utils.js';
 
 const hookEntrySchema = z.object({
@@ -68,23 +69,26 @@ export async function ensureHookSetup() {
 	await fs.mkdir(claudeDir, { recursive: true });
 
 	let settings: ClaudeSettings = {};
+	let content: string;
 	try {
-		const content = await fs.readFile(settingsPath, 'utf8');
-		settings = claudeSettingsSchema.parse(parseJson(content));
-	} catch (error) {
-		if (!(isErrnoException(error) && error.code === 'ENOENT')) {
+		content = await fs.readFile(settingsPath, 'utf8');
+	} catch (error: unknown) {
+		if (isErrnoException(error) && error.code === 'ENOENT') {
+			content = '{}';
+		} else {
 			throw error;
 		}
 	}
+
+	settings = claudeSettingsSchema.parse(parseJson(content));
 
 	const [ preToolUsePath, userPromptSubmitPath ] = await Promise.all([
 		findHookPath('claudex-hook-pre-tool-use'),
 		findHookPath('claudex-hook-user-prompt-submit'),
 	]);
 
-	if (!preToolUsePath && !userPromptSubmitPath) {
-		return;
-	}
+	invariant(preToolUsePath, 'claudex-hook-pre-tool-use executable must be found');
+	invariant(userPromptSubmitPath, 'claudex-hook-user-prompt-submit executable must be found');
 
 	settings.hooks ??= {};
 	let needsUpdate = false;
