@@ -2,6 +2,7 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 
 import process from 'node:process';
+import invariant from 'invariant';
 import { z } from 'zod';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
@@ -98,7 +99,7 @@ const baseToolInputSchema = z.object({
 	transcript_path: z.string(),
 });
 
-const toolInputSchema = baseToolInputSchema.and(z.union([
+const knownToolInputSchema = z.union([
 	z.object({ tool_name: z.literal('Edit'), tool_input: editToolInputSchema }),
 	z.object({ tool_name: z.literal('MultiEdit'), tool_input: multiEditToolInputSchema }),
 	z.object({ tool_name: z.literal('Write'), tool_input: writeToolInputSchema }),
@@ -112,11 +113,22 @@ const toolInputSchema = baseToolInputSchema.and(z.union([
 	z.object({ tool_name: z.literal('NotebookRead'), tool_input: notebookReadToolInputSchema }),
 	z.object({ tool_name: z.literal('NotebookEdit'), tool_input: notebookEditToolInputSchema }),
 	z.object({ tool_name: z.literal('WebSearch'), tool_input: webSearchToolInputSchema }),
+]);
+
+const mcpToolInputSchema = z.object({
+	tool_name: z.string().regex(/^mcp__.*__.*$/),
+	tool_input: z.unknown(),
+});
+
+const unknownToolInputSchema = z.union([
 	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
 	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
-]));
+	mcpToolInputSchema,
+]);
 
-type ToolInput = z.infer<typeof toolInputSchema>;
+const preToolUseHookInputSchema = baseToolInputSchema.and(z.union([ knownToolInputSchema, unknownToolInputSchema ]));
+
+type KnownToolInput = z.infer<typeof knownToolInputSchema>;
 
 // Skip logging for read-only tools and internal tools
 const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch' ]);
@@ -124,24 +136,30 @@ const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task' ]);
 
 async function main() {
 	const input = await readStdin();
-	const toolInput = parseJsonWithSchema(input, toolInputSchema);
-	const toolName = toolInput.tool_name ?? '';
-	const command = toolInput.tool_name === 'Bash' ? toolInput.tool_input.command : '';
-	const sessionId = toolInput.session_id ?? '';
-	const transcriptPath = toolInput.transcript_path ?? '';
 
-	if (READ_ONLY_TOOLS.has(toolName) || INTERNAL_TOOLS.has(toolName)) {
+	const preToolUseHookInput = parseJsonWithSchema(input, preToolUseHookInputSchema);
+
+	const preToolUseHookWithKnownToolInput = knownToolInputSchema.safeParse(preToolUseHookInput).data;
+
+	const toolName = preToolUseHookInput.tool_name ?? '';
+	const command = preToolUseHookWithKnownToolInput?.tool_name === 'Bash' ? preToolUseHookWithKnownToolInput.tool_input.command : '';
+	const sessionId = preToolUseHookInput.session_id ?? '';
+	const transcriptPath = preToolUseHookInput.transcript_path ?? '';
+
+	// Check if this is an MCP tool
+	const isMcpTool = toolName.startsWith('mcp__');
+
+	if (READ_ONLY_TOOLS.has(toolName) || INTERNAL_TOOLS.has(toolName) || isMcpTool) {
 		process.exit(0);
 	}
 
-	try {
-		const filteredInput = omitLongFields(toolInput);
+	invariant(preToolUseHookWithKnownToolInput, 'Expected preToolUseHookInput to match knownToolInputSchema');
+	const filteredInput = omitLongFields(preToolUseHookWithKnownToolInput);
 
-		const toolInputString = JSON.stringify(filteredInput);
-		const transcriptInfo = formatTranscriptInfo(sessionId, transcriptPath);
-		const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
-		await logMessage(message);
-	} catch {}
+	const toolInputString = JSON.stringify(filteredInput);
+	const transcriptInfo = formatTranscriptInfo(sessionId, transcriptPath);
+	const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
+	await logMessage(message);
 
 	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
 		const markerPattern = /x-claude-code-actually-co-authored:\s*\d{4}/i;
@@ -162,7 +180,7 @@ async function main() {
 	process.exit(0);
 }
 
-function omitLongFields(input: ToolInput): unknown {
+function omitLongFields(input: KnownToolInput): unknown {
 	if (input.tool_name === 'Edit') {
 		const { old_string: _oldString, new_string: _newString, ...rest } = input.tool_input;
 		return rest;
