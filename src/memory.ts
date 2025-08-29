@@ -2,12 +2,8 @@ import os from 'node:os';
 import path from 'node:path';
 import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
-import envPaths from 'env-paths';
+import { paths } from './paths.js';
 import { isErrnoException } from './utils.js';
-
-const paths = envPaths('claudex', {
-	suffix: '',
-});
 
 const claudexMemoryDirectoryPath = path.join(paths.config, 'CLAUDE.md.d');
 

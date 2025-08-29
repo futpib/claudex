@@ -2,8 +2,11 @@
 /* eslint-disable @typescript-eslint/naming-convention */
 
 import process from 'node:process';
+import fs from 'node:fs/promises';
+import path from 'node:path';
 import invariant from 'invariant';
 import { z } from 'zod';
+import { paths } from '../paths.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
 } from './shared.js';
@@ -162,17 +165,30 @@ async function main() {
 	await logMessage(message);
 
 	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
-		const markerPattern = /x-claude-code-actually-co-authored:\s*\d{4}/i;
-		if (markerPattern.test(command)) {
-			process.exit(0);
+		const markerPattern = /x-claude-code-actually-co-authored:\s*([a-f\d]{64})/i;
+		const match = markerPattern.exec(command);
+		if (match) {
+			const submittedPin = match[1];
+			const proofsDir = path.join(paths.data, 'co-authorship-proofs');
+			const proofFile = path.join(proofsDir, `${submittedPin}.json`);
+
+			try {
+				await fs.access(proofFile);
+				process.exit(0);
+			} catch {
+				console.error(`❌ Invalid co-authorship proof PIN: ${submittedPin}`);
+				console.error('The provided PIN does not correspond to a valid proof submission.');
+				process.exit(2);
+			}
 		} else {
-			const pin = Math.floor(1000 + (Math.random() * 9000));
-			console.error('⚠️  This commit includes co-authorship. Claude Code should:');
-			console.error('1. Review the staged changes with \'git diff --cached -ub\'');
-			console.error('2. Check the session history to verify if you made these changes');
-			console.error('3. If you did co-author, add the following to the end of your commit message:');
-			console.error(`   x-claude-code-actually-co-authored: ${pin}`);
-			console.error('4. If not, remove the Co-authored-by line and try again.');
+			console.error('⚠️  This commit includes co-authorship. Claude Code must:');
+			console.error('1. FIRST run \'git diff --cached\' to see what changes are being committed');
+			console.error('2. ACTUALLY check the session transcript - did Claude Code make these specific changes?');
+			console.error('3. If Claude Code genuinely co-authored, submit proof with:');
+			console.error('   claudex-submit-co-authorship-proof "Claude Code made changes X, Y, Z in this session"');
+			console.error('4. Use the returned PIN in your commit message as:');
+			console.error('   x-claude-code-actually-co-authored: <PIN-FROM-SUBMIT-PROOF>');
+			console.error('5. If Claude Code did NOT make these changes, remove Co-authored-by and try again.');
 			process.exit(2);
 		}
 	}
