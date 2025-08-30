@@ -165,7 +165,7 @@ async function main() {
 	await logMessage(message);
 
 	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
-		const markerPattern = /x-claude-code-actually-co-authored:\s*([a-f\d]{64})/i;
+		const markerPattern = /x-claude-code-co-authorship-proof:\s*([a-f\d]{64})/i;
 		const match = markerPattern.exec(command);
 		if (match) {
 			const submittedPin = match[1];
@@ -186,8 +186,9 @@ async function main() {
 			console.error('2. ACTUALLY check the session transcript - did Claude Code make these specific changes?');
 			console.error('3. If Claude Code genuinely co-authored, submit proof with:');
 			console.error('   claudex-submit-co-authorship-proof "Claude Code made changes X, Y, Z in this session"');
-			console.error('4. Use the returned PIN in your commit message as:');
-			console.error('   x-claude-code-actually-co-authored: <PIN-FROM-SUBMIT-PROOF>');
+			console.error('4. Add the returned PIN right after the Co-authored-by line:');
+			console.error('   Co-authored-by: Claude <claude@anthropic.com>');
+			console.error('   x-claude-code-co-authorship-proof: <PIN-FROM-SUBMIT-PROOF>');
 			console.error('5. If Claude Code did NOT make these changes, remove Co-authored-by and try again.');
 			process.exit(2);
 		}
