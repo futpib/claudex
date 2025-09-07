@@ -1380,6 +1380,7 @@ __metadata:
     claudex: ./build/cli.js
     claudex-hook-pre-tool-use: ./build/hooks/pre-tool-use.js
     claudex-hook-user-prompt-submit: ./build/hooks/user-prompt-submit.js
+    claudex-submit-co-authorship-proof: ./build/hooks/submit-co-authorship-proof.js
   languageName: unknown
   linkType: soft
 
