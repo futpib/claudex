@@ -97,6 +97,15 @@ const webSearchToolInputSchema = z.object({
 	blocked_domains: z.array(z.string()).optional(),
 });
 
+const bashOutputToolInputSchema = z.object({
+	bash_id: z.string(),
+	filter: z.string().optional(),
+});
+
+const killBashToolInputSchema = z.object({
+	shell_id: z.string(),
+});
+
 const baseToolInputSchema = z.object({
 	session_id: z.string(),
 	transcript_path: z.string(),
@@ -116,6 +125,8 @@ const knownToolInputSchema = z.union([
 	z.object({ tool_name: z.literal('NotebookRead'), tool_input: notebookReadToolInputSchema }),
 	z.object({ tool_name: z.literal('NotebookEdit'), tool_input: notebookEditToolInputSchema }),
 	z.object({ tool_name: z.literal('WebSearch'), tool_input: webSearchToolInputSchema }),
+	z.object({ tool_name: z.literal('BashOutput'), tool_input: bashOutputToolInputSchema }),
+	z.object({ tool_name: z.literal('KillBash'), tool_input: killBashToolInputSchema }),
 ]);
 
 const mcpToolInputSchema = z.object({
@@ -134,7 +145,7 @@ const preToolUseHookInputSchema = baseToolInputSchema.and(z.union([ knownToolInp
 type KnownToolInput = z.infer<typeof knownToolInputSchema>;
 
 // Skip logging for read-only tools and internal tools
-const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch' ]);
+const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
 const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task' ]);
 
 async function main() {
