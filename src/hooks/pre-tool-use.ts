@@ -175,6 +175,13 @@ async function main() {
 	const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
 	await logMessage(message);
 
+	// Ban git commit --amend commands entirely
+	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('--amend')) {
+		console.error('❌ git commit --amend is not allowed');
+		console.error('Amending commits can alter git history and is not permitted.');
+		process.exit(2);
+	}
+
 	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
 		const markerPattern = /x-claude-code-co-authorship-proof:\s*([a-f\d]{64})/i;
 		const match = markerPattern.exec(command);
