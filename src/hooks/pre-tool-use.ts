@@ -182,6 +182,13 @@ async function main() {
 		process.exit(2);
 	}
 
+	// Ban git commit --no-verify commands
+	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('--no-verify')) {
+		console.error('❌ git commit --no-verify is not allowed');
+		console.error('Bypassing pre-commit hooks can introduce code quality issues and is not permitted.');
+		process.exit(2);
+	}
+
 	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
 		const markerPattern = /x-claude-code-co-authorship-proof:\s*([a-f\d]{64})/i;
 		const match = markerPattern.exec(command);
