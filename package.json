@@ -2,7 +2,7 @@
   "name": "claudex",
   "version": "1.0.0",
   "main": "build/index.js",
-  "license": "claudex",
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "dev": "tsc --watch",
