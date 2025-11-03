@@ -189,6 +189,26 @@ async function main() {
 		process.exit(2);
 	}
 
+	// Ban using bash commands for file operations that have dedicated tools
+	if (toolName === 'Bash' && typeof command === 'string') {
+		const fileOperationCommands = ['cat', 'sed', 'head', 'tail', 'awk'];
+		const hasFileOperationCommand = fileOperationCommands.some(cmd => {
+			// Match command as standalone word (not part of another word), case-sensitive
+			const regex = new RegExp(`\\b${cmd}\\b`);
+			return regex.test(command);
+		});
+
+		if (hasFileOperationCommand) {
+			console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
+			console.error('Please use the dedicated tools instead:');
+			console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
+			console.error('  - Edit tool: for editing files (instead of sed/awk)');
+			console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
+			console.error('  - Grep tool: for searching file contents (instead of grep)');
+			process.exit(2);
+		}
+	}
+
 	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
 		const markerPattern = /x-claude-code-co-authorship-proof:\s*([a-f\d]{64})/i;
 		const match = markerPattern.exec(command);
