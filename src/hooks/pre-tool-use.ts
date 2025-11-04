@@ -199,13 +199,20 @@ async function main() {
 		});
 
 		if (hasFileOperationCommand) {
-			console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
-			console.error('Please use the dedicated tools instead:');
-			console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
-			console.error('  - Edit tool: for editing files (instead of sed/awk)');
-			console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
-			console.error('  - Grep tool: for searching file contents (instead of grep)');
-			process.exit(2);
+			// Allow cat with heredoc syntax (e.g., cat <<'EOF' or cat <<EOF)
+			// This is commonly used for formatting multi-line strings (e.g., in git commits)
+			const catHeredocPattern = /\bcat\s+<<-?['"]?\w+['"]?/;
+			if (catHeredocPattern.test(command)) {
+				// This is a legitimate use of cat with heredoc, allow it
+			} else {
+				console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
+				console.error('Please use the dedicated tools instead:');
+				console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
+				console.error('  - Edit tool: for editing files (instead of sed/awk)');
+				console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
+				console.error('  - Grep tool: for searching file contents (instead of grep)');
+				process.exit(2);
+			}
 		}
 	}
 
