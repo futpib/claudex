@@ -6,6 +6,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import invariant from 'invariant';
 import { z } from 'zod';
+import { parse as parseShellQuote } from 'shell-quote';
 import { paths } from '../paths.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
@@ -148,6 +149,98 @@ type KnownToolInput = z.infer<typeof knownToolInputSchema>;
 const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
 const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task' ]);
 
+type ParsedToken = string | { op: string } | { comment: string } | { pattern: string };
+
+/**
+ * Extracts actual command names from parsed shell tokens.
+ * This properly distinguishes between:
+ * - Actual commands: cat file.txt
+ * - Commands in strings: echo "cat file.txt" (cat is inside the string, not a command)
+ * - Commands in comments: # cat file.txt
+ * - Commands in substitutions: git commit -m "$(cat <<'EOF'...)" (recursively parses)
+ */
+function extractCommandNames(command: string): Set<string> {
+	const tokens = parseShellQuote(command);
+	const commands = new Set<string>();
+
+	let expectCommand = true; // We expect a command at the start
+	let backtickBuffer: string[] = []; // Collects tokens between backticks
+
+	for (let i = 0; i < tokens.length; i++) {
+		const token = tokens[i];
+
+		if (typeof token === 'string') {
+			// Check if we're collecting a backtick substitution
+			if (backtickBuffer.length > 0) {
+				backtickBuffer.push(token);
+				if (token.endsWith('`')) {
+					// Complete backtick substitution found
+					const subCommand = backtickBuffer.join(' ')
+						.replace(/^`/, '') // Remove leading backtick
+						.replace(/`$/, ''); // Remove trailing backtick
+					const subCommands = extractCommandNames(subCommand);
+					for (const cmd of subCommands) {
+						commands.add(cmd);
+					}
+
+					backtickBuffer = [];
+				}
+				continue;
+			}
+
+			// Check if this token starts a backtick substitution
+			if (token.startsWith('`')) {
+				backtickBuffer.push(token);
+				if (token.endsWith('`') && token.length > 1) {
+					// Complete backtick in single token
+					const subCommand = token.slice(1, -1);
+					const subCommands = extractCommandNames(subCommand);
+					for (const cmd of subCommands) {
+						commands.add(cmd);
+					}
+
+					backtickBuffer = [];
+				}
+				continue;
+			}
+
+			if (expectCommand) {
+				// This is a command name
+				commands.add(token);
+				expectCommand = false;
+			} else {
+				// This is an argument, check for command substitutions $(...)
+				const commandSubPattern = /\$\(([^)]+)\)/g;
+
+				let match = commandSubPattern.exec(token);
+				while (match !== null) {
+					const subCommand = match[1];
+					// Recursively parse the substitution content
+					const subCommands = extractCommandNames(subCommand);
+					for (const cmd of subCommands) {
+						commands.add(cmd);
+					}
+
+					match = commandSubPattern.exec(token);
+				}
+			}
+		} else if (typeof token === 'object' && token !== null && 'op' in token) {
+			// If we're inside backticks, keep collecting tokens (including operators)
+			if (backtickBuffer.length > 0) {
+				backtickBuffer.push((token as { op: string }).op);
+				continue;
+			}
+
+			// This is an operator (&&, ||, |, ;, etc.)
+			// After operators, we expect a new command
+			expectCommand = true;
+		}
+		// Ignore other token types (comments, patterns, etc.)
+	}
+
+	return commands;
+}
+
 async function main() {
 	const input = await readStdin();
 
@@ -191,27 +284,54 @@ async function main() {
 
 	// Ban using bash commands for file operations that have dedicated tools
 	if (toolName === 'Bash' && typeof command === 'string') {
-		const fileOperationCommands = ['cat', 'sed', 'head', 'tail', 'awk'];
-		const hasFileOperationCommand = fileOperationCommands.some(cmd => {
-			// Match command as standalone word (not part of another word), case-sensitive
-			const regex = new RegExp(`\\b${cmd}\\b`);
-			return regex.test(command);
-		});
+		const fileOperationCommands = new Set([ 'cat', 'sed', 'head', 'tail', 'awk' ]);
 
-		if (hasFileOperationCommand) {
-			// Allow cat with heredoc syntax (e.g., cat <<'EOF' or cat <<EOF)
-			// This is commonly used for formatting multi-line strings (e.g., in git commits)
-			const catHeredocPattern = /\bcat\s+<<-?['"]?\w+['"]?/;
-			if (catHeredocPattern.test(command)) {
-				// This is a legitimate use of cat with heredoc, allow it
-			} else {
-				console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
-				console.error('Please use the dedicated tools instead:');
-				console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
-				console.error('  - Edit tool: for editing files (instead of sed/awk)');
-				console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
-				console.error('  - Grep tool: for searching file contents (instead of grep)');
-				process.exit(2);
+		try {
+			// Extract actual command invocations (not commands in strings or comments)
+			const actualCommands = extractCommandNames(command);
+
+			// Check if any of the actual commands are file operation commands
+			const bannedCommands = [ ...actualCommands ].filter(cmd => fileOperationCommands.has(cmd));
+
+			if (bannedCommands.length > 0) {
+				// Allow cat with heredoc syntax (e.g., cat <<'EOF' or cat <<EOF)
+				// This is commonly used for formatting multi-line strings (e.g., in git commits)
+				const catHeredocPattern = /\bcat\s+<<-?['"]?\w+['"]?/;
+				if (bannedCommands.includes('cat') && catHeredocPattern.test(command)) {
+					// This is a legitimate use of cat with heredoc, allow it
+				} else {
+					console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
+					console.error(`Found: ${bannedCommands.join(', ')}`);
+					console.error('Please use the dedicated tools instead:');
+					console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
+					console.error('  - Edit tool: for editing files (instead of sed/awk)');
+					console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
+					console.error('  - Grep tool: for searching file contents (instead of grep)');
+					process.exit(2);
+				}
+			}
+		} catch {
+			// If parsing fails, fall back to simple regex check to avoid breaking the hook
+			const fileOperationCommandsArray = [ 'cat', 'sed', 'head', 'tail', 'awk' ];
+			const hasFileOperationCommand = fileOperationCommandsArray.some(cmd => {
+				const regex = new RegExp(`\\b${cmd}\\b`);
+				return regex.test(command);
+			});
+
+			if (hasFileOperationCommand) {
+				const catHeredocPattern = /\bcat\s+<<-?['"]?\w+['"]?/;
+				if (catHeredocPattern.test(command)) {
+					// This is a legitimate use of cat with heredoc, allow it
+				} else {
+					console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
+					console.error('(Note: Command parsing failed, using fallback detection)');
+					console.error('Please use the dedicated tools instead:');
+					console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
+					console.error('  - Edit tool: for editing files (instead of sed/awk)');
+					console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
+					console.error('  - Grep tool: for searching file contents (instead of grep)');
+					process.exit(2);
+				}
 			}
 		}
 	}

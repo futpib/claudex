@@ -492,6 +492,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/shell-quote@npm:^1.7.5":
+  version: 1.7.5
+  resolution: "@types/shell-quote@npm:1.7.5"
+  checksum: 10/32b4d697c7d23dbadf40713692c47f1595f083a3b3deea76cb18e30a05d197aa9205d2b87f6d92edb60cda120b51e35d32bda96ed9b0a7e32921eed2deb4559e
+  languageName: node
+  linkType: hard
+
 "@typescript-eslint/eslint-plugin@npm:8.38.0":
   version: 8.38.0
   resolution: "@typescript-eslint/eslint-plugin@npm:8.38.0"
@@ -1366,6 +1373,7 @@ __metadata:
     "@ava/typescript": "npm:^6.0.0"
     "@types/invariant": "npm:^2.2.37"
     "@types/node": "npm:^24.1.0"
+    "@types/shell-quote": "npm:^1.7.5"
     ava: "npm:^6.4.1"
     c8: "npm:^10.1.3"
     coveralls: "npm:^3.1.1"
@@ -1373,6 +1381,7 @@ __metadata:
     eslint-config-xo-typescript-overrides: "npm:^2.0.3"
     execa: "npm:^9.6.0"
     invariant: "npm:^2.2.4"
+    shell-quote: "npm:^1.8.3"
     typescript: "npm:^5.8.3"
     xo: "npm:^1.2.1"
     zod: "npm:^4.0.8"
@@ -4754,6 +4763,13 @@ __metadata:
   version: 3.0.0
   resolution: "shebang-regex@npm:3.0.0"
   checksum: 10/1a2bcae50de99034fcd92ad4212d8e01eedf52c7ec7830eedcf886622804fe36884278f2be8be0ea5fde3fd1c23911643a4e0f726c8685b61871c8908af01222
+  languageName: node
+  linkType: hard
+
+"shell-quote@npm:^1.8.3":
+  version: 1.8.3
+  resolution: "shell-quote@npm:1.8.3"
+  checksum: 10/5473e354637c2bd698911224129c9a8961697486cff1fb221f234d71c153fc377674029b0223d1d3c953a68d451d79366abfe53d1a0b46ee1f28eb9ade928f4c
   languageName: node
   linkType: hard
 
