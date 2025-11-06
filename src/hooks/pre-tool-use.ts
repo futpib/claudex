@@ -37,6 +37,7 @@ const bashToolInputSchema = z.object({
 	command: z.string(),
 	description: z.string().optional(),
 	timeout: z.number().optional(),
+	run_in_background: z.boolean().optional(),
 });
 
 const readToolInputSchema = z.object({
@@ -279,6 +280,13 @@ async function main() {
 	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('--no-verify')) {
 		console.error('❌ git commit --no-verify is not allowed');
 		console.error('Bypassing pre-commit hooks can introduce code quality issues and is not permitted.');
+		process.exit(2);
+	}
+
+	// Ban running bash commands in background
+	if (preToolUseHookWithKnownToolInput.tool_name === 'Bash' && preToolUseHookWithKnownToolInput.tool_input.run_in_background === true) {
+		console.error('❌ Running bash commands in background is not allowed');
+		console.error('Background bash processes cannot be monitored properly and may cause issues.');
 		process.exit(2);
 	}
 
