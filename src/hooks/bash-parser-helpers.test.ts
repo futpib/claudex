@@ -1,91 +1,5 @@
 import test from 'ava';
-import { parse as parseShellQuote } from 'shell-quote';
-
-/**
- * Extracts actual command names from parsed shell tokens.
- * This is a copy of the function from pre-tool-use.ts for testing purposes.
- */
-function extractCommandNames(command: string): Set<string> {
-	const tokens = parseShellQuote(command);
-	const commands = new Set<string>();
-
-	let expectCommand = true; // We expect a command at the start
-	let backtickBuffer: string[] = []; // Collects tokens between backticks
-
-	for (let i = 0; i < tokens.length; i++) {
-		const token = tokens[i];
-
-		if (typeof token === 'string') {
-			// Check if we're collecting a backtick substitution
-			if (backtickBuffer.length > 0) {
-				backtickBuffer.push(token);
-				if (token.endsWith('`')) {
-					// Complete backtick substitution found
-					const subCommand = backtickBuffer.join(' ')
-						.replace(/^`/, '') // Remove leading backtick
-						.replace(/`$/, ''); // Remove trailing backtick
-					const subCommands = extractCommandNames(subCommand);
-					for (const cmd of subCommands) {
-						commands.add(cmd);
-					}
-
-					backtickBuffer = [];
-				}
-				continue;
-			}
-
-			// Check if this token starts a backtick substitution
-			if (token.startsWith('`')) {
-				backtickBuffer.push(token);
-				if (token.endsWith('`') && token.length > 1) {
-					// Complete backtick in single token
-					const subCommand = token.slice(1, -1);
-					const subCommands = extractCommandNames(subCommand);
-					for (const cmd of subCommands) {
-						commands.add(cmd);
-					}
-
-					backtickBuffer = [];
-				}
-				continue;
-			}
-
-			if (expectCommand) {
-				// This is a command name
-				commands.add(token);
-				expectCommand = false;
-			} else {
-				// This is an argument, check for command substitutions $(...)
-				const commandSubPattern = /\$\(([^)]+)\)/g;
-
-				let match = commandSubPattern.exec(token);
-				while (match !== null) {
-					const subCommand = match[1];
-					// Recursively parse the substitution content
-					const subCommands = extractCommandNames(subCommand);
-					for (const cmd of subCommands) {
-						commands.add(cmd);
-					}
-
-					match = commandSubPattern.exec(token);
-				}
-			}
-		} else if (typeof token === 'object' && token !== null && 'op' in token) {
-			// If we're inside backticks, keep collecting tokens (including operators)
-			if (backtickBuffer.length > 0) {
-				backtickBuffer.push((token as { op: string }).op);
-				continue;
-			}
-
-			// This is an operator (&&, ||, |, ;, etc.)
-			// After operators, we expect a new command
-			expectCommand = true;
-		}
-		// Ignore other token types (comments, patterns, etc.)
-	}
-
-	return commands;
-}
+import { extractCommandNames, hasChainOperators } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', t => {
 	const commands = extractCommandNames('cat file.txt');
@@ -204,10 +118,54 @@ test('extractCommandNames - detects backticks inside $()', t => {
 });
 
 test('extractCommandNames - detects commands in complex pipeline with redirection', t => {
-	const input = 'yarn build && yarn ava src/hooks/pre-tool-use.test.ts 2>&1 | grep -A 10 "test"';
+	const input = 'yarn build && yarn ava src/hooks/bash-parser-helpers.test.ts 2>&1 | grep -A 10 "test"';
 	const commands = extractCommandNames(input);
 	t.true(commands.has('yarn'));
 	t.true(commands.has('grep'));
 	// Sets automatically deduplicate - only unique commands
-	t.is(commands.size, 3); // yarn, ava, grep
+	t.is(commands.size, 3); // Yarn, ava, grep
+});
+
+test('hasChainOperators - detects && operator', t => {
+	t.true(hasChainOperators('npm install && npm test'));
+});
+
+test('hasChainOperators - detects || operator', t => {
+	t.true(hasChainOperators('npm test || echo "Tests failed"'));
+});
+
+test('hasChainOperators - detects ; operator', t => {
+	t.true(hasChainOperators('cd /tmp; ls'));
+});
+
+test('hasChainOperators - detects multiple operators', t => {
+	t.true(hasChainOperators('cd /tmp && ls || echo "failed"'));
+});
+
+test('hasChainOperators - does not detect operators in strings', t => {
+	t.false(hasChainOperators('echo "use && to chain commands"'));
+});
+
+test('hasChainOperators - does not detect operators in comments', t => {
+	t.false(hasChainOperators('echo hello # use && for chaining'));
+});
+
+test('hasChainOperators - allows pipe operator', t => {
+	t.false(hasChainOperators('cat file.txt | grep pattern'));
+});
+
+test('hasChainOperators - does not detect & in background operator', t => {
+	// Single & for background is not banned, only && || and ;
+	t.false(hasChainOperators('sleep 10 &'));
+});
+
+test('hasChainOperators - does not detect operators in command substitution', t => {
+	// Operators inside $() should not be flagged as top-level operators
+	t.false(hasChainOperators('echo "$(cd /tmp && ls)"'));
+});
+
+test('hasChainOperators - handles simple commands', t => {
+	t.false(hasChainOperators('ls -la'));
+	t.false(hasChainOperators('git status'));
+	t.false(hasChainOperators('npm install'));
 });

@@ -6,11 +6,11 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import invariant from 'invariant';
 import { z } from 'zod';
-import { parse as parseShellQuote } from 'shell-quote';
 import { paths } from '../paths.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
 } from './shared.js';
+import { extractCommandNames, hasChainOperators } from './bash-parser-helpers.js';
 
 const editToolInputSchema = z.object({
 	file_path: z.string(),
@@ -150,98 +150,6 @@ type KnownToolInput = z.infer<typeof knownToolInputSchema>;
 const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
 const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task' ]);
 
-type ParsedToken = string | { op: string } | { comment: string } | { pattern: string };
-
-/**
- * Extracts actual command names from parsed shell tokens.
- * This properly distinguishes between:
- * - Actual commands: cat file.txt
- * - Commands in strings: echo "cat file.txt" (cat is inside the string, not a command)
- * - Commands in comments: # cat file.txt
- * - Commands in substitutions: git commit -m "$(cat <<'EOF'...)" (recursively parses)
- */
-function extractCommandNames(command: string): Set<string> {
-	const tokens = parseShellQuote(command);
-	const commands = new Set<string>();
-
-	let expectCommand = true; // We expect a command at the start
-	let backtickBuffer: string[] = []; // Collects tokens between backticks
-
-	for (let i = 0; i < tokens.length; i++) {
-		const token = tokens[i];
-
-		if (typeof token === 'string') {
-			// Check if we're collecting a backtick substitution
-			if (backtickBuffer.length > 0) {
-				backtickBuffer.push(token);
-				if (token.endsWith('`')) {
-					// Complete backtick substitution found
-					const subCommand = backtickBuffer.join(' ')
-						.replace(/^`/, '') // Remove leading backtick
-						.replace(/`$/, ''); // Remove trailing backtick
-					const subCommands = extractCommandNames(subCommand);
-					for (const cmd of subCommands) {
-						commands.add(cmd);
-					}
-
-					backtickBuffer = [];
-				}
-				continue;
-			}
-
-			// Check if this token starts a backtick substitution
-			if (token.startsWith('`')) {
-				backtickBuffer.push(token);
-				if (token.endsWith('`') && token.length > 1) {
-					// Complete backtick in single token
-					const subCommand = token.slice(1, -1);
-					const subCommands = extractCommandNames(subCommand);
-					for (const cmd of subCommands) {
-						commands.add(cmd);
-					}
-
-					backtickBuffer = [];
-				}
-				continue;
-			}
-
-			if (expectCommand) {
-				// This is a command name
-				commands.add(token);
-				expectCommand = false;
-			} else {
-				// This is an argument, check for command substitutions $(...)
-				const commandSubPattern = /\$\(([^)]+)\)/g;
-
-				let match = commandSubPattern.exec(token);
-				while (match !== null) {
-					const subCommand = match[1];
-					// Recursively parse the substitution content
-					const subCommands = extractCommandNames(subCommand);
-					for (const cmd of subCommands) {
-						commands.add(cmd);
-					}
-
-					match = commandSubPattern.exec(token);
-				}
-			}
-		} else if (typeof token === 'object' && token !== null && 'op' in token) {
-			// If we're inside backticks, keep collecting tokens (including operators)
-			if (backtickBuffer.length > 0) {
-				backtickBuffer.push((token as { op: string }).op);
-				continue;
-			}
-
-			// This is an operator (&&, ||, |, ;, etc.)
-			// After operators, we expect a new command
-			expectCommand = true;
-		}
-		// Ignore other token types (comments, patterns, etc.)
-	}
-
-	return commands;
-}
-
 async function main() {
 	const input = await readStdin();
 
@@ -288,6 +196,26 @@ async function main() {
 		console.error('❌ Running bash commands in background is not allowed');
 		console.error('Background bash processes cannot be monitored properly and may cause issues.');
 		process.exit(2);
+	}
+
+	// Ban bash commands using &&, ||, or ; operators
+	if (toolName === 'Bash' && typeof command === 'string') {
+		try {
+			if (hasChainOperators(command)) {
+				console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
+				console.error('Please run commands separately for better tracking and error handling.');
+				process.exit(2);
+			}
+		} catch {
+			// If parsing fails, fall back to regex check
+			const hasBannedOperators = /[;&|]{1,2}/.test(command);
+			if (hasBannedOperators) {
+				console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
+				console.error('(Note: Command parsing failed, using fallback detection)');
+				console.error('Please run commands separately for better tracking and error handling.');
+				process.exit(2);
+			}
+		}
 	}
 
 	// Ban using bash commands for file operations that have dedicated tools
