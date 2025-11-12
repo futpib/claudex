@@ -1,21 +1,38 @@
-FROM node:24-alpine
+FROM archlinux:latest
 
 # Build arguments for user configuration
 ARG USER_ID=1000
 ARG USERNAME=claude
+ARG PACKAGES=""
 
 # Install system dependencies
-RUN apk add --no-cache git bash
+RUN pacman -Syu --noconfirm git bash nodejs npm base-devel sudo ripgrep fd jq
+
+# Install yay
+RUN set -xe; \
+    useradd -m -G wheel builder; \
+    echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers; \
+    su - builder -c 'git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm'; \
+    userdel -r builder
 
 # Install Claude Code CLI
 RUN npm install -g @anthropic-ai/claude-code
 
-# Create non-root user (remove existing user with same UID if present)
+# Create non-root user
 RUN set -xe; \
-    (deluser node || true); \
-    adduser -D -u ${USER_ID} ${USERNAME}; \
+    useradd -m -u ${USER_ID} -G wheel ${USERNAME}; \
     mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share; \
     chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
 
 # Switch to non-root user
+USER ${USERNAME}
+
+# Install AUR packages if specified
+RUN if [ -n "${PACKAGES}" ]; then \
+    yay -S --noconfirm ${PACKAGES}; \
+    fi
+
+# Disable sudo for user
+USER root
+RUN gpasswd -d ${USERNAME} wheel || true
 USER ${USERNAME}

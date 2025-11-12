@@ -8,6 +8,7 @@ import { checkForClaudeCodeUpdate } from './update.js';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
+import { readConfig, expandVolumePaths } from './config.js';
 
 async function ensureDockerImage() {
 	const userInfo = os.userInfo();
@@ -17,18 +18,29 @@ async function ensureDockerImage() {
 	const currentFileUrl = import.meta.url;
 	const currentFilePath = fileURLToPath(currentFileUrl);
 	const projectRoot = path.resolve(path.dirname(currentFilePath), '..');
+	const dockerfilePath = path.join(projectRoot, 'Dockerfile');
+
+	const config = await readConfig();
 
 	// Always build image (Docker cache makes this fast if nothing changed)
-	await execa('docker', [
+	const buildArgs = [
 		'build',
 		'--build-arg',
 		`USER_ID=${userId}`,
 		'--build-arg',
 		`USERNAME=${username}`,
-		'-t',
-		'claudex',
-		projectRoot,
-	], {
+	];
+
+	if (config.packages && config.packages.length > 0) {
+		buildArgs.push('--build-arg', `PACKAGES=${config.packages.join(' ')}`);
+	}
+
+	buildArgs.push('-t', 'claudex', '-');
+
+	const dockerfileContent = await fs.readFile(dockerfilePath, 'utf8');
+
+	await execa('docker', buildArgs, {
+		input: dockerfileContent,
 		stdout: process.stdout,
 		stderr: process.stderr,
 	});
@@ -55,6 +67,8 @@ export async function main() {
 	if (useDocker) {
 		const { username, projectRoot } = await ensureDockerImage();
 
+		const config = await readConfig();
+
 		const cwd = process.cwd();
 		const homeDir = os.homedir();
 		const claudeConfigDir = path.join(homeDir, '.claude');
@@ -77,9 +91,17 @@ export async function main() {
 			`${paths.config}:${paths.config}`,
 			'-v',
 			`${paths.data}:${paths.data}`,
-			'-w',
-			cwd,
 		];
+
+		// Add volumes from config
+		if (config.volumes) {
+			for (const volume of config.volumes) {
+				const expandedVolume = expandVolumePaths(volume);
+				dockerArgs.push('-v', `${expandedVolume.host}:${expandedVolume.container}`);
+			}
+		}
+
+		dockerArgs.push('-w', cwd);
 
 		if (useShell) {
 			dockerArgs.push('--entrypoint', 'bash', 'claudex');
