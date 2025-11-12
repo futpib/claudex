@@ -11,10 +11,11 @@ RUN apk add --no-cache git bash
 RUN npm install -g @anthropic-ai/claude-code
 
 # Create non-root user (remove existing user with same UID if present)
-RUN (deluser node || true) && adduser -D -u ${USER_ID} ${USERNAME}
+RUN set -xe; \
+    (deluser node || true); \
+    adduser -D -u ${USER_ID} ${USERNAME}; \
+    mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share; \
+    chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
 
 # Switch to non-root user
 USER ${USERNAME}
-
-# Entrypoint
-ENTRYPOINT ["claude"]
