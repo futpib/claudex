@@ -101,6 +101,13 @@ export async function main() {
 			}
 		}
 
+		// Add environment variables from config
+		if (config.env) {
+			for (const [key, value] of Object.entries(config.env)) {
+				dockerArgs.push('-e', `${key}=${value}`);
+			}
+		}
+
 		dockerArgs.push('-w', cwd);
 
 		if (useShell) {

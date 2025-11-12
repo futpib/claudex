@@ -13,6 +13,7 @@ export type Volume = string | VolumeMount;
 export interface ClaudexConfig {
 	packages?: string[];
 	volumes?: Volume[];
+	env?: Record<string, string>;
 }
 
 function expandTilde(filePath: string): string {
@@ -47,12 +48,14 @@ export async function readConfig(): Promise<ClaudexConfig> {
 		return {
 			packages: config.packages ?? [],
 			volumes: config.volumes ?? [],
+			env: config.env ?? {},
 		};
 	} catch {
 		// Return defaults if config doesn't exist or is invalid
 		return {
 			packages: [],
 			volumes: [],
+			env: {},
 		};
 	}
 }
