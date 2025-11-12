@@ -3,7 +3,6 @@ FROM archlinux:latest
 # Build arguments for user configuration
 ARG USER_ID=1000
 ARG USERNAME=claude
-ARG PACKAGES=""
 
 # Install system dependencies
 RUN pacman -Syu --noconfirm git bash nodejs npm base-devel sudo ripgrep fd jq
@@ -28,6 +27,7 @@ RUN set -xe; \
 USER ${USERNAME}
 
 # Install AUR packages if specified
+ARG PACKAGES=""
 RUN if [ -n "${PACKAGES}" ]; then \
     yay -S --noconfirm ${PACKAGES}; \
     fi
