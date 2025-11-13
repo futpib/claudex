@@ -25,6 +25,7 @@ async function ensureDockerImage() {
 	// Always build image (Docker cache makes this fast if nothing changed)
 	const buildArgs = [
 		'build',
+		'--pull=never',
 		'--build-arg',
 		`USER_ID=${userId}`,
 		'--build-arg',
@@ -104,7 +105,19 @@ export async function main() {
 		// Add environment variables from config
 		if (config.env) {
 			for (const [key, value] of Object.entries(config.env)) {
-				dockerArgs.push('-e', `${key}=${value}`);
+				// Check if value is a reference to host environment variable
+				const match = value.match(/^\$\{(.+)\}$/);
+				if (match) {
+					const hostVarName = match[1];
+					const hostValue = process.env[hostVarName];
+					if (hostValue !== undefined) {
+						dockerArgs.push('-e', `${key}=${hostValue}`);
+					}
+					// Skip if host variable is not defined
+				} else {
+					// Use literal value
+					dockerArgs.push('-e', `${key}=${value}`);
+				}
 			}
 		}
 
