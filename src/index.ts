@@ -10,7 +10,7 @@ import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
 import { readConfig, expandVolumePaths } from './config.js';
 
-async function ensureDockerImage() {
+async function ensureDockerImage(pull = false) {
 	const userInfo = os.userInfo();
 	const userId = userInfo.uid;
 	const { username } = userInfo;
@@ -25,12 +25,18 @@ async function ensureDockerImage() {
 	// Always build image (Docker cache makes this fast if nothing changed)
 	const buildArgs = [
 		'build',
-		'--pull=never',
+	];
+
+	if (pull) {
+		buildArgs.push('--pull');
+	}
+
+	buildArgs.push(
 		'--build-arg',
 		`USER_ID=${userId}`,
 		'--build-arg',
 		`USERNAME=${username}`,
-	];
+	);
 
 	if (config.packages && config.packages.length > 0) {
 		buildArgs.push('--build-arg', `PACKAGES=${config.packages.join(' ')}`);
@@ -57,16 +63,19 @@ export async function main() {
 	const noDockerIndex = args.indexOf('--no-docker');
 	const useDocker = noDockerIndex === -1;
 
-	const shellIndex = args.indexOf('--shell');
-	const useShell = shellIndex !== -1;
+	const dockerShellIndex = args.indexOf('--docker-shell');
+	const useDockerShell = dockerShellIndex !== -1;
+
+	const dockerPullIndex = args.indexOf('--docker-pull');
+	const dockerPull = dockerPullIndex !== -1;
 
 	const claudeArgs = args.filter((_, index) =>
-		index !== noDockerIndex && index !== shellIndex);
+		index !== noDockerIndex && index !== dockerShellIndex && index !== dockerPullIndex);
 
 	let claudeChildProcess;
 
 	if (useDocker) {
-		const { username, projectRoot } = await ensureDockerImage();
+		const { username, projectRoot } = await ensureDockerImage(dockerPull);
 
 		const config = await readConfig();
 
@@ -123,7 +132,7 @@ export async function main() {
 
 		dockerArgs.push('-w', cwd);
 
-		if (useShell) {
+		if (useDockerShell) {
 			dockerArgs.push('--entrypoint', 'bash', 'claudex');
 		} else {
 			dockerArgs.push('--entrypoint', 'node', 'claudex', cliInDockerPath, ...claudeArgs);
