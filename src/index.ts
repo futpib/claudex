@@ -10,7 +10,7 @@ import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
 import { readConfig, expandVolumePaths } from './config.js';
 
-async function ensureDockerImage(pull = false) {
+async function ensureDockerImage(pull = false, noCache = false) {
 	const userInfo = os.userInfo();
 	const userId = userInfo.uid;
 	const { username } = userInfo;
@@ -22,6 +22,10 @@ async function ensureDockerImage(pull = false) {
 
 	const config = await readConfig();
 
+	// Get current Claude Code version from npm
+	const claudeCodeVersionResult = await execa('npm', ['info', '@anthropic-ai/claude-code', 'version']);
+	const claudeCodeVersion = claudeCodeVersionResult.stdout.trim();
+
 	// Always build image (Docker cache makes this fast if nothing changed)
 	const buildArgs = [
 		'build',
@@ -31,11 +35,17 @@ async function ensureDockerImage(pull = false) {
 		buildArgs.push('--pull');
 	}
 
+	if (noCache) {
+		buildArgs.push('--no-cache');
+	}
+
 	buildArgs.push(
 		'--build-arg',
 		`USER_ID=${userId}`,
 		'--build-arg',
 		`USERNAME=${username}`,
+		'--build-arg',
+		`CLAUDE_CODE_VERSION=${claudeCodeVersion}`,
 	);
 
 	if (config.packages && config.packages.length > 0) {
@@ -69,13 +79,16 @@ export async function main() {
 	const dockerPullIndex = args.indexOf('--docker-pull');
 	const dockerPull = dockerPullIndex !== -1;
 
+	const dockerNoCacheIndex = args.indexOf('--docker-no-cache');
+	const dockerNoCache = dockerNoCacheIndex !== -1;
+
 	const claudeArgs = args.filter((_, index) =>
-		index !== noDockerIndex && index !== dockerShellIndex && index !== dockerPullIndex);
+		index !== noDockerIndex && index !== dockerShellIndex && index !== dockerPullIndex && index !== dockerNoCacheIndex);
 
 	let claudeChildProcess;
 
 	if (useDocker) {
-		const { username, projectRoot } = await ensureDockerImage(dockerPull);
+		const { username, projectRoot } = await ensureDockerImage(dockerPull, dockerNoCache);
 
 		const config = await readConfig();
 

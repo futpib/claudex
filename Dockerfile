@@ -9,28 +9,35 @@ RUN pacman -Syu --noconfirm git bash nodejs npm base-devel sudo ripgrep fd jq
 
 # Install yay
 RUN set -xe; \
-    useradd -m -G wheel builder; \
-    echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers; \
-    su - builder -c 'git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm'; \
-    userdel -r builder
-
-# Install Claude Code CLI
-RUN npm install -g @anthropic-ai/claude-code
+	useradd -m -G wheel builder; \
+	echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers; \
+	su - builder -c 'git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm'; \
+	userdel -r builder
 
 # Create non-root user
 RUN set -xe; \
-    useradd -m -u ${USER_ID} -G wheel ${USERNAME}; \
-    mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share; \
-    chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
+	useradd -m -u ${USER_ID} -G wheel ${USERNAME}; \
+	mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share; \
+	chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
 
 # Switch to non-root user
 USER ${USERNAME}
 
+# Configure npm to use user-local prefix for global installs
+RUN mkdir -p /home/${USERNAME}/.local/share/npm-global && \
+	npm config set prefix /home/${USERNAME}/.local/share/npm-global
+ENV PATH="/home/${USERNAME}/.local/share/npm-global/bin:${PATH}"
+
 # Install AUR packages if specified
 ARG PACKAGES=""
 RUN if [ -n "${PACKAGES}" ]; then \
-    yay -S --noconfirm ${PACKAGES}; \
-    fi
+	pacman -Syu --noconfirm; \
+	yay -S --noconfirm ${PACKAGES}; \
+	fi
+
+# Install Claude Code CLI
+ARG CLAUDE_CODE_VERSION
+RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
 
 # Disable sudo for user
 USER root
