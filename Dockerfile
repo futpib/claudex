@@ -24,6 +24,7 @@ RUN set -xe; \
 ARG PACKAGES=""
 RUN set -xe; \
 	if [ -n "${PACKAGES}" ]; then \
+		pacman -Syu --noconfirm; \
 		useradd -m -G wheel builder; \
 		su - builder -c "yay -S --noconfirm ${PACKAGES}"; \
 		userdel -r builder; \

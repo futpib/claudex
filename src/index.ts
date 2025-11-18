@@ -178,7 +178,10 @@ export async function main() {
 	try {
 		await claudeChildProcess;
 	} finally {
-		await checkForClaudeCodeUpdate();
+		// Only check for updates when running on host (not in Docker)
+		if (!useDocker) {
+			await checkForClaudeCodeUpdate();
+		}
 	}
 }
 
