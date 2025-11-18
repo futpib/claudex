@@ -20,6 +20,15 @@ RUN set -xe; \
 	mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share; \
 	chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
 
+# Install AUR packages if specified
+ARG PACKAGES=""
+RUN set -xe; \
+	if [ -n "${PACKAGES}" ]; then \
+		useradd -m -G wheel builder; \
+		su - builder -c "yay -S --noconfirm ${PACKAGES}"; \
+		userdel -r builder; \
+	fi
+
 # Switch to non-root user
 USER ${USERNAME}
 
@@ -27,13 +36,6 @@ USER ${USERNAME}
 RUN mkdir -p /home/${USERNAME}/.local/share/npm-global && \
 	npm config set prefix /home/${USERNAME}/.local/share/npm-global
 ENV PATH="/home/${USERNAME}/.local/share/npm-global/bin:${PATH}"
-
-# Install AUR packages if specified
-ARG PACKAGES=""
-RUN if [ -n "${PACKAGES}" ]; then \
-	pacman -Syu --noconfirm; \
-	yay -S --noconfirm ${PACKAGES}; \
-	fi
 
 # Install Claude Code CLI
 ARG CLAUDE_CODE_VERSION
