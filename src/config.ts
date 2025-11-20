@@ -38,6 +38,23 @@ export function expandVolumePaths(volume: Volume): VolumeMount {
 	};
 }
 
+function sortVolumes(volumes: Volume[]): Volume[] {
+	return volumes.slice().sort((a, b) => {
+		const aKey = typeof a === 'string' ? a : a.host;
+		const bKey = typeof b === 'string' ? b : b.host;
+		return aKey.localeCompare(bKey);
+	});
+}
+
+function sortEnv(env: Record<string, string>): Record<string, string> {
+	const sortedKeys = Object.keys(env).sort((a, b) => a.localeCompare(b));
+	const sortedEnv: Record<string, string> = {};
+	for (const key of sortedKeys) {
+		sortedEnv[key] = env[key];
+	}
+	return sortedEnv;
+}
+
 export async function readConfig(): Promise<ClaudexConfig> {
 	const configPath = path.join(paths.config, 'config.json');
 
@@ -46,9 +63,9 @@ export async function readConfig(): Promise<ClaudexConfig> {
 		const config = JSON.parse(configContent) as ClaudexConfig;
 
 		return {
-			packages: config.packages ?? [],
-			volumes: config.volumes ?? [],
-			env: config.env ?? {},
+			packages: config.packages ? [...config.packages].sort((a, b) => a.localeCompare(b)) : [],
+			volumes: config.volumes ? sortVolumes(config.volumes) : [],
+			env: config.env ? sortEnv(config.env) : {},
 		};
 	} catch {
 		// Return defaults if config doesn't exist or is invalid
