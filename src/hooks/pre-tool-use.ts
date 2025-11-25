@@ -165,6 +165,17 @@ async function main() {
 	// Check if this is an MCP tool
 	const isMcpTool = toolName.startsWith('mcp__');
 
+	// Ban web searches containing "2024" to encourage using current year
+	if (preToolUseHookWithKnownToolInput?.tool_name === 'WebSearch') {
+		const query = preToolUseHookWithKnownToolInput.tool_input.query;
+		if (/\b2024\b/.test(query)) {
+			const currentYear = new Date().getFullYear();
+			console.error(`❌ Web searches containing "2024" are not allowed`);
+			console.error(`The current year is ${currentYear}. Please update your search query to use the current year.`);
+			process.exit(2);
+		}
+	}
+
 	if (READ_ONLY_TOOLS.has(toolName) || INTERNAL_TOOLS.has(toolName) || isMcpTool) {
 		process.exit(0);
 	}
