@@ -188,6 +188,40 @@ async function main() {
 	const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
 	await logMessage(message);
 
+	// Ban git add -A commands
+	if (toolName === 'Bash' && typeof command === 'string') {
+		try {
+			const actualCommands = extractCommandNames(command);
+			if (actualCommands.has('git')) {
+				// Check if this is a git add command with banned flags
+				// Parse tokens to find git add and its arguments
+				const gitAddPattern = /\bgit\s+(?:-C\s+\S+\s+)?add\s+/;
+				if (gitAddPattern.test(command)) {
+					// Check for -A in short flags, --all, or --no-ignore-removal
+					const bannedFlagPattern = /\bgit\s+(?:-C\s+\S+\s+)?add\s+(?:[^|;&]*?\s)?(?:-[a-zA-Z]*A(?:\s|$)|--all\b|--no-ignore-removal\b)/;
+					if (bannedFlagPattern.test(command)) {
+						console.error('❌ git add -A/--all/--no-ignore-removal is not allowed');
+						console.error('These flags stage all changes including deletions across the entire repository.');
+						console.error('Please use "git add ." to stage changes in the current directory instead.');
+						process.exit(2);
+					}
+				}
+			}
+		} catch {
+			// If parsing fails, fall back to simple check
+			if (command.toLowerCase().includes('git add')) {
+				const bannedFlagPattern = /\bgit\s+(?:-C\s+\S+\s+)?add\s+(?:[^|;&]*?\s)?(?:-[a-zA-Z]*A(?:\s|$)|--all\b|--no-ignore-removal\b)/;
+				if (bannedFlagPattern.test(command)) {
+					console.error('❌ git add -A/--all/--no-ignore-removal is not allowed');
+					console.error('(Note: Command parsing failed, using fallback detection)');
+					console.error('These flags stage all changes including deletions across the entire repository.');
+					console.error('Please use "git add ." to stage changes in the current directory instead.');
+					process.exit(2);
+				}
+			}
+		}
+	}
+
 	// Ban git commit --amend commands entirely
 	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('--amend')) {
 		console.error('❌ git commit --amend is not allowed');
