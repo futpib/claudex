@@ -10,7 +10,7 @@ import { paths } from '../paths.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
 } from './shared.js';
-import { extractCommandNames, hasChainOperators } from './bash-parser-helpers.js';
+import { extractCommandNames, hasChainOperators, hasGitCFlag } from './bash-parser-helpers.js';
 
 const editToolInputSchema = z.object({
 	file_path: z.string(),
@@ -188,32 +188,28 @@ async function main() {
 	const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
 	await logMessage(message);
 
+	// Ban git -C commands (running git in a different directory)
+	if (toolName === 'Bash' && typeof command === 'string') {
+		if (await hasGitCFlag(command)) {
+			console.error('❌ git -C is not allowed');
+			console.error('Running git commands in a different directory is not permitted.');
+			console.error('Please cd to the target directory and run git commands there instead.');
+			process.exit(2);
+		}
+	}
+
 	// Ban git add -A commands
 	if (toolName === 'Bash' && typeof command === 'string') {
-		try {
-			const actualCommands = extractCommandNames(command);
-			if (actualCommands.has('git')) {
-				// Check if this is a git add command with banned flags
-				// Parse tokens to find git add and its arguments
-				const gitAddPattern = /\bgit\s+(?:-C\s+\S+\s+)?add\s+/;
-				if (gitAddPattern.test(command)) {
-					// Check for -A in short flags, --all, or --no-ignore-removal
-					const bannedFlagPattern = /\bgit\s+(?:-C\s+\S+\s+)?add\s+(?:[^|;&]*?\s)?(?:-[a-zA-Z]*A(?:\s|$)|--all\b|--no-ignore-removal\b)/;
-					if (bannedFlagPattern.test(command)) {
-						console.error('❌ git add -A/--all/--no-ignore-removal is not allowed');
-						console.error('These flags stage all changes including deletions across the entire repository.');
-						console.error('Please use "git add ." to stage changes in the current directory instead.');
-						process.exit(2);
-					}
-				}
-			}
-		} catch {
-			// If parsing fails, fall back to simple check
-			if (command.toLowerCase().includes('git add')) {
-				const bannedFlagPattern = /\bgit\s+(?:-C\s+\S+\s+)?add\s+(?:[^|;&]*?\s)?(?:-[a-zA-Z]*A(?:\s|$)|--all\b|--no-ignore-removal\b)/;
+		const actualCommands = await extractCommandNames(command);
+		if (actualCommands.has('git')) {
+			// Check if this is a git add command with banned flags
+			// Parse tokens to find git add and its arguments
+			const gitAddPattern = /\bgit\s+add\s+/;
+			if (gitAddPattern.test(command)) {
+				// Check for -A in short flags, --all, or --no-ignore-removal
+				const bannedFlagPattern = /\bgit\s+add\s+(?:[^|;&]*?\s)?(?:-[a-zA-Z]*A(?:\s|$)|--all\b|--no-ignore-removal\b)/;
 				if (bannedFlagPattern.test(command)) {
 					console.error('❌ git add -A/--all/--no-ignore-removal is not allowed');
-					console.error('(Note: Command parsing failed, using fallback detection)');
 					console.error('These flags stage all changes including deletions across the entire repository.');
 					console.error('Please use "git add ." to stage changes in the current directory instead.');
 					process.exit(2);
@@ -245,21 +241,10 @@ async function main() {
 
 	// Ban bash commands using &&, ||, or ; operators
 	if (toolName === 'Bash' && typeof command === 'string') {
-		try {
-			if (hasChainOperators(command)) {
-				console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
-				console.error('Please run commands separately for better tracking and error handling.');
-				process.exit(2);
-			}
-		} catch {
-			// If parsing fails, fall back to regex check
-			const hasBannedOperators = /[;&|]{1,2}/.test(command);
-			if (hasBannedOperators) {
-				console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
-				console.error('(Note: Command parsing failed, using fallback detection)');
-				console.error('Please run commands separately for better tracking and error handling.');
-				process.exit(2);
-			}
+		if (await hasChainOperators(command)) {
+			console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
+			console.error('Please run commands separately for better tracking and error handling.');
+			process.exit(2);
 		}
 	}
 
@@ -267,52 +252,27 @@ async function main() {
 	if (toolName === 'Bash' && typeof command === 'string') {
 		const fileOperationCommands = new Set([ 'cat', 'sed', 'head', 'tail', 'awk' ]);
 
-		try {
-			// Extract actual command invocations (not commands in strings or comments)
-			const actualCommands = extractCommandNames(command);
+		// Extract actual command invocations (not commands in strings or comments)
+		const actualCommands = await extractCommandNames(command);
 
-			// Check if any of the actual commands are file operation commands
-			const bannedCommands = [ ...actualCommands ].filter(cmd => fileOperationCommands.has(cmd));
+		// Check if any of the actual commands are file operation commands
+		const bannedCommands = [ ...actualCommands ].filter(cmd => fileOperationCommands.has(cmd));
 
-			if (bannedCommands.length > 0) {
-				// Allow cat with heredoc syntax (e.g., cat <<'EOF' or cat <<EOF)
-				// This is commonly used for formatting multi-line strings (e.g., in git commits)
-				const catHeredocPattern = /\bcat\s+<<-?['"]?\w+['"]?/;
-				if (bannedCommands.includes('cat') && catHeredocPattern.test(command)) {
-					// This is a legitimate use of cat with heredoc, allow it
-				} else {
-					console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
-					console.error(`Found: ${bannedCommands.join(', ')}`);
-					console.error('Please use the dedicated tools instead:');
-					console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
-					console.error('  - Edit tool: for editing files (instead of sed/awk)');
-					console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
-					console.error('  - Grep tool: for searching file contents (instead of grep)');
-					process.exit(2);
-				}
-			}
-		} catch {
-			// If parsing fails, fall back to simple regex check to avoid breaking the hook
-			const fileOperationCommandsArray = [ 'cat', 'sed', 'head', 'tail', 'awk' ];
-			const hasFileOperationCommand = fileOperationCommandsArray.some(cmd => {
-				const regex = new RegExp(`\\b${cmd}\\b`);
-				return regex.test(command);
-			});
-
-			if (hasFileOperationCommand) {
-				const catHeredocPattern = /\bcat\s+<<-?['"]?\w+['"]?/;
-				if (catHeredocPattern.test(command)) {
-					// This is a legitimate use of cat with heredoc, allow it
-				} else {
-					console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
-					console.error('(Note: Command parsing failed, using fallback detection)');
-					console.error('Please use the dedicated tools instead:');
-					console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
-					console.error('  - Edit tool: for editing files (instead of sed/awk)');
-					console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
-					console.error('  - Grep tool: for searching file contents (instead of grep)');
-					process.exit(2);
-				}
+		if (bannedCommands.length > 0) {
+			// Allow cat with heredoc syntax (e.g., cat <<'EOF' or cat <<EOF)
+			// This is commonly used for formatting multi-line strings (e.g., in git commits)
+			const catHeredocPattern = /\bcat\s+<<-?['"]?\w+['"]?/;
+			if (bannedCommands.includes('cat') && catHeredocPattern.test(command)) {
+				// This is a legitimate use of cat with heredoc, allow it
+			} else {
+				console.error('❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed');
+				console.error(`Found: ${bannedCommands.join(', ')}`);
+				console.error('Please use the dedicated tools instead:');
+				console.error('  - Read tool: for reading files (supports offset/limit for specific line ranges)');
+				console.error('  - Edit tool: for editing files (instead of sed/awk)');
+				console.error('  - Write tool: for creating files (instead of cat/echo redirection)');
+				console.error('  - Grep tool: for searching file contents (instead of grep)');
+				process.exit(2);
 			}
 		}
 	}

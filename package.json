@@ -22,16 +22,15 @@
   },
   "bin": {
     "claudex": "./build/cli.js",
-    "claudex-in-docker": "./build/cli-in-docker.js",
     "claudex-hook-pre-tool-use": "./build/hooks/pre-tool-use.js",
     "claudex-hook-user-prompt-submit": "./build/hooks/user-prompt-submit.js",
+    "claudex-in-docker": "./build/cli-in-docker.js",
     "claudex-submit-co-authorship-proof": "./build/hooks/submit-co-authorship-proof.js"
   },
   "devDependencies": {
     "@ava/typescript": "^6.0.0",
     "@types/invariant": "^2.2.37",
     "@types/node": "^24.1.0",
-    "@types/shell-quote": "^1.7.5",
     "ava": "^6.4.1",
     "c8": "^10.1.3",
     "coveralls": "^3.1.1",
@@ -41,10 +40,10 @@
   },
   "packageManager": "yarn@4.9.2",
   "dependencies": {
+    "@futpib/parser": "^1.0.4",
     "env-paths": "^3.0.0",
     "execa": "^9.6.0",
     "invariant": "^2.2.4",
-    "shell-quote": "^1.8.3",
     "zod": "^4.0.8"
   }
 }

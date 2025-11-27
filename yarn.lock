@@ -185,6 +185,24 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@futpib/parser@npm:^1.0.4":
+  version: 1.0.4
+  resolution: "@futpib/parser@npm:1.0.4"
+  dependencies:
+    fp-ts: "npm:^2.16.11"
+    mem: "npm:^10.0.0"
+    monocle-ts: "npm:^2.3.13"
+    newtype-ts: "npm:^0.3.5"
+    p-mutex: "npm:^1.0.0"
+  peerDependencies:
+    mutf-8: ^1.1.4
+  peerDependenciesMeta:
+    mutf-8:
+      optional: true
+  checksum: 10/a86e8ae6b85e84a19b8b1d3f09097ff3b39871b4b40a90b4f1208e68e790e5eba9f0edcbcdb955e622636704f879fec8c100f89e42b68c512dd6529deb86b3ba
+  languageName: node
+  linkType: hard
+
 "@humanfs/core@npm:^0.19.1":
   version: 0.19.1
   resolution: "@humanfs/core@npm:0.19.1"
@@ -489,13 +507,6 @@ __metadata:
   dependencies:
     undici-types: "npm:~7.8.0"
   checksum: 10/02c3d91e1407a93a2363f97a245475fa0f6209d3f3e6ba9fdaabe65389e3e078f648da81b8738125dec6b6bf98c50fb928f36f4e72b8b015817bc21479a868c2
-  languageName: node
-  linkType: hard
-
-"@types/shell-quote@npm:^1.7.5":
-  version: 1.7.5
-  resolution: "@types/shell-quote@npm:1.7.5"
-  checksum: 10/32b4d697c7d23dbadf40713692c47f1595f083a3b3deea76cb18e30a05d197aa9205d2b87f6d92edb60cda120b51e35d32bda96ed9b0a7e32921eed2deb4559e
   languageName: node
   linkType: hard
 
@@ -1371,9 +1382,9 @@ __metadata:
   resolution: "claudex@workspace:."
   dependencies:
     "@ava/typescript": "npm:^6.0.0"
+    "@futpib/parser": "npm:^1.0.4"
     "@types/invariant": "npm:^2.2.37"
     "@types/node": "npm:^24.1.0"
-    "@types/shell-quote": "npm:^1.7.5"
     ava: "npm:^6.4.1"
     c8: "npm:^10.1.3"
     coveralls: "npm:^3.1.1"
@@ -1381,7 +1392,6 @@ __metadata:
     eslint-config-xo-typescript-overrides: "npm:^2.0.3"
     execa: "npm:^9.6.0"
     invariant: "npm:^2.2.4"
-    shell-quote: "npm:^1.8.3"
     typescript: "npm:^5.8.3"
     xo: "npm:^1.2.1"
     zod: "npm:^4.0.8"
@@ -1389,6 +1399,7 @@ __metadata:
     claudex: ./build/cli.js
     claudex-hook-pre-tool-use: ./build/hooks/pre-tool-use.js
     claudex-hook-user-prompt-submit: ./build/hooks/user-prompt-submit.js
+    claudex-in-docker: ./build/cli-in-docker.js
     claudex-submit-co-authorship-proof: ./build/hooks/submit-co-authorship-proof.js
   languageName: unknown
   linkType: soft
@@ -2697,6 +2708,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"fp-ts@npm:^2.16.11":
+  version: 2.16.11
+  resolution: "fp-ts@npm:2.16.11"
+  checksum: 10/4c034326728c43a28b3a0f3a88c1218bca13c69ee3c420ab7a52636aa0d68cb68990308e72d93b3e5cc952e998019f7e3ba16389bb1ecc0174574536c29d3ab3
+  languageName: node
+  linkType: hard
+
 "function-bind@npm:^1.1.2":
   version: 1.1.2
   resolution: "function-bind@npm:1.1.2"
@@ -3823,6 +3841,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"map-age-cleaner@npm:^0.1.3":
+  version: 0.1.3
+  resolution: "map-age-cleaner@npm:0.1.3"
+  dependencies:
+    p-defer: "npm:^1.0.0"
+  checksum: 10/cb2804a5bcb3cbdfe4b59066ea6d19f5e7c8c196cd55795ea4c28f792b192e4c442426ae52524e5e1acbccf393d3bddacefc3d41f803e66453f6c4eda3650bc1
+  languageName: node
+  linkType: hard
+
 "matcher@npm:^5.0.0":
   version: 5.0.0
   resolution: "matcher@npm:5.0.0"
@@ -3845,6 +3872,16 @@ __metadata:
   dependencies:
     blueimp-md5: "npm:^2.10.0"
   checksum: 10/4af5252998a525a01fc899b0df222a505ca6400f9de58d2fed26473ac91919331436a84cc5bf376a5fe1b1b45d3057a214ddaf86668b608e9be26221ca1585cc
+  languageName: node
+  linkType: hard
+
+"mem@npm:^10.0.0":
+  version: 10.0.0
+  resolution: "mem@npm:10.0.0"
+  dependencies:
+    map-age-cleaner: "npm:^0.1.3"
+    mimic-fn: "npm:^4.0.0"
+  checksum: 10/9f725ea48cc355393a532c93b7c897ac5b9894cf47fbb12df6fc93ae7547ca7ade64f4bb2f5796205e95ec0475e2dff4e98b180507b8f85814e9dd45291c41d8
   languageName: node
   linkType: hard
 
@@ -3901,6 +3938,13 @@ __metadata:
   dependencies:
     mime-db: "npm:1.52.0"
   checksum: 10/89aa9651b67644035de2784a6e665fc685d79aba61857e02b9c8758da874a754aed4a9aced9265f5ed1171fd934331e5516b84a7f0218031b6fa0270eca1e51a
+  languageName: node
+  linkType: hard
+
+"mimic-fn@npm:^4.0.0":
+  version: 4.0.0
+  resolution: "mimic-fn@npm:4.0.0"
+  checksum: 10/995dcece15ee29aa16e188de6633d43a3db4611bcf93620e7e62109ec41c79c0f34277165b8ce5e361205049766e371851264c21ac64ca35499acb5421c2ba56
   languageName: node
   linkType: hard
 
@@ -3977,6 +4021,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"monocle-ts@npm:^2.3.13":
+  version: 2.3.13
+  resolution: "monocle-ts@npm:2.3.13"
+  peerDependencies:
+    fp-ts: ^2.5.0
+  checksum: 10/6dc2fb990ee996bcdaa14717be48ca75db977d1318ccb599ce37051bd096afe9e37602f99fb2f04032de5930caeecd6a25646df1e878560dc5e2a19c15c0b24b
+  languageName: node
+  linkType: hard
+
 "ms@npm:^2.1.3":
   version: 2.1.3
   resolution: "ms@npm:2.1.3"
@@ -3997,6 +4050,16 @@ __metadata:
   version: 1.4.0
   resolution: "natural-compare@npm:1.4.0"
   checksum: 10/23ad088b08f898fc9b53011d7bb78ec48e79de7627e01ab5518e806033861bef68d5b0cd0e2205c2f36690ac9571ff6bcb05eb777ced2eeda8d4ac5b44592c3d
+  languageName: node
+  linkType: hard
+
+"newtype-ts@npm:^0.3.5":
+  version: 0.3.5
+  resolution: "newtype-ts@npm:0.3.5"
+  peerDependencies:
+    fp-ts: ^2.0.0
+    monocle-ts: ^2.0.0
+  checksum: 10/8eb4dfacdb2a5fcabeca9a6dd1c863b4b9c576ee6987c6d09a3e3b5fe16fff932a34b207f668c9a7d545a5be7936965d445d5cf2d28cfb945911bde9e1108c9a
   languageName: node
   linkType: hard
 
@@ -4194,6 +4257,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"p-defer@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "p-defer@npm:1.0.0"
+  checksum: 10/1d8fb7138a0ccebb65479160fd93f245303c06c977c976105d75838f7f504a9a6ef11b7e058f98b4c957a6a8df268c616da1ee339285d565f9e5ba00304e027b
+  languageName: node
+  linkType: hard
+
 "p-limit@npm:^3.0.2":
   version: 3.1.0
   resolution: "p-limit@npm:3.1.0"
@@ -4216,6 +4286,15 @@ __metadata:
   version: 7.0.3
   resolution: "p-map@npm:7.0.3"
   checksum: 10/2ef48ccfc6dd387253d71bf502604f7893ed62090b2c9d73387f10006c342606b05233da0e4f29388227b61eb5aeface6197e166520c465c234552eeab2fe633
+  languageName: node
+  linkType: hard
+
+"p-mutex@npm:^1.0.0":
+  version: 1.0.0
+  resolution: "p-mutex@npm:1.0.0"
+  dependencies:
+    yocto-queue: "npm:^1.2.1"
+  checksum: 10/7e6ce8d6b966f2c9a0c0b20618be74d6ae46dc9dffc6372a584659b854541bd42ea87ab6591dafcb4c1ca3fd435001b12133d93f0809878459b9eaf5a736fe5c
   languageName: node
   linkType: hard
 
@@ -4763,13 +4842,6 @@ __metadata:
   version: 3.0.0
   resolution: "shebang-regex@npm:3.0.0"
   checksum: 10/1a2bcae50de99034fcd92ad4212d8e01eedf52c7ec7830eedcf886622804fe36884278f2be8be0ea5fde3fd1c23911643a4e0f726c8685b61871c8908af01222
-  languageName: node
-  linkType: hard
-
-"shell-quote@npm:^1.8.3":
-  version: 1.8.3
-  resolution: "shell-quote@npm:1.8.3"
-  checksum: 10/5473e354637c2bd698911224129c9a8961697486cff1fb221f234d71c153fc377674029b0223d1d3c953a68d451d79366abfe53d1a0b46ee1f28eb9ade928f4c
   languageName: node
   linkType: hard
 
@@ -5694,6 +5766,13 @@ __metadata:
   version: 0.1.0
   resolution: "yocto-queue@npm:0.1.0"
   checksum: 10/f77b3d8d00310def622123df93d4ee654fc6a0096182af8bd60679ddcdfb3474c56c6c7190817c84a2785648cdee9d721c0154eb45698c62176c322fb46fc700
+  languageName: node
+  linkType: hard
+
+"yocto-queue@npm:^1.2.1":
+  version: 1.2.2
+  resolution: "yocto-queue@npm:1.2.2"
+  checksum: 10/92dd9880c324dbc94ff4b677b7d350ba8d835619062b7102f577add7a59ab4d87f40edc5a03d77d369dfa9d11175b1b2ec4a06a6f8a5d8ce5d1306713f66ee41
   languageName: node
   linkType: hard
 
