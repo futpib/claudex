@@ -139,6 +139,7 @@ const mcpToolInputSchema = z.object({
 const unknownToolInputSchema = z.union([
 	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
 	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
+	z.object({ tool_name: z.literal('AskUserQuestion'), tool_input: z.unknown() }),
 	mcpToolInputSchema,
 ]);
 
@@ -148,7 +149,7 @@ type KnownToolInput = z.infer<typeof knownToolInputSchema>;
 
 // Skip logging for read-only tools and internal tools
 const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
-const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task' ]);
+const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
 
 async function main() {
 	const input = await readStdin();
