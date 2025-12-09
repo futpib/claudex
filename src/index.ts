@@ -26,6 +26,8 @@ async function ensureDockerImage(pull = false, noCache = false) {
 	const claudeCodeVersionResult = await execa('npm', ['info', '@anthropic-ai/claude-code', 'version']);
 	const claudeCodeVersion = claudeCodeVersionResult.stdout.trim();
 
+	const imageName = `claudex-${claudeCodeVersion}`;
+
 	// Always build image (Docker cache makes this fast if nothing changed)
 	const buildArgs = [
 		'build',
@@ -52,7 +54,7 @@ async function ensureDockerImage(pull = false, noCache = false) {
 		buildArgs.push('--build-arg', `PACKAGES=${config.packages.join(' ')}`);
 	}
 
-	buildArgs.push('-t', 'claudex', '-');
+	buildArgs.push('-t', imageName, '-');
 
 	const dockerfileContent = await fs.readFile(dockerfilePath, 'utf8');
 
@@ -62,7 +64,7 @@ async function ensureDockerImage(pull = false, noCache = false) {
 		stderr: process.stderr,
 	});
 
-	return { userId, username, projectRoot };
+	return { userId, username, projectRoot, imageName };
 }
 
 export async function main() {
@@ -88,11 +90,14 @@ export async function main() {
 	let claudeChildProcess;
 
 	if (useDocker) {
-		const { username, projectRoot } = await ensureDockerImage(dockerPull, dockerNoCache);
+		const { username, projectRoot, imageName } = await ensureDockerImage(dockerPull, dockerNoCache);
 
 		const config = await readConfig();
 
 		const cwd = process.cwd();
+		const cwdBasename = path.basename(cwd);
+		const randomSuffix = Math.random().toString(36).slice(2, 8);
+		const containerName = `claudex-${cwdBasename}-${randomSuffix}`;
 		const homeDir = os.homedir();
 		const claudeConfigDir = path.join(homeDir, '.claude');
 		const claudeConfigFile = path.join(homeDir, '.claude.json');
@@ -102,6 +107,8 @@ export async function main() {
 			'run',
 			'--rm',
 			'-it',
+			'--name',
+			containerName,
 			'-v',
 			`${cwd}:${cwd}`,
 			'-v',
@@ -146,9 +153,9 @@ export async function main() {
 		dockerArgs.push('-w', cwd);
 
 		if (useDockerShell) {
-			dockerArgs.push('--entrypoint', 'bash', 'claudex');
+			dockerArgs.push('--entrypoint', 'bash', imageName);
 		} else {
-			dockerArgs.push('--entrypoint', 'node', 'claudex', cliInDockerPath, ...claudeArgs);
+			dockerArgs.push('--entrypoint', 'node', imageName, cliInDockerPath, ...claudeArgs);
 		}
 
 		claudeChildProcess = execa('docker', dockerArgs, {
