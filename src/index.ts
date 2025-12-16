@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa } from 'execa';
+import meow from 'meow';
 import { checkForClaudeCodeUpdate } from './update.js';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
@@ -68,24 +69,56 @@ async function ensureDockerImage(pull = false, noCache = false) {
 }
 
 export async function main() {
-	const args = process.argv.slice(2);
+	const cli = meow(`
+	Usage
+	  $ claudex [options] [claude args...]
+
+	Options
+	  --no-docker        Run Claude Code directly on the host instead of in Docker
+	  --docker-shell     Launch a bash shell inside the Docker container
+	  --docker-pull      Pull the latest base image when building
+	  --docker-no-cache  Build the Docker image without cache
+
+	Examples
+	  $ claudex
+	  $ claudex --no-docker
+	  $ claudex --docker-shell
+	  $ claudex -p "Hello, Claude"
+`, {
+		importMeta: import.meta,
+		flags: {
+			docker: {
+				type: 'boolean',
+				default: true,
+			},
+			dockerShell: {
+				type: 'boolean',
+				default: false,
+			},
+			dockerPull: {
+				type: 'boolean',
+				default: false,
+			},
+			dockerNoCache: {
+				type: 'boolean',
+				default: false,
+			},
+		},
+		allowUnknownFlags: true,
+	});
 
 	await ensureHookSetup();
 
-	const noDockerIndex = args.indexOf('--no-docker');
-	const useDocker = noDockerIndex === -1;
+	const {
+		docker: useDocker,
+		dockerShell: useDockerShell,
+		dockerPull,
+		dockerNoCache,
+	} = cli.flags;
 
-	const dockerShellIndex = args.indexOf('--docker-shell');
-	const useDockerShell = dockerShellIndex !== -1;
-
-	const dockerPullIndex = args.indexOf('--docker-pull');
-	const dockerPull = dockerPullIndex !== -1;
-
-	const dockerNoCacheIndex = args.indexOf('--docker-no-cache');
-	const dockerNoCache = dockerNoCacheIndex !== -1;
-
-	const claudeArgs = args.filter((_, index) =>
-		index !== noDockerIndex && index !== dockerShellIndex && index !== dockerPullIndex && index !== dockerNoCacheIndex);
+	// Pass through unknown flags and input to claude
+	const knownFlags = [ '--no-docker', '--docker-shell', '--docker-pull', '--docker-no-cache' ];
+	const claudeArgs = process.argv.slice(2).filter(arg => !knownFlags.includes(arg));
 
 	let claudeChildProcess;
 
