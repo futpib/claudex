@@ -11,6 +11,24 @@ import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
 import { readConfig, expandVolumePaths } from './config.js';
 
+async function getGitWorktreeParentPath(cwd: string): Promise<string | undefined> {
+	try {
+		const { stdout: gitCommonDir } = await execa('git', [ 'rev-parse', '--git-common-dir' ], { cwd });
+		const { stdout: gitDir } = await execa('git', [ 'rev-parse', '--git-dir' ], { cwd });
+
+		// If they differ, we're in a worktree
+		if (gitCommonDir !== gitDir) {
+			// gitCommonDir is like /path/to/main/.git, we need /path/to/main
+			const absoluteCommonDir = path.resolve(cwd, gitCommonDir);
+			return path.dirname(absoluteCommonDir);
+		}
+	} catch {
+		// Not a git repo
+	}
+
+	return undefined;
+}
+
 async function ensureDockerImage(pull = false, noCache = false) {
 	const userInfo = os.userInfo();
 	const userId = userInfo.uid;
@@ -195,6 +213,12 @@ export async function main() {
 			'-v',
 			`${paths.data}:${paths.data}`,
 		];
+
+		// Detect git worktree and mount parent repo if needed
+		const worktreeParentPath = await getGitWorktreeParentPath(cwd);
+		if (worktreeParentPath) {
+			dockerArgs.push('-v', `${worktreeParentPath}:${worktreeParentPath}`);
+		}
 
 		// Add volumes from config
 		if (config.volumes) {
