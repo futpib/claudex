@@ -76,6 +76,7 @@ export async function main() {
 	Options
 	  --no-docker        Run Claude Code directly on the host instead of in Docker
 	  --docker-shell     Launch a bash shell inside the Docker container
+	  --docker-exec      Exec into a running claudex container for current directory
 	  --docker-pull      Pull the latest base image when building
 	  --docker-no-cache  Build the Docker image without cache
 
@@ -83,6 +84,7 @@ export async function main() {
 	  $ claudex
 	  $ claudex --no-docker
 	  $ claudex --docker-shell
+	  $ claudex --docker-exec
 	  $ claudex -p "Hello, Claude"
 `, {
 		importMeta: import.meta,
@@ -92,6 +94,10 @@ export async function main() {
 				default: true,
 			},
 			dockerShell: {
+				type: 'boolean',
+				default: false,
+			},
+			dockerExec: {
 				type: 'boolean',
 				default: false,
 			},
@@ -112,13 +118,47 @@ export async function main() {
 	const {
 		docker: useDocker,
 		dockerShell: useDockerShell,
+		dockerExec: useDockerExec,
 		dockerPull,
 		dockerNoCache,
 	} = cli.flags;
 
 	// Pass through unknown flags and input to claude
-	const knownFlags = [ '--no-docker', '--docker-shell', '--docker-pull', '--docker-no-cache' ];
+	const knownFlags = [ '--no-docker', '--docker-shell', '--docker-exec', '--docker-pull', '--docker-no-cache' ];
 	const claudeArgs = process.argv.slice(2).filter(arg => !knownFlags.includes(arg));
+
+	// Handle --docker-exec: exec into a running container for current directory
+	if (useDockerExec) {
+		const cwd = process.cwd();
+		const cwdBasename = path.basename(cwd);
+		const containerPrefix = `claudex-${cwdBasename}-`;
+
+		const result = await execa('docker', [ 'ps', '--filter', `name=${containerPrefix}`, '--format', '{{.Names}}' ]);
+		const containers = result.stdout.split('\n').filter(Boolean);
+
+		if (containers.length === 0) {
+			console.error(`No running claudex containers found for ${cwdBasename}.`);
+			process.exit(1);
+		}
+
+		if (containers.length > 1) {
+			console.error(`Multiple running claudex containers found for ${cwdBasename}:`);
+			for (const container of containers) {
+				console.error(`  ${container}`);
+			}
+			console.error('\nPlease stop all but one container, or exec manually with:');
+			console.error('  docker exec -it <container-name> bash');
+			process.exit(1);
+		}
+
+		const containerName = containers[0];
+		await execa('docker', [ 'exec', '-it', containerName, 'bash' ], {
+			stdin: process.stdin,
+			stdout: process.stdout,
+			stderr: process.stderr,
+		});
+		return;
+	}
 
 	let claudeChildProcess;
 
