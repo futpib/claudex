@@ -29,6 +29,29 @@ async function getGitWorktreeParentPath(cwd: string): Promise<string | undefined
 	return undefined;
 }
 
+async function ensureMcpServerConfig(projectRoot: string) {
+	const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+	let config: Record<string, unknown> = {};
+
+	try {
+		const content = await fs.readFile(claudeJsonPath, 'utf8');
+		config = JSON.parse(content) as Record<string, unknown>;
+	} catch {
+		// File doesn't exist or invalid JSON
+	}
+
+	const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
+	const serverPath = path.join(projectRoot, 'build', 'mcp', 'cli.js');
+
+	mcpServers.claudex = {
+		command: 'node',
+		args: [ serverPath ],
+	};
+
+	config.mcpServers = mcpServers;
+	await fs.writeFile(claudeJsonPath, JSON.stringify(config, null, 2));
+}
+
 async function ensureDockerImage(pull = false, noCache = false) {
 	const userInfo = os.userInfo();
 	const userId = userInfo.uid;
@@ -132,6 +155,12 @@ export async function main() {
 	});
 
 	await ensureHookSetup();
+
+	// Ensure MCP server is configured in ~/.claude.json
+	const currentFileUrl = import.meta.url;
+	const currentFilePath = fileURLToPath(currentFileUrl);
+	const projectRoot = path.resolve(path.dirname(currentFilePath), '..');
+	await ensureMcpServerConfig(projectRoot);
 
 	const {
 		docker: useDocker,
