@@ -1,26 +1,43 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { z } from 'zod';
 import { paths } from './paths.js';
 
-export interface VolumeMount {
-	host: string;
-	container: string;
-}
+// Volume can be a simple string (same path for host and container)
+// or an object with different paths
+const VolumeMountSchema = z.object({
+	host: z.string(),
+	container: z.string(),
+});
 
-export type Volume = string | VolumeMount;
+const VolumeSchema = z.union([z.string(), VolumeMountSchema]);
 
-export interface SshConfig {
-	keys?: string[];
-	keysByPath?: Record<string, string[]>;
-}
+const SshConfigSchema = z.object({
+	keys: z.array(z.string()).optional(),
+});
 
-export interface ClaudexConfig {
-	packages?: string[];
-	volumes?: Volume[];
-	env?: Record<string, string>;
-	ssh?: SshConfig;
-}
+// Base config schema - can appear at both root and project level
+const BaseConfigSchema = z.object({
+	packages: z.array(z.string()).optional(),
+	volumes: z.array(VolumeSchema).optional(),
+	env: z.record(z.string(), z.string()).optional(),
+	ssh: SshConfigSchema.optional(),
+});
+
+// Root config adds projects mapping
+const RootConfigSchema = BaseConfigSchema.extend({
+	projects: z.record(z.string(), BaseConfigSchema).optional(),
+});
+
+export type VolumeMount = z.infer<typeof VolumeMountSchema>;
+export type Volume = z.infer<typeof VolumeSchema>;
+export type SshConfig = z.infer<typeof SshConfigSchema>;
+export type BaseConfig = z.infer<typeof BaseConfigSchema>;
+export type RootConfig = z.infer<typeof RootConfigSchema>;
+
+// Merged config is the same as base config (after merging root + project)
+export type ClaudexConfig = BaseConfig;
 
 export function expandTilde(filePath: string): string {
 	if (filePath.startsWith('~/')) {
@@ -29,29 +46,12 @@ export function expandTilde(filePath: string): string {
 	return filePath;
 }
 
-export function getSshKeysForPath(config: ClaudexConfig, cwd: string): string[] {
-	const keys: string[] = [];
-
-	// Add global keys
-	if (config.ssh?.keys) {
-		for (const key of config.ssh.keys) {
-			keys.push(expandTilde(key));
-		}
+export function getSshKeys(config: ClaudexConfig): string[] {
+	if (!config.ssh?.keys) {
+		return [];
 	}
 
-	// Add path-specific keys
-	if (config.ssh?.keysByPath) {
-		for (const [ pathPrefix, pathKeys ] of Object.entries(config.ssh.keysByPath)) {
-			const expandedPrefix = expandTilde(pathPrefix);
-			if (cwd === expandedPrefix || cwd.startsWith(expandedPrefix + '/')) {
-				for (const key of pathKeys) {
-					keys.push(expandTilde(key));
-				}
-			}
-		}
-	}
-
-	return keys;
+	return config.ssh.keys.map(key => expandTilde(key));
 }
 
 export function expandVolumePaths(volume: Volume): VolumeMount {
@@ -86,25 +86,106 @@ function sortEnv(env: Record<string, string>): Record<string, string> {
 	return sortedEnv;
 }
 
-export async function readConfig(): Promise<ClaudexConfig> {
+function dedupeStrings(arr: string[]): string[] {
+	return [...new Set(arr)];
+}
+
+function dedupeVolumes(volumes: Volume[]): Volume[] {
+	const seen = new Set<string>();
+	const result: Volume[] = [];
+
+	for (const volume of volumes) {
+		const hostPath = typeof volume === 'string' ? volume : volume.host;
+		if (!seen.has(hostPath)) {
+			seen.add(hostPath);
+			result.push(volume);
+		}
+	}
+
+	return result;
+}
+
+function mergeConfigs(root: BaseConfig, project: BaseConfig | undefined): ClaudexConfig {
+	if (!project) {
+		return root;
+	}
+
+	const packages = dedupeStrings([
+		...(root.packages ?? []),
+		...(project.packages ?? []),
+	]);
+
+	const volumes = dedupeVolumes([
+		...(root.volumes ?? []),
+		...(project.volumes ?? []),
+	]);
+
+	const env = {
+		...(root.env ?? {}),
+		...(project.env ?? {}),
+	};
+
+	const sshKeys = dedupeStrings([
+		...(root.ssh?.keys ?? []),
+		...(project.ssh?.keys ?? []),
+	]);
+
+	return {
+		packages: packages.length > 0 ? packages : undefined,
+		volumes: volumes.length > 0 ? volumes : undefined,
+		env: Object.keys(env).length > 0 ? env : undefined,
+		ssh: sshKeys.length > 0 ? { keys: sshKeys } : undefined,
+	};
+}
+
+function findMatchingProject(rootConfig: RootConfig, cwd: string): BaseConfig | undefined {
+	if (!rootConfig.projects) {
+		return undefined;
+	}
+
+	// Find the most specific matching project (longest path prefix)
+	let bestMatch: { path: string; config: BaseConfig } | undefined;
+
+	for (const [projectPath, projectConfig] of Object.entries(rootConfig.projects)) {
+		const expandedPath = expandTilde(projectPath);
+		if (cwd === expandedPath || cwd.startsWith(expandedPath + '/')) {
+			if (!bestMatch || expandedPath.length > bestMatch.path.length) {
+				bestMatch = { path: expandedPath, config: projectConfig };
+			}
+		}
+	}
+
+	return bestMatch?.config;
+}
+
+async function readRootConfig(): Promise<RootConfig> {
 	const configPath = path.join(paths.config, 'config.json');
 
 	try {
 		const configContent = await fs.readFile(configPath, 'utf8');
-		const config = JSON.parse(configContent) as ClaudexConfig;
-
-		return {
-			packages: config.packages ? [...config.packages].sort((a, b) => a.localeCompare(b)) : [],
-			volumes: config.volumes ? sortVolumes(config.volumes) : [],
-			env: config.env ? sortEnv(config.env) : {},
-			ssh: config.ssh,
-		};
+		const parsed = JSON.parse(configContent) as unknown;
+		return RootConfigSchema.parse(parsed);
 	} catch {
 		// Return defaults if config doesn't exist or is invalid
-		return {
-			packages: [],
-			volumes: [],
-			env: {},
-		};
+		return {};
 	}
+}
+
+export async function getMergedConfig(cwd: string): Promise<ClaudexConfig> {
+	const rootConfig = await readRootConfig();
+	const projectConfig = findMatchingProject(rootConfig, cwd);
+	const merged = mergeConfigs(rootConfig, projectConfig);
+
+	// Sort for consistent Docker cache
+	return {
+		packages: merged.packages ? [...merged.packages].sort((a, b) => a.localeCompare(b)) : undefined,
+		volumes: merged.volumes ? sortVolumes(merged.volumes) : undefined,
+		env: merged.env ? sortEnv(merged.env) : undefined,
+		ssh: merged.ssh,
+	};
+}
+
+// Legacy function for backward compatibility - deprecated
+export async function readConfig(): Promise<ClaudexConfig> {
+	return getMergedConfig(process.cwd());
 }

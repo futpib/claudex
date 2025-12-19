@@ -9,7 +9,7 @@ import { checkForClaudeCodeUpdate } from './update.js';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
-import { readConfig, expandVolumePaths, getSshKeysForPath } from './config.js';
+import { getMergedConfig, expandVolumePaths, getSshKeys } from './config.js';
 
 type SshAgentInfo = {
 	socketPath: string;
@@ -100,7 +100,7 @@ async function ensureMcpServerConfig(projectRoot: string) {
 	await fs.writeFile(claudeJsonPath, JSON.stringify(config, null, 2));
 }
 
-async function ensureDockerImage(pull = false, noCache = false) {
+async function ensureDockerImage(cwd: string, config: Awaited<ReturnType<typeof getMergedConfig>>, pull = false, noCache = false) {
 	const userInfo = os.userInfo();
 	const userId = userInfo.uid;
 	const { username } = userInfo;
@@ -110,13 +110,13 @@ async function ensureDockerImage(pull = false, noCache = false) {
 	const projectRoot = path.resolve(path.dirname(currentFilePath), '..');
 	const dockerfilePath = path.join(projectRoot, 'Dockerfile');
 
-	const config = await readConfig();
+	const cwdBasename = path.basename(cwd);
 
 	// Get current Claude Code version from npm
 	const claudeCodeVersionResult = await execa('npm', ['info', '@anthropic-ai/claude-code', 'version']);
 	const claudeCodeVersion = claudeCodeVersionResult.stdout.trim();
 
-	const imageName = `claudex-${claudeCodeVersion}`;
+	const imageName = `claudex-${cwdBasename}-${claudeCodeVersion}`;
 
 	// Always build image (Docker cache makes this fast if nothing changed)
 	const buildArgs = [
@@ -259,12 +259,11 @@ export async function main() {
 	let sshAgent: SshAgentInfo | undefined;
 
 	if (useDocker) {
-		const { username, projectRoot, imageName } = await ensureDockerImage(dockerPull, dockerNoCache);
-
-		const config = await readConfig();
-
 		const cwd = process.cwd();
 		const cwdBasename = path.basename(cwd);
+		const config = await getMergedConfig(cwd);
+
+		const { username, projectRoot, imageName } = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
 		const randomSuffix = Math.random().toString(36).slice(2, 8);
 		const containerName = `claudex-${cwdBasename}-${randomSuffix}`;
 		const homeDir = os.homedir();
@@ -326,7 +325,7 @@ export async function main() {
 		}
 
 		// Start SSH agent with configured keys
-		const sshKeys = getSshKeysForPath(config, cwd);
+		const sshKeys = getSshKeys(config);
 		sshAgent = await startSshAgent(sshKeys);
 		if (sshAgent) {
 			dockerArgs.push('-v', `${sshAgent.socketPath}:/ssh-agent`);
