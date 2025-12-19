@@ -10,17 +10,48 @@ export interface VolumeMount {
 
 export type Volume = string | VolumeMount;
 
+export interface SshConfig {
+	keys?: string[];
+	keysByPath?: Record<string, string[]>;
+}
+
 export interface ClaudexConfig {
 	packages?: string[];
 	volumes?: Volume[];
 	env?: Record<string, string>;
+	ssh?: SshConfig;
 }
 
-function expandTilde(filePath: string): string {
+export function expandTilde(filePath: string): string {
 	if (filePath.startsWith('~/')) {
 		return path.join(os.homedir(), filePath.slice(2));
 	}
 	return filePath;
+}
+
+export function getSshKeysForPath(config: ClaudexConfig, cwd: string): string[] {
+	const keys: string[] = [];
+
+	// Add global keys
+	if (config.ssh?.keys) {
+		for (const key of config.ssh.keys) {
+			keys.push(expandTilde(key));
+		}
+	}
+
+	// Add path-specific keys
+	if (config.ssh?.keysByPath) {
+		for (const [ pathPrefix, pathKeys ] of Object.entries(config.ssh.keysByPath)) {
+			const expandedPrefix = expandTilde(pathPrefix);
+			if (cwd === expandedPrefix || cwd.startsWith(expandedPrefix + '/')) {
+				for (const key of pathKeys) {
+					keys.push(expandTilde(key));
+				}
+			}
+		}
+	}
+
+	return keys;
 }
 
 export function expandVolumePaths(volume: Volume): VolumeMount {
@@ -66,6 +97,7 @@ export async function readConfig(): Promise<ClaudexConfig> {
 			packages: config.packages ? [...config.packages].sort((a, b) => a.localeCompare(b)) : [],
 			volumes: config.volumes ? sortVolumes(config.volumes) : [],
 			env: config.env ? sortEnv(config.env) : {},
+			ssh: config.ssh,
 		};
 	} catch {
 		// Return defaults if config doesn't exist or is invalid

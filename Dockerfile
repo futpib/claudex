@@ -5,7 +5,7 @@ ARG USER_ID=1000
 ARG USERNAME=claude
 
 # Install system dependencies
-RUN pacman -Syu --noconfirm git bash nodejs npm base-devel sudo ripgrep fd jq
+RUN pacman -Syu --noconfirm git bash nodejs npm base-devel sudo ripgrep fd jq openssh
 
 # Install yay
 RUN set -xe; \

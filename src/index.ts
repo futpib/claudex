@@ -9,7 +9,55 @@ import { checkForClaudeCodeUpdate } from './update.js';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
-import { readConfig, expandVolumePaths } from './config.js';
+import { readConfig, expandVolumePaths, getSshKeysForPath } from './config.js';
+
+type SshAgentInfo = {
+	socketPath: string;
+	pid: string;
+	cleanup: () => Promise<void>;
+};
+
+async function startSshAgent(keys: string[]): Promise<SshAgentInfo | undefined> {
+	if (keys.length === 0) {
+		return undefined;
+	}
+
+	// Start ssh-agent and parse its output
+	const agentResult = await execa('ssh-agent', [ '-s' ]);
+	const output = agentResult.stdout;
+
+	const socketMatch = output.match(/SSH_AUTH_SOCK=([^;]+)/);
+	const pidMatch = output.match(/SSH_AGENT_PID=(\d+)/);
+
+	if (!socketMatch || !pidMatch) {
+		console.error('Failed to parse ssh-agent output');
+		return undefined;
+	}
+
+	const socketPath = socketMatch[1];
+	const pid = pidMatch[1];
+
+	// Add keys to the agent
+	for (const key of keys) {
+		try {
+			await execa('ssh-add', [ key ], {
+				env: { ...process.env, SSH_AUTH_SOCK: socketPath },
+			});
+		} catch (error) {
+			console.error(`Failed to add SSH key ${key}:`, error instanceof Error ? error.message : error);
+		}
+	}
+
+	const cleanup = async () => {
+		try {
+			await execa('kill', [ pid ]);
+		} catch {
+			// Agent may already be dead
+		}
+	};
+
+	return { socketPath, pid, cleanup };
+}
 
 async function getGitWorktreeParentPath(cwd: string): Promise<string | undefined> {
 	try {
@@ -208,6 +256,7 @@ export async function main() {
 	}
 
 	let claudeChildProcess;
+	let sshAgent: SshAgentInfo | undefined;
 
 	if (useDocker) {
 		const { username, projectRoot, imageName } = await ensureDockerImage(dockerPull, dockerNoCache);
@@ -276,6 +325,14 @@ export async function main() {
 			}
 		}
 
+		// Start SSH agent with configured keys
+		const sshKeys = getSshKeysForPath(config, cwd);
+		sshAgent = await startSshAgent(sshKeys);
+		if (sshAgent) {
+			dockerArgs.push('-v', `${sshAgent.socketPath}:/ssh-agent`);
+			dockerArgs.push('-e', 'SSH_AUTH_SOCK=/ssh-agent');
+		}
+
 		dockerArgs.push('-w', cwd);
 
 		if (useDockerShell) {
@@ -311,6 +368,11 @@ export async function main() {
 	try {
 		await claudeChildProcess;
 	} finally {
+		// Cleanup SSH agent if we started one
+		if (sshAgent) {
+			await sshAgent.cleanup();
+		}
+
 		// Only check for updates when running on host (not in Docker)
 		if (!useDocker) {
 			await checkForClaudeCodeUpdate();
