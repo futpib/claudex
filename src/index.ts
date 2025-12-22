@@ -275,6 +275,8 @@ export async function main() {
 			'run',
 			'--rm',
 			'-it',
+			'--cap-drop', 'ALL',
+			'--security-opt', 'no-new-privileges',
 			'--name',
 			containerName,
 			'-v',
