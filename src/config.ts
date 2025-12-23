@@ -106,29 +106,25 @@ function dedupeVolumes(volumes: Volume[]): Volume[] {
 	return result;
 }
 
-function mergeConfigs(root: BaseConfig, project: BaseConfig | undefined): ClaudexConfig {
-	if (!project) {
-		return root;
-	}
-
+function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	const packages = dedupeStrings([
-		...(root.packages ?? []),
-		...(project.packages ?? []),
+		...(base.packages ?? []),
+		...(overlay.packages ?? []),
 	]);
 
 	const volumes = dedupeVolumes([
-		...(root.volumes ?? []),
-		...(project.volumes ?? []),
+		...(base.volumes ?? []),
+		...(overlay.volumes ?? []),
 	]);
 
 	const env = {
-		...(root.env ?? {}),
-		...(project.env ?? {}),
+		...(base.env ?? {}),
+		...(overlay.env ?? {}),
 	};
 
 	const sshKeys = dedupeStrings([
-		...(root.ssh?.keys ?? []),
-		...(project.ssh?.keys ?? []),
+		...(base.ssh?.keys ?? []),
+		...(overlay.ssh?.keys ?? []),
 	]);
 
 	return {
@@ -136,6 +132,45 @@ function mergeConfigs(root: BaseConfig, project: BaseConfig | undefined): Claude
 		volumes: volumes.length > 0 ? volumes : undefined,
 		env: Object.keys(env).length > 0 ? env : undefined,
 		ssh: sshKeys.length > 0 ? { keys: sshKeys } : undefined,
+	};
+}
+
+function mergeConfigs(root: BaseConfig, project: BaseConfig | undefined): ClaudexConfig {
+	if (!project) {
+		return root;
+	}
+
+	return mergeBaseConfigs(root, project);
+}
+
+function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
+	const merged = mergeBaseConfigs(base, overlay);
+
+	// Merge projects: combine keys, merge configs for same project path
+	let projects: Record<string, BaseConfig> | undefined;
+
+	if (base.projects || overlay.projects) {
+		projects = {};
+		const allPaths = new Set([
+			...Object.keys(base.projects ?? {}),
+			...Object.keys(overlay.projects ?? {}),
+		]);
+
+		for (const projectPath of allPaths) {
+			const baseProject = base.projects?.[projectPath];
+			const overlayProject = overlay.projects?.[projectPath];
+
+			if (baseProject && overlayProject) {
+				projects[projectPath] = mergeBaseConfigs(baseProject, overlayProject);
+			} else {
+				projects[projectPath] = (overlayProject ?? baseProject)!;
+			}
+		}
+	}
+
+	return {
+		...merged,
+		projects,
 	};
 }
 
@@ -160,16 +195,39 @@ function findMatchingProject(rootConfig: RootConfig, cwd: string): BaseConfig | 
 }
 
 async function readRootConfig(): Promise<RootConfig> {
-	const configPath = path.join(paths.config, 'config.json');
+	const configDir = paths.config;
+	const configPath = path.join(configDir, 'config.json');
+	const configDPath = path.join(configDir, 'config.json.d');
 
+	let merged: RootConfig = {};
+
+	// Read main config.json
 	try {
-		const configContent = await fs.readFile(configPath, 'utf8');
-		const parsed = JSON.parse(configContent) as unknown;
-		return RootConfigSchema.parse(parsed);
+		const content = await fs.readFile(configPath, 'utf8');
+		merged = RootConfigSchema.parse(JSON.parse(content));
 	} catch {
-		// Return defaults if config doesn't exist or is invalid
-		return {};
+		// Doesn't exist or invalid
 	}
+
+	// Read all .json files from config.json.d/
+	try {
+		const files = await fs.readdir(configDPath);
+		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
+
+		for (const file of jsonFiles) {
+			try {
+				const content = await fs.readFile(path.join(configDPath, file), 'utf8');
+				const parsed = RootConfigSchema.parse(JSON.parse(content));
+				merged = mergeRootConfigs(merged, parsed);
+			} catch {
+				// Skip invalid files
+			}
+		}
+	} catch {
+		// Directory doesn't exist
+	}
+
+	return merged;
 }
 
 async function getGitRoot(cwd: string): Promise<string | undefined> {
