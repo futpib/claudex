@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import { z } from 'zod';
+import { execa } from 'execa';
 import { paths } from './paths.js';
 
 // Volume can be a simple string (same path for host and container)
@@ -171,18 +172,70 @@ async function readRootConfig(): Promise<RootConfig> {
 	}
 }
 
+async function getGitRoot(cwd: string): Promise<string | undefined> {
+	try {
+		const { stdout } = await execa('git', ['rev-parse', '--show-toplevel'], { cwd });
+		return stdout.trim();
+	} catch {
+		// Not a git repo
+		return undefined;
+	}
+}
+
+export async function getGitWorktreeParentPath(cwd: string): Promise<string | undefined> {
+	try {
+		const { stdout: gitCommonDir } = await execa('git', ['rev-parse', '--git-common-dir'], { cwd });
+		const { stdout: gitDir } = await execa('git', ['rev-parse', '--git-dir'], { cwd });
+
+		// If they differ, we're in a worktree
+		if (gitCommonDir !== gitDir) {
+			// gitCommonDir is like /path/to/main/.git, we need /path/to/main
+			const absoluteCommonDir = path.resolve(cwd, gitCommonDir);
+			return path.dirname(absoluteCommonDir);
+		}
+	} catch {
+		// Not a git repo
+	}
+
+	return undefined;
+}
+
+function sortConfig(config: ClaudexConfig): ClaudexConfig {
+	return {
+		packages: config.packages ? [...config.packages].sort((a, b) => a.localeCompare(b)) : undefined,
+		volumes: config.volumes ? sortVolumes(config.volumes) : undefined,
+		env: config.env ? sortEnv(config.env) : undefined,
+		ssh: config.ssh,
+	};
+}
+
 export async function getMergedConfig(cwd: string): Promise<ClaudexConfig> {
 	const rootConfig = await readRootConfig();
-	const projectConfig = findMatchingProject(rootConfig, cwd);
-	const merged = mergeConfigs(rootConfig, projectConfig);
+
+	// Get git-aware paths
+	const gitRoot = await getGitRoot(cwd);
+	const worktreeParent = await getGitWorktreeParentPath(cwd);
+
+	// Determine resolution path (git root or cwd if not in git)
+	const resolutionPath = gitRoot ?? cwd;
+
+	// Build merge chain: root → parent repo → git root
+	let merged: ClaudexConfig = rootConfig;
+
+	if (worktreeParent) {
+		const parentProjectConfig = findMatchingProject(rootConfig, worktreeParent);
+		if (parentProjectConfig) {
+			merged = mergeConfigs(merged, parentProjectConfig);
+		}
+	}
+
+	const projectConfig = findMatchingProject(rootConfig, resolutionPath);
+	if (projectConfig) {
+		merged = mergeConfigs(merged, projectConfig);
+	}
 
 	// Sort for consistent Docker cache
-	return {
-		packages: merged.packages ? [...merged.packages].sort((a, b) => a.localeCompare(b)) : undefined,
-		volumes: merged.volumes ? sortVolumes(merged.volumes) : undefined,
-		env: merged.env ? sortEnv(merged.env) : undefined,
-		ssh: merged.ssh,
-	};
+	return sortConfig(merged);
 }
 
 // Legacy function for backward compatibility - deprecated

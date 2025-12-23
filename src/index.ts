@@ -9,7 +9,7 @@ import { checkForClaudeCodeUpdate } from './update.js';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
-import { getMergedConfig, expandVolumePaths, getSshKeys } from './config.js';
+import { getMergedConfig, expandVolumePaths, getSshKeys, getGitWorktreeParentPath } from './config.js';
 
 type SshAgentInfo = {
 	socketPath: string;
@@ -57,24 +57,6 @@ async function startSshAgent(keys: string[]): Promise<SshAgentInfo | undefined> 
 	};
 
 	return { socketPath, pid, cleanup };
-}
-
-async function getGitWorktreeParentPath(cwd: string): Promise<string | undefined> {
-	try {
-		const { stdout: gitCommonDir } = await execa('git', [ 'rev-parse', '--git-common-dir' ], { cwd });
-		const { stdout: gitDir } = await execa('git', [ 'rev-parse', '--git-dir' ], { cwd });
-
-		// If they differ, we're in a worktree
-		if (gitCommonDir !== gitDir) {
-			// gitCommonDir is like /path/to/main/.git, we need /path/to/main
-			const absoluteCommonDir = path.resolve(cwd, gitCommonDir);
-			return path.dirname(absoluteCommonDir);
-		}
-	} catch {
-		// Not a git repo
-	}
-
-	return undefined;
 }
 
 async function ensureMcpServerConfig(projectRoot: string) {
