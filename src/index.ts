@@ -353,11 +353,13 @@ export async function main() {
 	} finally {
 		// Cleanup SSH agent if we started one
 		if (sshAgent) {
+			console.log('Cleaning up SSH agent...');
 			await sshAgent.cleanup();
 		}
 
 		// Only check for updates when running on host (not in Docker)
 		if (!useDocker) {
+			console.log('Checking for updates...');
 			await checkForClaudeCodeUpdate();
 		}
 	}
@@ -468,4 +470,6 @@ export async function mainInDocker() {
 		stdout: process.stdout,
 		stderr: process.stderr,
 	});
+
+	console.log('Shutting down container...');
 }
