@@ -289,7 +289,8 @@ export async function main() {
 			}
 		}
 
-		// Add environment variables from config
+		// Resolve environment variables from config
+		const resolvedEnv: Record<string, string> = {};
 		if (config.env) {
 			for (const [key, value] of Object.entries(config.env)) {
 				// Check if value is a reference to host environment variable
@@ -298,15 +299,27 @@ export async function main() {
 					const hostVarName = match[1];
 					const hostValue = process.env[hostVarName];
 					if (hostValue !== undefined) {
-						dockerArgs.push('-e', `${key}=${hostValue}`);
+						resolvedEnv[key] = hostValue;
 					}
 					// Skip if host variable is not defined
 				} else {
 					// Use literal value, expand ~/ in PATH
-					const expandedValue = key === 'PATH' ? expandPathEnv(value) : value;
-					dockerArgs.push('-e', `${key}=${expandedValue}`);
+					resolvedEnv[key] = key === 'PATH' ? expandPathEnv(value) : value;
 				}
 			}
+		}
+
+		// Print env overrides
+		if (Object.keys(resolvedEnv).length > 0) {
+			console.error('Environment overrides:');
+			for (const [key, value] of Object.entries(resolvedEnv)) {
+				console.error(`  ${key}=${value}`);
+			}
+		}
+
+		// Add environment variables to docker args
+		for (const [key, value] of Object.entries(resolvedEnv)) {
+			dockerArgs.push('-e', `${key}=${value}`);
 		}
 
 		// Start SSH agent with configured keys

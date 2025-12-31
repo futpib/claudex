@@ -106,6 +106,17 @@ function dedupeStrings(arr: string[]): string[] {
 	return [...new Set(arr)];
 }
 
+function mergeEnv(base: Record<string, string>, overlay: Record<string, string>): Record<string, string> {
+	const result = { ...base, ...overlay };
+
+	// Special handling for PATH: prepend overlay to base
+	if (base.PATH && overlay.PATH) {
+		result.PATH = `${overlay.PATH}:${base.PATH}`;
+	}
+
+	return result;
+}
+
 function dedupeVolumes(volumes: Volume[]): Volume[] {
 	const seen = new Set<string>();
 	const result: Volume[] = [];
@@ -132,10 +143,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 		...(overlay.volumes ?? []),
 	]);
 
-	const env = {
-		...(base.env ?? {}),
-		...(overlay.env ?? {}),
-	};
+	const env = mergeEnv(base.env ?? {}, overlay.env ?? {});
 
 	const sshKeys = dedupeStrings([
 		...(base.ssh?.keys ?? []),
