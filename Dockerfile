@@ -5,7 +5,7 @@ ARG USER_ID=1000
 ARG USERNAME=claude
 
 # Install system dependencies
-RUN pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh
+RUN pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh nodejs npm
 
 # Install yay
 RUN set -xe; \
@@ -34,7 +34,8 @@ RUN set -xe; \
 USER ${USERNAME}
 
 # Configure npm to use user-local prefix for global installs
-RUN mkdir -p /home/${USERNAME}/.local/share/npm-global && \
+RUN set -xe; \
+	mkdir -p /home/${USERNAME}/.local/share/npm-global; \
 	npm config set prefix /home/${USERNAME}/.local/share/npm-global
 ENV PATH="/home/${USERNAME}/.local/share/npm-global/bin:${PATH}"
 
