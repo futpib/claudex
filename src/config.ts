@@ -47,6 +47,21 @@ export function expandTilde(filePath: string): string {
 	return filePath;
 }
 
+export function expandPathEnv(value: string): string {
+	return value
+		.split(':')
+		.map(p => expandTilde(p))
+		.join(':');
+}
+
+export function expandEnvValues(env: Record<string, string>): Record<string, string> {
+	const result: Record<string, string> = {};
+	for (const [key, value] of Object.entries(env)) {
+		result[key] = key === 'PATH' ? expandPathEnv(value) : value;
+	}
+	return result;
+}
+
 export function getSshKeys(config: ClaudexConfig): string[] {
 	if (!config.ssh?.keys) {
 		return [];

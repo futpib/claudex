@@ -9,7 +9,7 @@ import { checkForClaudeCodeUpdate } from './update.js';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
-import { getMergedConfig, expandVolumePaths, getSshKeys, getGitWorktreeParentPath } from './config.js';
+import { getMergedConfig, expandVolumePaths, getSshKeys, getGitWorktreeParentPath, expandPathEnv } from './config.js';
 
 type SshAgentInfo = {
 	socketPath: string;
@@ -302,8 +302,9 @@ export async function main() {
 					}
 					// Skip if host variable is not defined
 				} else {
-					// Use literal value
-					dockerArgs.push('-e', `${key}=${value}`);
+					// Use literal value, expand ~/ in PATH
+					const expandedValue = key === 'PATH' ? expandPathEnv(value) : value;
+					dockerArgs.push('-e', `${key}=${expandedValue}`);
 				}
 			}
 		}
