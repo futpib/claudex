@@ -140,6 +140,33 @@ async function ensureDockerImage(cwd: string, config: Awaited<ReturnType<typeof 
 }
 
 export async function main() {
+	const flagsConfig = {
+		docker: {
+			type: 'boolean',
+			default: true,
+		},
+		dockerShell: {
+			type: 'boolean',
+			default: false,
+		},
+		dockerExec: {
+			type: 'boolean',
+			default: false,
+		},
+		dockerPull: {
+			type: 'boolean',
+			default: false,
+		},
+		dockerNoCache: {
+			type: 'boolean',
+			default: false,
+		},
+		dockerSudo: {
+			type: 'boolean',
+			default: false,
+		},
+	} as const;
+
 	const cli = meow(`
 	Usage
 	  $ claudex [options] [claude args...]
@@ -160,33 +187,18 @@ export async function main() {
 	  $ claudex -p "Hello, Claude"
 `, {
 		importMeta: import.meta,
-		flags: {
-			docker: {
-				type: 'boolean',
-				default: true,
-			},
-			dockerShell: {
-				type: 'boolean',
-				default: false,
-			},
-			dockerExec: {
-				type: 'boolean',
-				default: false,
-			},
-			dockerPull: {
-				type: 'boolean',
-				default: false,
-			},
-			dockerNoCache: {
-				type: 'boolean',
-				default: false,
-			},
-			dockerSudo: {
-				type: 'boolean',
-				default: false,
-			},
-		},
+		flags: flagsConfig,
 		allowUnknownFlags: true,
+	});
+
+	// Derive known flags from config to avoid duplication
+	const knownFlags = Object.entries(flagsConfig).flatMap(([key, config]) => {
+		const kebab = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+		// Boolean flags with default: true use --no- prefix
+		if (config.type === 'boolean' && config.default === true) {
+			return [`--no-${kebab}`, `--${kebab}`];
+		}
+		return [`--${kebab}`];
 	});
 
 	await ensureHookSetup();
@@ -207,7 +219,6 @@ export async function main() {
 	} = cli.flags;
 
 	// Pass through unknown flags and input to claude
-	const knownFlags = [ '--no-docker', '--docker-shell', '--docker-exec', '--docker-pull', '--docker-no-cache', '--docker-sudo' ];
 	const claudeArgs = process.argv.slice(2).filter(arg => !knownFlags.includes(arg));
 
 	// Handle --docker-exec: exec into a running container for current directory
