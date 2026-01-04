@@ -150,6 +150,7 @@ export async function main() {
 	  --docker-exec      Exec into a running claudex container for current directory
 	  --docker-pull      Pull the latest base image when building
 	  --docker-no-cache  Build the Docker image without cache
+	  --docker-sudo      Allow sudo inside the container (less secure)
 
 	Examples
 	  $ claudex
@@ -180,6 +181,10 @@ export async function main() {
 				type: 'boolean',
 				default: false,
 			},
+			dockerSudo: {
+				type: 'boolean',
+				default: false,
+			},
 		},
 		allowUnknownFlags: true,
 	});
@@ -198,10 +203,11 @@ export async function main() {
 		dockerExec: useDockerExec,
 		dockerPull,
 		dockerNoCache,
+		dockerSudo,
 	} = cli.flags;
 
 	// Pass through unknown flags and input to claude
-	const knownFlags = [ '--no-docker', '--docker-shell', '--docker-exec', '--docker-pull', '--docker-no-cache' ];
+	const knownFlags = [ '--no-docker', '--docker-shell', '--docker-exec', '--docker-pull', '--docker-no-cache', '--docker-sudo' ];
 	const claudeArgs = process.argv.slice(2).filter(arg => !knownFlags.includes(arg));
 
 	// Handle --docker-exec: exec into a running container for current directory
@@ -257,8 +263,7 @@ export async function main() {
 			'run',
 			'--rm',
 			'-it',
-			'--cap-drop', 'ALL',
-			'--security-opt', 'no-new-privileges',
+			...(dockerSudo ? [] : ['--cap-drop', 'ALL', '--security-opt', 'no-new-privileges']),
 			'--name',
 			containerName,
 			'-v',
