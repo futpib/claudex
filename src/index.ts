@@ -98,7 +98,7 @@ async function ensureDockerImage(cwd: string, config: Awaited<ReturnType<typeof 
 	const claudeCodeVersionResult = await execa('npm', ['info', '@anthropic-ai/claude-code', 'version']);
 	const claudeCodeVersion = claudeCodeVersionResult.stdout.trim();
 
-	const imageName = `claudex-${cwdBasename}-${claudeCodeVersion}`;
+	const imageName = `claudex-${cwdBasename}-${claudeCodeVersion}`.toLowerCase();
 
 	// Always build image (Docker cache makes this fast if nothing changed)
 	const buildArgs = [
