@@ -139,6 +139,41 @@ async function ensureDockerImage(cwd: string, config: Awaited<ReturnType<typeof 
 	return { userId, username, projectRoot, imageName };
 }
 
+async function isUnsafeDirectory(dir: string): Promise<{ unsafe: boolean; reason: string }> {
+	const homeDir = os.homedir();
+	const userInfo = os.userInfo();
+
+	// Check if it's the home directory itself
+	if (dir === homeDir) {
+		return { unsafe: true, reason: 'home directory' };
+	}
+
+	// Check if it's a hidden directory in home (e.g., ~/.config, ~/.ssh)
+	if (dir.startsWith(homeDir + '/.')) {
+		return { unsafe: true, reason: 'hidden directory in home' };
+	}
+
+	// Check if directory is owned by current user
+	try {
+		const stat = await fs.stat(dir);
+		if (stat.uid !== userInfo.uid) {
+			return { unsafe: true, reason: 'directory not owned by current user' };
+		}
+	} catch {
+		// If we can't stat, consider it unsafe
+		return { unsafe: true, reason: 'cannot access directory' };
+	}
+
+	// Check if directory contains .git
+	try {
+		await fs.access(path.join(dir, '.git'));
+	} catch {
+		return { unsafe: true, reason: 'directory does not contain .git' };
+	}
+
+	return { unsafe: false, reason: '' };
+}
+
 export async function main() {
 	const flagsConfig = {
 		docker: {
@@ -165,6 +200,10 @@ export async function main() {
 			type: 'boolean',
 			default: false,
 		},
+		allowUnsafeDirectory: {
+			type: 'boolean',
+			default: false,
+		},
 	} as const;
 
 	const cli = meow(`
@@ -172,12 +211,13 @@ export async function main() {
 	  $ claudex [options] [claude args...]
 
 	Options
-	  --no-docker        Run Claude Code directly on the host instead of in Docker
-	  --docker-shell     Launch a bash shell inside the Docker container
-	  --docker-exec      Exec into a running claudex container for current directory
-	  --docker-pull      Pull the latest base image when building
-	  --docker-no-cache  Build the Docker image without cache
-	  --docker-sudo      Allow sudo inside the container (less secure)
+	  --no-docker              Run Claude Code directly on the host instead of in Docker
+	  --docker-shell           Launch a bash shell inside the Docker container
+	  --docker-exec            Exec into a running claudex container for current directory
+	  --docker-pull            Pull the latest base image when building
+	  --docker-no-cache        Build the Docker image without cache
+	  --docker-sudo            Allow sudo inside the container (less secure)
+	  --allow-unsafe-directory Skip directory safety checks (home, hidden, unowned, no .git)
 
 	Examples
 	  $ claudex
@@ -216,14 +256,28 @@ export async function main() {
 		dockerPull,
 		dockerNoCache,
 		dockerSudo,
+		allowUnsafeDirectory,
 	} = cli.flags;
 
 	// Pass through unknown flags and input to claude
 	const claudeArgs = process.argv.slice(2).filter(arg => !knownFlags.includes(arg));
 
+	// Check directory safety and potentially create temp directory
+	let cwd = process.cwd();
+	let tempDirCreated: string | undefined;
+
+	if (!allowUnsafeDirectory) {
+		const safetyCheck = await isUnsafeDirectory(cwd);
+		if (safetyCheck.unsafe) {
+			tempDirCreated = await fs.mkdtemp(path.join(os.tmpdir(), 'claudex-'));
+			console.error(`Warning: Running in ${safetyCheck.reason} (${cwd}).`);
+			console.error(`Creating temporary directory: ${tempDirCreated}`);
+			cwd = tempDirCreated;
+		}
+	}
+
 	// Handle --docker-exec: exec into a running container for current directory
 	if (useDockerExec) {
-		const cwd = process.cwd();
 		const cwdBasename = path.basename(cwd);
 		const containerPrefix = `claudex-${cwdBasename}-`;
 
@@ -258,7 +312,6 @@ export async function main() {
 	let sshAgent: SshAgentInfo | undefined;
 
 	if (useDocker) {
-		const cwd = process.cwd();
 		const cwdBasename = path.basename(cwd);
 		const config = await getMergedConfig(cwd);
 
@@ -381,6 +434,11 @@ export async function main() {
 	try {
 		await claudeChildProcess;
 	} finally {
+		// Remind user about temp directory
+		if (tempDirCreated) {
+			console.log(`Temporary directory used: ${tempDirCreated}`);
+		}
+
 		// Cleanup SSH agent if we started one
 		if (sshAgent) {
 			console.log('Cleaning up SSH agent...');
