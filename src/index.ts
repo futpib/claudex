@@ -9,7 +9,7 @@ import { checkForClaudeCodeUpdate } from './update.js';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
-import { getMergedConfig, expandVolumePaths, getSshKeys, getGitWorktreeParentPath, expandPathEnv } from './config.js';
+import { getMergedConfig, expandVolumePaths, getSshKeys, getGitWorktreeParentPath, expandPathEnv, type Volume } from './config.js';
 
 type SshAgentInfo = {
 	socketPath: string;
@@ -174,6 +174,23 @@ async function isUnsafeDirectory(dir: string): Promise<{ unsafe: boolean; reason
 	return { unsafe: false, reason: '' };
 }
 
+function parseVolumeSpec(spec: string): Volume {
+	if (spec.includes(':')) {
+		const [host, container] = spec.split(':', 2);
+		return { host, container };
+	}
+	return spec;
+}
+
+function parseEnvSpec(spec: string): [string, string] {
+	const idx = spec.indexOf('=');
+	if (idx === -1) {
+		// Shorthand: FOO → FOO=${FOO}
+		return [spec, `\${${spec}}`];
+	}
+	return [spec.slice(0, idx), spec.slice(idx + 1)];
+}
+
 export async function main() {
 	const flagsConfig = {
 		docker: {
@@ -204,6 +221,22 @@ export async function main() {
 			type: 'boolean',
 			default: false,
 		},
+		package: {
+			type: 'string',
+			isMultiple: true,
+		},
+		volume: {
+			type: 'string',
+			isMultiple: true,
+		},
+		env: {
+			type: 'string',
+			isMultiple: true,
+		},
+		sshKey: {
+			type: 'string',
+			isMultiple: true,
+		},
 	} as const;
 
 	const cli = meow(`
@@ -218,6 +251,10 @@ export async function main() {
 	  --docker-no-cache        Build the Docker image without cache
 	  --docker-sudo            Allow sudo inside the container (less secure)
 	  --allow-unsafe-directory Skip directory safety checks (home, hidden, unowned, no .git)
+	  --package <name>         Add apt package to install in Docker (can be repeated)
+	  --volume <spec>          Add volume mount: path or host:container (can be repeated)
+	  --env <spec>             Add env var: KEY=value or KEY for KEY=\${KEY} (can be repeated)
+	  --ssh-key <path>         Add SSH key to agent (can be repeated)
 
 	Examples
 	  $ claudex
@@ -232,14 +269,20 @@ export async function main() {
 	});
 
 	// Derive known flags from config to avoid duplication
-	const knownFlags = Object.entries(flagsConfig).flatMap(([key, config]) => {
+	const knownBooleanFlags = new Set<string>();
+	const knownStringFlags = new Set<string>();
+
+	for (const [key, config] of Object.entries(flagsConfig)) {
 		const kebab = key.replace(/([A-Z])/g, '-$1').toLowerCase();
-		// Boolean flags with default: true use --no- prefix
-		if (config.type === 'boolean' && config.default === true) {
-			return [`--no-${kebab}`, `--${kebab}`];
+		if (config.type === 'boolean') {
+			knownBooleanFlags.add(`--${kebab}`);
+			if ('default' in config && config.default === true) {
+				knownBooleanFlags.add(`--no-${kebab}`);
+			}
+		} else if (config.type === 'string') {
+			knownStringFlags.add(`--${kebab}`);
 		}
-		return [`--${kebab}`];
-	});
+	}
 
 	await ensureHookSetup();
 
@@ -257,10 +300,37 @@ export async function main() {
 		dockerNoCache,
 		dockerSudo,
 		allowUnsafeDirectory,
+		package: cliPackages,
+		volume: cliVolumes,
+		env: cliEnv,
+		sshKey: cliSshKeys,
 	} = cli.flags;
 
 	// Pass through unknown flags and input to claude
-	const claudeArgs = process.argv.slice(2).filter(arg => !knownFlags.includes(arg));
+	// Filter out claudex-specific flags and their values
+	const claudeArgs: string[] = [];
+	const argv = process.argv.slice(2);
+	for (let i = 0; i < argv.length; i++) {
+		const arg = argv[i];
+		if (knownBooleanFlags.has(arg)) {
+			// Skip boolean flag
+			continue;
+		}
+		if (knownStringFlags.has(arg)) {
+			// Skip string flag and its value
+			i++;
+			continue;
+		}
+		// Check for --flag=value format
+		const eqIdx = arg.indexOf('=');
+		if (eqIdx !== -1) {
+			const flagPart = arg.slice(0, eqIdx);
+			if (knownStringFlags.has(flagPart) || knownBooleanFlags.has(flagPart)) {
+				continue;
+			}
+		}
+		claudeArgs.push(arg);
+	}
 
 	// Check directory safety and potentially create temp directory
 	let cwd = process.cwd();
@@ -314,6 +384,26 @@ export async function main() {
 	if (useDocker) {
 		const cwdBasename = path.basename(cwd);
 		const config = await getMergedConfig(cwd);
+
+		// Merge CLI flags with config
+		if (cliPackages?.length) {
+			config.packages = [...(config.packages ?? []), ...cliPackages];
+		}
+		if (cliVolumes?.length) {
+			const parsedVolumes = cliVolumes.map(parseVolumeSpec);
+			config.volumes = [...(config.volumes ?? []), ...parsedVolumes];
+		}
+		if (cliEnv?.length) {
+			config.env = config.env ?? {};
+			for (const spec of cliEnv) {
+				const [key, value] = parseEnvSpec(spec);
+				config.env[key] = value;
+			}
+		}
+		if (cliSshKeys?.length) {
+			config.ssh = config.ssh ?? {};
+			config.ssh.keys = [...(config.ssh.keys ?? []), ...cliSshKeys];
+		}
 
 		const { username, projectRoot, imageName } = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
 		const randomSuffix = Math.random().toString(36).slice(2, 8);
