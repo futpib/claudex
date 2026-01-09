@@ -215,6 +215,65 @@ function someSimpleCommandInUnit(
 }
 
 /**
+ * Gets the start-point from a `git checkout -b <branch> <start-point>` command.
+ * Returns undefined if not a git checkout -b command or if no start-point is specified.
+ */
+export async function getGitCheckoutBStartPoint(command: string): Promise<string | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	let result: string | undefined;
+
+	someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (name !== 'git') {
+			return false;
+		}
+
+		const args = cmd.args.map(arg => getWordLiteralValue(arg)).filter((arg): arg is string => arg !== undefined);
+
+		// Find 'checkout' subcommand
+		const checkoutIndex = args.indexOf('checkout');
+		if (checkoutIndex === -1) {
+			return false;
+		}
+
+		// Look for -b flag after checkout
+		const argsAfterCheckout = args.slice(checkoutIndex + 1);
+		const bFlagIndex = argsAfterCheckout.findIndex(arg => arg === '-b' || arg === '-B');
+		if (bFlagIndex === -1) {
+			return false;
+		}
+
+		// After -b <branch>, there might be a start-point
+		// Pattern: git checkout -b <branch> [<start-point>]
+		// We need to skip the branch name and get the next positional argument
+		const argsAfterBFlag = argsAfterCheckout.slice(bFlagIndex + 1);
+
+		// Skip the branch name (first positional arg after -b)
+		// Then look for the start-point (second positional arg, if any)
+		let positionalCount = 0;
+		for (const arg of argsAfterBFlag) {
+			if (arg.startsWith('-')) {
+				continue; // Skip flags
+			}
+
+			positionalCount++;
+			if (positionalCount === 2) {
+				result = arg;
+				return true;
+			}
+		}
+
+		return false;
+	});
+
+	return result;
+}
+
+/**
  * Checks if a git command uses the -C flag to run in a different directory.
  */
 export async function hasGitCFlag(command: string): Promise<boolean> {

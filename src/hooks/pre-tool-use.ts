@@ -4,13 +4,14 @@
 import process from 'node:process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { execa } from 'execa';
 import invariant from 'invariant';
 import { z } from 'zod';
 import { paths } from '../paths.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
 } from './shared.js';
-import { extractCommandNames, hasChainOperators, hasGitCFlag } from './bash-parser-helpers.js';
+import { extractCommandNames, hasChainOperators, hasGitCFlag, getGitCheckoutBStartPoint } from './bash-parser-helpers.js';
 
 const editToolInputSchema = z.object({
 	file_path: z.string(),
@@ -196,6 +197,34 @@ async function main() {
 			console.error('Running git commands in a different directory is not permitted.');
 			console.error('Please cd to the target directory and run git commands there instead.');
 			process.exit(2);
+		}
+	}
+
+	// Check for git checkout -b with start-point when already on detached HEAD at that point
+	if (toolName === 'Bash' && typeof command === 'string') {
+		const startPoint = await getGitCheckoutBStartPoint(command);
+		if (startPoint) {
+			try {
+				// Check if HEAD is detached (symbolic-ref fails when detached)
+				await execa('git', [ 'symbolic-ref', '-q', 'HEAD' ]);
+			} catch {
+				// HEAD is detached, check if start-point matches current HEAD
+				try {
+					const [ headResult, startPointResult ] = await Promise.all([
+						execa('git', [ 'rev-parse', 'HEAD' ]),
+						execa('git', [ 'rev-parse', startPoint ]),
+					]);
+					if (headResult.stdout.trim() === startPointResult.stdout.trim()) {
+						console.error(`❌ Unnecessary start-point in git checkout -b`);
+						console.error(`You are already on a detached HEAD at ${startPoint}.`);
+						console.error(`Just use: git checkout -b <branch-name>`);
+						console.error(`Instead of: git checkout -b <branch-name> ${startPoint}`);
+						process.exit(2);
+					}
+				} catch {
+					// If rev-parse fails, skip this check
+				}
+			}
 		}
 	}
 
