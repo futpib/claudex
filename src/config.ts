@@ -16,6 +16,7 @@ const VolumeSchema = z.union([z.string(), VolumeMountSchema]);
 
 const SshConfigSchema = z.object({
 	keys: z.array(z.string()).optional(),
+	hosts: z.array(z.string()).optional(),
 });
 
 // Base config schema - can appear at both root and project level
@@ -68,6 +69,53 @@ export function getSshKeys(config: ClaudexConfig): string[] {
 	}
 
 	return config.ssh.keys.map(key => expandTilde(key));
+}
+
+export function getSshHosts(config: ClaudexConfig): string[] {
+	return config.ssh?.hosts ?? [];
+}
+
+export async function getFilteredKnownHosts(hosts: string[]): Promise<string> {
+	if (hosts.length === 0) {
+		return '';
+	}
+
+	const knownHostsPath = path.join(os.homedir(), '.ssh', 'known_hosts');
+
+	try {
+		const content = await fs.readFile(knownHostsPath, 'utf8');
+		const lines = content.split('\n');
+		const filtered: string[] = [];
+
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith('#')) {
+				continue;
+			}
+
+			// known_hosts format: hostname[,hostname...] keytype key [comment]
+			const firstSpace = trimmed.indexOf(' ');
+			if (firstSpace === -1) {
+				continue;
+			}
+
+			const hostPart = trimmed.substring(0, firstSpace);
+			const hostnames = hostPart.split(',');
+
+			// Check if any of the hostnames match our configured hosts
+			for (const hostname of hostnames) {
+				if (hosts.includes(hostname)) {
+					filtered.push(line);
+					break;
+				}
+			}
+		}
+
+		return filtered.join('\n') + (filtered.length > 0 ? '\n' : '');
+	} catch {
+		// known_hosts doesn't exist or can't be read
+		return '';
+	}
 }
 
 export function expandVolumePaths(volume: Volume): VolumeMount {
@@ -150,11 +198,21 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 		...(overlay.ssh?.keys ?? []),
 	]);
 
+	const sshHosts = dedupeStrings([
+		...(base.ssh?.hosts ?? []),
+		...(overlay.ssh?.hosts ?? []),
+	]);
+
+	const hasSsh = sshKeys.length > 0 || sshHosts.length > 0;
+
 	return {
 		packages: packages.length > 0 ? packages : undefined,
 		volumes: volumes.length > 0 ? volumes : undefined,
 		env: Object.keys(env).length > 0 ? env : undefined,
-		ssh: sshKeys.length > 0 ? { keys: sshKeys } : undefined,
+		ssh: hasSsh ? {
+			keys: sshKeys.length > 0 ? sshKeys : undefined,
+			hosts: sshHosts.length > 0 ? sshHosts : undefined,
+		} : undefined,
 	};
 }
 
