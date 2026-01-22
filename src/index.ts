@@ -9,6 +9,7 @@ import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
 import { getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, type Volume } from './config.js';
+import { shieldEnvVars } from './secrets.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const CLAUDE_CODE_BIN_PATH = '/opt/claude-code/.local/bin';
@@ -464,11 +465,12 @@ export async function main() {
 			}
 		}
 
-		// Print env overrides
+		// Print env overrides (with secrets shielded)
 		if (Object.keys(resolvedEnv).length > 0) {
 			console.error('Environment overrides:');
-			for (const [key, value] of Object.entries(resolvedEnv)) {
-				console.error(`  ${key}=${value}`);
+			const shieldedEntries = await shieldEnvVars(resolvedEnv);
+			for (const entry of shieldedEntries) {
+				console.error(`  ${entry}`);
 			}
 		}
 
