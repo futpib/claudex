@@ -5,11 +5,13 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa } from 'execa';
 import meow from 'meow';
-import { checkForClaudeCodeUpdate } from './update.js';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
 import { getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, type Volume } from './config.js';
+
+// Path where Claude Code is installed in the Docker container (must match Dockerfile)
+const CLAUDE_CODE_BIN_PATH = '/opt/claude-code/.local/bin';
 
 type SshAgentInfo = {
 	socketPath: string;
@@ -94,11 +96,7 @@ async function ensureDockerImage(cwd: string, config: Awaited<ReturnType<typeof 
 
 	const cwdBasename = path.basename(cwd);
 
-	// Get current Claude Code version from npm
-	const claudeCodeVersionResult = await execa('npm', ['info', '@anthropic-ai/claude-code', 'version']);
-	const claudeCodeVersion = claudeCodeVersionResult.stdout.trim();
-
-	const imageName = `claudex-${cwdBasename}-${claudeCodeVersion}`.toLowerCase();
+	const imageName = `claudex-${cwdBasename}`.toLowerCase();
 
 	// Always build image (Docker cache makes this fast if nothing changed)
 	const buildArgs = [
@@ -118,8 +116,6 @@ async function ensureDockerImage(cwd: string, config: Awaited<ReturnType<typeof 
 		`USER_ID=${userId}`,
 		'--build-arg',
 		`USERNAME=${username}`,
-		'--build-arg',
-		`CLAUDE_CODE_VERSION=${claudeCodeVersion}`,
 	);
 
 	if (config.packages && config.packages.length > 0) {
@@ -476,6 +472,10 @@ export async function main() {
 			}
 		}
 
+		// Ensure Claude Code bin path is always first in PATH
+		const basePath = resolvedEnv.PATH ?? '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
+		resolvedEnv.PATH = `${CLAUDE_CODE_BIN_PATH}:${basePath}`;
+
 		// Add environment variables to docker args
 		for (const [key, value] of Object.entries(resolvedEnv)) {
 			dockerArgs.push('-e', `${key}=${value}`);
@@ -540,12 +540,6 @@ export async function main() {
 		if (sshAgent) {
 			console.log('Cleaning up SSH agent...');
 			await sshAgent.cleanup();
-		}
-
-		// Only check for updates when running on host (not in Docker)
-		if (!useDocker) {
-			console.log('Checking for updates...');
-			await checkForClaudeCodeUpdate();
 		}
 	}
 }

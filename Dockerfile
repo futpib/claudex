@@ -1,26 +1,26 @@
+# Stage 1: Install Claude Code
+FROM archlinux:latest AS claude-code-installer
+RUN pacman -Syu --noconfirm curl
+RUN curl -fsSL https://claude.ai/install.sh | bash
+
+# Stage 2: Main image
 FROM archlinux:latest
 
 # Build arguments for user configuration
 ARG USER_ID=1000
 ARG USERNAME=claude
 
-# Install system dependencies
-RUN pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh nodejs npm
+# Install system dependencies (as root)
+RUN pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh
 
-# Install yay
+# Install yay (as root, using temp builder user)
 RUN set -xe; \
 	useradd -m -G wheel builder; \
 	echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers; \
 	su - builder -c 'git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm'; \
 	userdel -r builder
 
-# Create non-root user
-RUN set -xe; \
-	useradd -m -u ${USER_ID} -G wheel ${USERNAME}; \
-	mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share; \
-	chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
-
-# Install AUR packages if specified
+# Install AUR packages if specified (as root, using temp builder user)
 ARG PACKAGES=""
 RUN set -xe; \
 	if [ -n "${PACKAGES}" ]; then \
@@ -30,20 +30,16 @@ RUN set -xe; \
 		userdel -r builder; \
 	fi
 
-# Switch to non-root user
-USER ${USERNAME}
+# Copy Claude Code installation from first stage
+COPY --from=claude-code-installer /root/.local/bin/claude /opt/claude-code/.local/bin/claude
+COPY --from=claude-code-installer /root/.local/share/claude /opt/claude-code/.local/share/claude
 
-# Configure npm to use user-local prefix for global installs
+# Create non-root user WITHOUT sudo access
 RUN set -xe; \
-	mkdir -p /home/${USERNAME}/.local/share/npm-global; \
-	npm config set prefix /home/${USERNAME}/.local/share/npm-global
-ENV PATH="/home/${USERNAME}/.local/share/npm-global/bin:${PATH}"
+	useradd -m -u ${USER_ID} ${USERNAME}; \
+	mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share; \
+	chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
 
-# Install Claude Code CLI
-ARG CLAUDE_CODE_VERSION
-RUN npm install -g @anthropic-ai/claude-code@${CLAUDE_CODE_VERSION}
-
-# Disable sudo for user
-USER root
-RUN gpasswd -d ${USERNAME} wheel || true
+# Switch to non-root user (no sudo from this point)
 USER ${USERNAME}
+ENV PATH="/opt/claude-code/.local/bin:/home/${USERNAME}/.local/bin:${PATH}"
