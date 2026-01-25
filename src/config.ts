@@ -27,15 +27,22 @@ const BaseConfigSchema = z.object({
 	ssh: SshConfigSchema.optional(),
 });
 
-// Root config adds projects mapping
+// Project config can reference a group
+const ProjectConfigSchema = BaseConfigSchema.extend({
+	group: z.string().optional(),
+});
+
+// Root config adds projects mapping and groups
 const RootConfigSchema = BaseConfigSchema.extend({
-	projects: z.record(z.string(), BaseConfigSchema).optional(),
+	groups: z.record(z.string(), BaseConfigSchema).optional(),
+	projects: z.record(z.string(), ProjectConfigSchema).optional(),
 });
 
 export type VolumeMount = z.infer<typeof VolumeMountSchema>;
 export type Volume = z.infer<typeof VolumeSchema>;
 export type SshConfig = z.infer<typeof SshConfigSchema>;
 export type BaseConfig = z.infer<typeof BaseConfigSchema>;
+export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 export type RootConfig = z.infer<typeof RootConfigSchema>;
 
 // Merged config is the same as base config (after merging root + project)
@@ -224,11 +231,43 @@ function mergeConfigs(root: BaseConfig, project: BaseConfig | undefined): Claude
 	return mergeBaseConfigs(root, project);
 }
 
+function mergeProjectConfigs(base: ProjectConfig, overlay: ProjectConfig): ProjectConfig {
+	const merged = mergeBaseConfigs(base, overlay);
+	// Overlay's group takes precedence if specified
+	const group = overlay.group ?? base.group;
+	return {
+		...merged,
+		group,
+	};
+}
+
 function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 	const merged = mergeBaseConfigs(base, overlay);
 
+	// Merge groups: combine keys, merge configs for same group name
+	let groups: Record<string, BaseConfig> | undefined;
+
+	if (base.groups || overlay.groups) {
+		groups = {};
+		const allGroupNames = new Set([
+			...Object.keys(base.groups ?? {}),
+			...Object.keys(overlay.groups ?? {}),
+		]);
+
+		for (const groupName of allGroupNames) {
+			const baseGroup = base.groups?.[groupName];
+			const overlayGroup = overlay.groups?.[groupName];
+
+			if (baseGroup && overlayGroup) {
+				groups[groupName] = mergeBaseConfigs(baseGroup, overlayGroup);
+			} else {
+				groups[groupName] = (overlayGroup ?? baseGroup)!;
+			}
+		}
+	}
+
 	// Merge projects: combine keys, merge configs for same project path
-	let projects: Record<string, BaseConfig> | undefined;
+	let projects: Record<string, ProjectConfig> | undefined;
 
 	if (base.projects || overlay.projects) {
 		projects = {};
@@ -242,7 +281,7 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 			const overlayProject = overlay.projects?.[projectPath];
 
 			if (baseProject && overlayProject) {
-				projects[projectPath] = mergeBaseConfigs(baseProject, overlayProject);
+				projects[projectPath] = mergeProjectConfigs(baseProject, overlayProject);
 			} else {
 				projects[projectPath] = (overlayProject ?? baseProject)!;
 			}
@@ -251,17 +290,18 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 
 	return {
 		...merged,
+		groups,
 		projects,
 	};
 }
 
-function findMatchingProject(rootConfig: RootConfig, cwd: string): BaseConfig | undefined {
+function findMatchingProject(rootConfig: RootConfig, cwd: string): ProjectConfig | undefined {
 	if (!rootConfig.projects) {
 		return undefined;
 	}
 
 	// Find the most specific matching project (longest path prefix)
-	let bestMatch: { path: string; config: BaseConfig } | undefined;
+	let bestMatch: { path: string; config: ProjectConfig } | undefined;
 
 	for (const [projectPath, projectConfig] of Object.entries(rootConfig.projects)) {
 		const expandedPath = expandTilde(projectPath);
@@ -273,6 +313,10 @@ function findMatchingProject(rootConfig: RootConfig, cwd: string): BaseConfig | 
 	}
 
 	return bestMatch?.config;
+}
+
+function resolveGroup(rootConfig: RootConfig, groupName: string): BaseConfig | undefined {
+	return rootConfig.groups?.[groupName];
 }
 
 async function readRootConfig(): Promise<RootConfig> {
@@ -348,6 +392,24 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 	};
 }
 
+function mergeProjectConfig(
+	rootConfig: RootConfig,
+	merged: ClaudexConfig,
+	projectConfig: ProjectConfig,
+): ClaudexConfig {
+	// First merge the group config if project references one
+	if (projectConfig.group) {
+		const groupConfig = resolveGroup(rootConfig, projectConfig.group);
+		if (groupConfig) {
+			merged = mergeConfigs(merged, groupConfig);
+		}
+	}
+
+	// Then merge the project-specific config (excluding the group field)
+	const { group: _, ...projectBaseConfig } = projectConfig;
+	return mergeConfigs(merged, projectBaseConfig);
+}
+
 export async function getMergedConfig(cwd: string): Promise<ClaudexConfig> {
 	const rootConfig = await readRootConfig();
 
@@ -358,19 +420,19 @@ export async function getMergedConfig(cwd: string): Promise<ClaudexConfig> {
 	// Determine resolution path (git root or cwd if not in git)
 	const resolutionPath = gitRoot ?? cwd;
 
-	// Build merge chain: root → parent repo → git root
+	// Build merge chain: root → group → worktree parent → project
 	let merged: ClaudexConfig = rootConfig;
 
 	if (worktreeParent) {
 		const parentProjectConfig = findMatchingProject(rootConfig, worktreeParent);
 		if (parentProjectConfig) {
-			merged = mergeConfigs(merged, parentProjectConfig);
+			merged = mergeProjectConfig(rootConfig, merged, parentProjectConfig);
 		}
 	}
 
 	const projectConfig = findMatchingProject(rootConfig, resolutionPath);
 	if (projectConfig) {
-		merged = mergeConfigs(merged, projectConfig);
+		merged = mergeProjectConfig(rootConfig, merged, projectConfig);
 	}
 
 	// Sort for consistent Docker cache
