@@ -218,6 +218,9 @@ export async function main() {
 			type: 'boolean',
 			default: false,
 		},
+		showConfig: {
+			type: 'string',
+		},
 		package: {
 			type: 'string',
 			isMultiple: true,
@@ -248,6 +251,7 @@ export async function main() {
 	  --docker-no-cache        Build the Docker image without cache
 	  --docker-sudo            Allow sudo inside the container (less secure)
 	  --allow-unsafe-directory Skip directory safety checks (home, hidden, unowned, no .git)
+	  --show-config [path]     Show effective merged config for path (default: cwd) and exit
 	  --package <name>         Add apt package to install in Docker (can be repeated)
 	  --volume <spec>          Add volume mount: path or host:container (can be repeated)
 	  --env <spec>             Add env var: KEY=value or KEY for KEY=\${KEY} (can be repeated)
@@ -258,6 +262,7 @@ export async function main() {
 	  $ claudex --no-docker
 	  $ claudex --docker-shell
 	  $ claudex --docker-exec
+	  $ claudex --show-config
 	  $ claudex -p "Hello, Claude"
 `, {
 		importMeta: import.meta,
@@ -297,11 +302,21 @@ export async function main() {
 		dockerNoCache,
 		dockerSudo,
 		allowUnsafeDirectory,
+		showConfig,
 		package: cliPackages,
 		volume: cliVolumes,
 		env: cliEnv,
 		sshKey: cliSshKeys,
 	} = cli.flags;
+
+	// Handle --show-config: print merged config and exit
+	if (showConfig !== undefined) {
+		const configPath = showConfig || process.cwd();
+		const absolutePath = path.resolve(configPath);
+		const config = await getMergedConfig(absolutePath);
+		console.log(JSON.stringify(config, null, 2));
+		return;
+	}
 
 	// Pass through unknown flags and input to claude
 	// Filter out claudex-specific flags and their values
