@@ -25,6 +25,7 @@ const BaseConfigSchema = z.object({
 	volumes: z.array(VolumeSchema).optional(),
 	env: z.record(z.string(), z.string()).optional(),
 	ssh: SshConfigSchema.optional(),
+	shareVolumes: z.boolean().optional(), // default true - auto-share volumes between group members
 });
 
 // Project config can reference a group
@@ -212,6 +213,9 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 
 	const hasSsh = sshKeys.length > 0 || sshHosts.length > 0;
 
+	// shareVolumes: overlay takes precedence if defined, otherwise use base
+	const shareVolumes = overlay.shareVolumes ?? base.shareVolumes;
+
 	return {
 		packages: packages.length > 0 ? packages : undefined,
 		volumes: volumes.length > 0 ? volumes : undefined,
@@ -220,6 +224,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 			keys: sshKeys.length > 0 ? sshKeys : undefined,
 			hosts: sshHosts.length > 0 ? sshHosts : undefined,
 		} : undefined,
+		shareVolumes,
 	};
 }
 
@@ -319,6 +324,23 @@ function resolveGroup(rootConfig: RootConfig, groupName: string): BaseConfig | u
 	return rootConfig.groups?.[groupName];
 }
 
+function getGroupSiblingPaths(
+	rootConfig: RootConfig,
+	groupName: string,
+	currentProjectPath: string,
+): string[] {
+	const siblings: string[] = [];
+	for (const [projectPath, projectConfig] of Object.entries(rootConfig.projects ?? {})) {
+		if (projectConfig.group === groupName) {
+			const expandedPath = expandTilde(projectPath);
+			if (expandedPath !== currentProjectPath) {
+				siblings.push(expandedPath);
+			}
+		}
+	}
+	return siblings;
+}
+
 async function readRootConfig(): Promise<RootConfig> {
 	const configDir = paths.config;
 	const configPath = path.join(configDir, 'config.json');
@@ -384,6 +406,7 @@ export async function getGitWorktreeParentPath(cwd: string): Promise<string | un
 }
 
 function sortConfig(config: ClaudexConfig): ClaudexConfig {
+	// Note: shareVolumes is excluded from final output (only used during resolution)
 	return {
 		packages: config.packages ? [...config.packages].sort((a, b) => a.localeCompare(b)) : undefined,
 		volumes: config.volumes ? sortVolumes(config.volumes) : undefined,
@@ -433,6 +456,25 @@ export async function getMergedConfig(cwd: string): Promise<ClaudexConfig> {
 	const projectConfig = findMatchingProject(rootConfig, resolutionPath);
 	if (projectConfig) {
 		merged = mergeProjectConfig(rootConfig, merged, projectConfig);
+	}
+
+	// Auto-share volumes between group members (shareVolumes defaults to true)
+	if (merged.shareVolumes !== false && projectConfig?.group) {
+		const siblingPaths = getGroupSiblingPaths(rootConfig, projectConfig.group, resolutionPath);
+		if (siblingPaths.length > 0) {
+			const siblingVolumes: Volume[] = siblingPaths;
+			merged = {
+				...merged,
+				volumes: dedupeVolumes([
+					...(merged.volumes ?? []),
+					...siblingVolumes,
+				]),
+			};
+			// Preserve undefined if still empty after deduplication
+			if (merged.volumes?.length === 0) {
+				merged.volumes = undefined;
+			}
+		}
 	}
 
 	// Sort for consistent Docker cache

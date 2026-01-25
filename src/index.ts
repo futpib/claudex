@@ -453,9 +453,14 @@ export async function main() {
 		}
 
 		// Add volumes from config
-		if (config.volumes) {
+		if (config.volumes && config.volumes.length > 0) {
+			console.error('Volumes:');
 			for (const volume of config.volumes) {
 				const expandedVolume = expandVolumePaths(volume);
+				const volumeSpec = expandedVolume.host === expandedVolume.container
+					? expandedVolume.host
+					: `${expandedVolume.host}:${expandedVolume.container}`;
+				console.error(`  ${volumeSpec}`);
 				dockerArgs.push('-v', `${expandedVolume.host}:${expandedVolume.container}`);
 			}
 		}
