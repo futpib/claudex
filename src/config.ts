@@ -26,6 +26,7 @@ const BaseConfigSchema = z.object({
 	env: z.record(z.string(), z.string()).optional(),
 	ssh: SshConfigSchema.optional(),
 	shareVolumes: z.boolean().optional(), // default true - auto-share volumes between group members
+	settingSources: z.string().optional(), // default "user,local" - controls --setting-sources flag for Claude Code
 });
 
 // Project config can reference a group
@@ -216,6 +217,9 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	// shareVolumes: overlay takes precedence if defined, otherwise use base
 	const shareVolumes = overlay.shareVolumes ?? base.shareVolumes;
 
+	// settingSources: overlay takes precedence if defined, otherwise use base
+	const settingSources = overlay.settingSources ?? base.settingSources;
+
 	return {
 		packages: packages.length > 0 ? packages : undefined,
 		volumes: volumes.length > 0 ? volumes : undefined,
@@ -225,6 +229,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 			hosts: sshHosts.length > 0 ? sshHosts : undefined,
 		} : undefined,
 		shareVolumes,
+		settingSources,
 	};
 }
 
@@ -412,6 +417,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		volumes: config.volumes ? sortVolumes(config.volumes) : undefined,
 		env: config.env ? sortEnv(config.env) : undefined,
 		ssh: config.ssh,
+		settingSources: config.settingSources,
 	};
 }
 

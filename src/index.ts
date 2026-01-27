@@ -3,7 +3,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import fs from 'node:fs/promises';
-import { execa } from 'execa';
+import { execa, type Options as ExecaOptions } from 'execa';
 import meow from 'meow';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
@@ -13,6 +13,18 @@ import { shieldEnvVars } from './secrets.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const CLAUDE_CODE_BIN_PATH = '/opt/claude-code/.local/bin';
+
+function quoteArg(arg: string): string {
+	if (arg.includes(' ') || arg.includes("'") || arg.includes('"')) {
+		return `'${arg.replace(/'/g, "'\\''")}'`;
+	}
+	return arg;
+}
+
+function execaLog(command: string, args: string[], options?: ExecaOptions) {
+	console.error(`+ ${command} ${args.map(quoteArg).join(' ')}`);
+	return execa(command, args, options);
+}
 
 type SshAgentInfo = {
 	socketPath: string;
@@ -520,19 +532,28 @@ export async function main() {
 
 		dockerArgs.push('-w', cwd);
 
+		// Default to 'user,local' to ignore shared project .claude/ but allow local overrides
+		const settingSources = config.settingSources ?? 'user,local';
+
 		if (useDockerShell) {
 			dockerArgs.push('--entrypoint', 'bash', imageName);
 		} else {
-			dockerArgs.push('--entrypoint', 'node', imageName, cliInDockerPath, ...claudeArgs);
+			dockerArgs.push('--entrypoint', 'node', imageName, cliInDockerPath, '--setting-sources', settingSources, ...claudeArgs);
 		}
 
-		claudeChildProcess = execa('docker', dockerArgs, {
+		claudeChildProcess = execaLog('docker', dockerArgs, {
 			stdin: process.stdin,
 			stdout: process.stdout,
 			stderr: process.stderr,
 		});
 	} else {
-		claudeChildProcess = execa('claude', claudeArgs, {
+		// Load config for settingSources even in non-Docker mode
+		const config = await getMergedConfig(cwd);
+		const settingSources = config.settingSources ?? 'user,local';
+
+		const claudeFullArgs = ['--setting-sources', settingSources, ...claudeArgs];
+
+		claudeChildProcess = execaLog('claude', claudeFullArgs, {
 			stdin: process.stdin,
 			stdout: process.stdout,
 			stderr: process.stderr,
