@@ -1,5 +1,5 @@
 import test from 'ava';
-import { extractCommandNames, hasChainOperators, hasGitCFlag } from './bash-parser-helpers.js';
+import { extractCommandNames, hasChainOperators, hasGitCFlag, getPipedFilterCommand } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
 	const commands = await extractCommandNames('cat file.txt');
@@ -169,4 +169,64 @@ test('hasGitCFlag - does not trigger on regular git commands', async t => {
 	t.false(await hasGitCFlag('git status'));
 	t.false(await hasGitCFlag('git commit -m "message"'));
 	t.false(await hasGitCFlag('git add .'));
+});
+
+test('getPipedFilterCommand - detects pipe to grep', async t => {
+	t.is(await getPipedFilterCommand('some-command 2>&1 | grep -E "pattern"'), 'grep');
+});
+
+test('getPipedFilterCommand - detects pipe to head', async t => {
+	t.is(await getPipedFilterCommand('some-command | head -n 10'), 'head');
+});
+
+test('getPipedFilterCommand - detects pipe to tail', async t => {
+	t.is(await getPipedFilterCommand('some-command | tail -f'), 'tail');
+});
+
+test('getPipedFilterCommand - detects pipe to awk', async t => {
+	t.is(await getPipedFilterCommand('some-command | awk \'{print $1}\''), 'awk');
+});
+
+test('getPipedFilterCommand - detects pipe to sed', async t => {
+	t.is(await getPipedFilterCommand('some-command | sed "s/foo/bar/"'), 'sed');
+});
+
+test('getPipedFilterCommand - detects pipe to cut', async t => {
+	t.is(await getPipedFilterCommand('some-command | cut -d: -f1'), 'cut');
+});
+
+test('getPipedFilterCommand - detects pipe to sort', async t => {
+	t.is(await getPipedFilterCommand('some-command | sort'), 'sort');
+});
+
+test('getPipedFilterCommand - detects pipe to uniq', async t => {
+	t.is(await getPipedFilterCommand('some-command | uniq'), 'uniq');
+});
+
+test('getPipedFilterCommand - detects pipe to wc', async t => {
+	t.is(await getPipedFilterCommand('some-command | wc -l'), 'wc');
+});
+
+test('getPipedFilterCommand - detects pipe to tr', async t => {
+	t.is(await getPipedFilterCommand('some-command | tr a-z A-Z'), 'tr');
+});
+
+test('getPipedFilterCommand - returns first filter in chain', async t => {
+	t.is(await getPipedFilterCommand('some-command | grep pattern | head -n 10'), 'grep');
+});
+
+test('getPipedFilterCommand - allows commands without pipes', async t => {
+	t.is(await getPipedFilterCommand('some-command --flag arg'), undefined);
+});
+
+test('getPipedFilterCommand - allows pipe to non-filter commands', async t => {
+	t.is(await getPipedFilterCommand('some-command | less'), undefined);
+});
+
+test('getPipedFilterCommand - does not detect filter in strings', async t => {
+	t.is(await getPipedFilterCommand('echo "some-command | grep pattern"'), undefined);
+});
+
+test('getPipedFilterCommand - handles complex command with redirections', async t => {
+	t.is(await getPipedFilterCommand('taxdome-gitlab-mr-ci -j 0 2>&1 | grep -E "^(Failed examples:|rspec )"'), 'grep');
 });

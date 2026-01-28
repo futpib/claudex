@@ -276,6 +276,37 @@ export async function getGitCheckoutBStartPoint(command: string): Promise<string
 /**
  * Checks if a git command uses the -C flag to run in a different directory.
  */
+/**
+ * Checks if a command pipes output to a filter command (grep, head, tail, awk, sed, etc.).
+ * Returns the name of the filter command if found, undefined otherwise.
+ */
+export async function getPipedFilterCommand(command: string): Promise<string | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	const filterCommands = new Set([ 'grep', 'head', 'tail', 'awk', 'sed', 'cut', 'sort', 'uniq', 'wc', 'tr' ]);
+
+	for (const entry of ast.entries) {
+		const pipelineCommands = entry.pipeline.commands;
+		// If there's more than one command in the pipeline, check if any after the first is a filter
+		if (pipelineCommands.length > 1) {
+			for (let i = 1; i < pipelineCommands.length; i++) {
+				const unit = pipelineCommands[i];
+				if (unit.type === 'simple' && unit.name) {
+					const name = getWordLiteralValue(unit.name);
+					if (name && filterCommands.has(name)) {
+						return name;
+					}
+				}
+			}
+		}
+	}
+
+	return undefined;
+}
+
 export async function hasGitCFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {

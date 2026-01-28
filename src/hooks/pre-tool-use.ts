@@ -11,7 +11,7 @@ import { paths } from '../paths.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
 } from './shared.js';
-import { extractCommandNames, hasChainOperators, hasGitCFlag, getGitCheckoutBStartPoint } from './bash-parser-helpers.js';
+import { extractCommandNames, hasChainOperators, hasGitCFlag, getGitCheckoutBStartPoint, getPipedFilterCommand } from './bash-parser-helpers.js';
 
 const editToolInputSchema = z.object({
 	file_path: z.string(),
@@ -274,6 +274,17 @@ async function main() {
 		if (await hasChainOperators(command)) {
 			console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
 			console.error('Please run commands separately for better tracking and error handling.');
+			process.exit(2);
+		}
+	}
+
+	// Ban piping command output to filter commands (grep, head, tail, etc.)
+	if (toolName === 'Bash' && typeof command === 'string') {
+		const pipedFilter = await getPipedFilterCommand(command);
+		if (pipedFilter) {
+			console.error(`❌ Piping output to ${pipedFilter} is not allowed`);
+			console.error('Run the command first, then search its output file using the Read or Grep tools.');
+			console.error('For long output, the command result will include an output file path you can search.');
 			process.exit(2);
 		}
 	}
