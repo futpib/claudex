@@ -541,6 +541,15 @@ export async function main() {
 			}
 		}
 
+		// Add extra host entries to container /etc/hosts
+		if (config.extraHosts && Object.keys(config.extraHosts).length > 0) {
+			console.error('Extra hosts:');
+			for (const [hostname, ip] of Object.entries(config.extraHosts)) {
+				dockerArgs.push('--add-host', `${hostname}:${ip}`);
+				console.error(`  ${hostname} → ${ip}`);
+			}
+		}
+
 		dockerArgs.push('-w', cwd);
 
 		// Default to 'user,local' to ignore shared project .claude/ but allow local overrides

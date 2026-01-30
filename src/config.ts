@@ -26,6 +26,7 @@ const BaseConfigSchema = z.object({
 	env: z.record(z.string(), z.string()).optional(),
 	ssh: SshConfigSchema.optional(),
 	hostPorts: z.array(z.number().int().positive()).optional(),
+	extraHosts: z.record(z.string(), z.string()).optional(),
 	shareVolumes: z.boolean().optional(), // default true - auto-share volumes between group members
 	settingSources: z.string().optional(), // default "user,local" - controls --setting-sources flag for Claude Code
 });
@@ -220,6 +221,11 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 		...(overlay.hostPorts ?? []),
 	])];
 
+	const extraHosts = {
+		...(base.extraHosts ?? {}),
+		...(overlay.extraHosts ?? {}),
+	};
+
 	// shareVolumes: overlay takes precedence if defined, otherwise use base
 	const shareVolumes = overlay.shareVolumes ?? base.shareVolumes;
 
@@ -235,6 +241,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 			hosts: sshHosts.length > 0 ? sshHosts : undefined,
 		} : undefined,
 		hostPorts: hostPorts.length > 0 ? hostPorts : undefined,
+		extraHosts: Object.keys(extraHosts).length > 0 ? extraHosts : undefined,
 		shareVolumes,
 		settingSources,
 	};
@@ -434,6 +441,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		env: config.env ? sortEnv(config.env) : undefined,
 		ssh: config.ssh,
 		hostPorts: config.hostPorts ? [...config.hostPorts].sort((a, b) => a - b) : undefined,
+		extraHosts: config.extraHosts ? sortEnv(config.extraHosts) : undefined,
 		settingSources: config.settingSources,
 	};
 }
