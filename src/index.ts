@@ -8,7 +8,7 @@ import meow from 'meow';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
-import { getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, type Volume } from './config.js';
+import { getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, type Volume, type ClaudexConfig } from './config.js';
 import { shieldEnvVars } from './secrets.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
@@ -85,7 +85,7 @@ async function ensureMcpServerConfig(projectRoot: string) {
 	await fs.writeFile(claudeJsonPath, JSON.stringify(config, null, 2));
 }
 
-async function ensureDockerImage(cwd: string, config: Awaited<ReturnType<typeof getMergedConfig>>, pull = false, noCache = false) {
+async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = false, noCache = false) {
 	const userInfo = os.userInfo();
 	const userId = userInfo.uid;
 	const { username } = userInfo;
@@ -313,7 +313,16 @@ export async function main() {
 	if (showConfig !== undefined) {
 		const configPath = showConfig || process.cwd();
 		const absolutePath = path.resolve(configPath);
-		const config = await getMergedConfig(absolutePath);
+		const { config, configFiles } = await getMergedConfig(absolutePath);
+		if (configFiles.length > 0) {
+			console.error('Config files:');
+			for (const file of configFiles) {
+				console.error(`  ${file}`);
+			}
+		} else {
+			console.error('No config files found.');
+		}
+
 		console.log(JSON.stringify(config, null, 2));
 		return;
 	}
@@ -395,7 +404,7 @@ export async function main() {
 
 	if (useDocker) {
 		const cwdBasename = path.basename(cwd);
-		const config = await getMergedConfig(cwd);
+		const { config } = await getMergedConfig(cwd);
 
 		// Merge CLI flags with config
 		if (cliPackages?.length) {
@@ -537,7 +546,7 @@ export async function main() {
 		});
 	} else {
 		// Load config for settingSources even in non-Docker mode
-		const config = await getMergedConfig(cwd);
+		const { config } = await getMergedConfig(cwd);
 		const settingSources = config.settingSources ?? 'user,local';
 		console.error(`Setting sources: ${settingSources}`);
 

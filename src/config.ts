@@ -346,17 +346,24 @@ function getGroupSiblingPaths(
 	return siblings;
 }
 
-async function readRootConfig(): Promise<RootConfig> {
+type ReadRootConfigResult = {
+	config: RootConfig;
+	configFiles: string[];
+};
+
+async function readRootConfig(): Promise<ReadRootConfigResult> {
 	const configDir = paths.config;
 	const configPath = path.join(configDir, 'config.json');
 	const configDPath = path.join(configDir, 'config.json.d');
 
 	let merged: RootConfig = {};
+	const configFiles: string[] = [];
 
 	// Read main config.json
 	try {
 		const content = await fs.readFile(configPath, 'utf8');
 		merged = RootConfigSchema.parse(JSON.parse(content));
+		configFiles.push(configPath);
 	} catch {
 		// Doesn't exist or invalid
 	}
@@ -367,10 +374,12 @@ async function readRootConfig(): Promise<RootConfig> {
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
 
 		for (const file of jsonFiles) {
+			const filePath = path.join(configDPath, file);
 			try {
-				const content = await fs.readFile(path.join(configDPath, file), 'utf8');
+				const content = await fs.readFile(filePath, 'utf8');
 				const parsed = RootConfigSchema.parse(JSON.parse(content));
 				merged = mergeRootConfigs(merged, parsed);
+				configFiles.push(filePath);
 			} catch {
 				// Skip invalid files
 			}
@@ -379,7 +388,7 @@ async function readRootConfig(): Promise<RootConfig> {
 		// Directory doesn't exist
 	}
 
-	return merged;
+	return { config: merged, configFiles };
 }
 
 async function getGitRoot(cwd: string): Promise<string | undefined> {
@@ -439,8 +448,13 @@ function mergeProjectConfig(
 	return mergeConfigs(merged, projectBaseConfig);
 }
 
-export async function getMergedConfig(cwd: string): Promise<ClaudexConfig> {
-	const rootConfig = await readRootConfig();
+export type MergedConfigResult = {
+	config: ClaudexConfig;
+	configFiles: string[];
+};
+
+export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> {
+	const { config: rootConfig, configFiles } = await readRootConfig();
 
 	// Get git-aware paths
 	const gitRoot = await getGitRoot(cwd);
@@ -484,10 +498,10 @@ export async function getMergedConfig(cwd: string): Promise<ClaudexConfig> {
 	}
 
 	// Sort for consistent Docker cache
-	return sortConfig(merged);
+	return { config: sortConfig(merged), configFiles };
 }
 
 // Legacy function for backward compatibility - deprecated
-export async function readConfig(): Promise<ClaudexConfig> {
+export async function readConfig(): Promise<MergedConfigResult> {
 	return getMergedConfig(process.cwd());
 }
