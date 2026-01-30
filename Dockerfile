@@ -11,7 +11,7 @@ ARG USER_ID=1000
 ARG USERNAME=claude
 
 # Install system dependencies (as root)
-RUN pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh
+RUN pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh socat
 
 # Install yay (as root, using temp builder user)
 RUN set -xe; \

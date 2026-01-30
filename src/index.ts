@@ -521,10 +521,24 @@ export async function main() {
 		}
 
 		// Get filtered known_hosts content for configured SSH hosts
-		const sshHosts = getSshHosts(config);
+		// Include [localhost]:PORT entries for each host port
+		const sshHosts = [
+			...getSshHosts(config),
+			...(config.hostPorts ?? []).map(port => `[localhost]:${port}`),
+		];
 		const knownHostsContent = await getFilteredKnownHosts(sshHosts);
 		if (knownHostsContent) {
 			dockerArgs.push('-e', `CLAUDEX_KNOWN_HOSTS_CONTENT=${knownHostsContent}`);
+		}
+
+		// Configure host port forwarding via socat
+		if (config.hostPorts && config.hostPorts.length > 0) {
+			dockerArgs.push('--add-host', 'host.docker.internal:host-gateway');
+			dockerArgs.push('-e', `CLAUDEX_HOST_PORTS=${config.hostPorts.join(',')}`);
+			console.error('Host ports:');
+			for (const port of config.hostPorts) {
+				console.error(`  ${port}`);
+			}
 		}
 
 		dockerArgs.push('-w', cwd);
@@ -708,18 +722,71 @@ async function setupKnownHosts() {
 	console.log(`Created ${knownHostsPath} with filtered known hosts`);
 }
 
+async function setupHostPortForwarding(): Promise<(() => void) | undefined> {
+	const hostPorts = process.env.CLAUDEX_HOST_PORTS;
+	if (!hostPorts) {
+		return undefined;
+	}
+
+	const ports = hostPorts.split(',').map(Number).filter(p => p > 0);
+	if (ports.length === 0) {
+		return undefined;
+	}
+
+	const children: import('execa').ResultPromise[] = [];
+
+	let stopped = false;
+
+	for (const port of ports) {
+		// Listen on both IPv4 and IPv6 loopback so that
+		// connections to localhost work regardless of resolution
+		const child4 = execa('socat', [
+			`TCP4-LISTEN:${port},fork,reuseaddr,bind=127.0.0.1`,
+			`TCP:host.docker.internal:${port}`,
+		]);
+		const child6 = execa('socat', [
+			`TCP6-LISTEN:${port},fork,reuseaddr,bind=::1`,
+			`TCP:host.docker.internal:${port}`,
+		]);
+		for (const child of [child4, child6]) {
+			child.catch((error: unknown) => {
+				if (stopped) {
+					return;
+				}
+
+				console.error(`socat port ${port} error:`, error instanceof Error ? error.message : error);
+			});
+		}
+
+		children.push(child4, child6);
+		console.log(`Forwarding localhost:${port} → host:${port}`);
+	}
+
+	return () => {
+		stopped = true;
+		for (const child of children) {
+			child.kill();
+		}
+	};
+}
+
 export async function mainInDocker() {
 	await setupHookSymlinks();
 	await setupKnownHosts();
+	const cleanupPortForwarding = await setupHostPortForwarding();
 
 	// Now exec claude with all arguments
 	const args = process.argv.slice(2);
 
-	await execa('claude', args, {
-		stdin: process.stdin,
-		stdout: process.stdout,
-		stderr: process.stderr,
-	});
+	try {
+		await execa('claude', args, {
+			stdin: process.stdin,
+			stdout: process.stdout,
+			stderr: process.stderr,
+		});
+	} finally {
+		cleanupPortForwarding?.();
+	}
 
 	console.log('Shutting down container...');
 }
