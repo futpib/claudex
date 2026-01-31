@@ -275,12 +275,11 @@ test('group scope writes to correct file', async t => {
 test('--file writes to specific file in config.json.d', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {
-		// eslint-disable-next-line @typescript-eslint/naming-convention
-		const configDDir = path.join(configDir, 'claudex', 'config.json.d');
-		await mkdir(configDDir, { recursive: true });
+		const configJsonDirectory = path.join(configDir, 'claudex', 'config.json.d');
+		await mkdir(configJsonDirectory, { recursive: true });
 
 		await runConfigWithDir(configDir, [ 'add', '--global', '--file', 'config.json.d/99-private.json', 'packages', 'vim' ]);
-		const config = await readJsonFile(path.join(configDDir, '99-private.json'));
+		const config = await readJsonFile(path.join(configJsonDirectory, '99-private.json'));
 		t.deepEqual((config as { packages: string[] }).packages, [ 'vim' ]);
 	} finally {
 		await cleanup();
@@ -291,9 +290,8 @@ test('ambiguous project file errors', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {
 		const claudexDir = path.join(configDir, 'claudex');
-		// eslint-disable-next-line @typescript-eslint/naming-convention
-		const configDDir = path.join(claudexDir, 'config.json.d');
-		await mkdir(configDDir, { recursive: true });
+		const configJsonDirectory = path.join(claudexDir, 'config.json.d');
+		await mkdir(configJsonDirectory, { recursive: true });
 
 		const projectPath = '/home/user/code/myproject';
 
@@ -305,7 +303,7 @@ test('ambiguous project file errors', async t => {
 
 		// Write same project to another file
 		await writeFile(
-			path.join(configDDir, '01-extra.json'),
+			path.join(configJsonDirectory, '01-extra.json'),
 			JSON.stringify({ projects: { [projectPath]: { packages: [ 'curl' ] } } }),
 		);
 

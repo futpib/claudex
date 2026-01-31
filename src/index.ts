@@ -5,6 +5,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa, type ResultPromise } from 'execa';
 import meow from 'meow';
+import { z } from 'zod';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
@@ -428,8 +429,7 @@ export async function main() {
 		}
 
 		if (cliVolumes?.length) {
-			// eslint-disable-next-line unicorn/no-array-callback-reference
-			const parsedVolumes = cliVolumes.map(parseVolumeSpec);
+			const parsedVolumes = cliVolumes.map(spec => parseVolumeSpec(spec));
 			config.volumes = [ ...(config.volumes ?? []), ...parsedVolumes ];
 		}
 
@@ -641,14 +641,28 @@ type Settings = {
 	hooks?: Record<string, HookMatcher[]>;
 };
 
+const settingsSchema = z.object({
+	hooks: z.record(z.string(), z.array(z.object({
+		matcher: z.string(),
+		hooks: z.array(z.object({
+			type: z.string(),
+			command: z.string(),
+		})),
+	}))).optional(),
+});
+
+function parseJsonWithSchema<T>(content: string, schema: z.ZodType<T>): T {
+	const parsed: unknown = JSON.parse(content);
+	return schema.parse(parsed);
+}
+
 async function setupHookSymlinks() {
 	const homeDir = os.homedir();
 	const settingsPath = path.join(homeDir, '.claude', 'settings.json');
 
 	try {
 		const settingsContent = await fs.readFile(settingsPath, 'utf8');
-		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
-		const settings: Settings = JSON.parse(settingsContent);
+		const settings = parseJsonWithSchema(settingsContent, settingsSchema);
 
 		if (!settings.hooks) {
 			return;
