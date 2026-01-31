@@ -12,10 +12,8 @@ import * as helpers from './bash-parser-helpers.js';
 import { createRuleRegistry } from './rules/index.js';
 
 // Skip all checks for read-only tools and internal tools
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
+const readOnlyTools = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
+const internalTools = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
 
 async function main() {
 	const input = await readStdin();
@@ -69,7 +67,7 @@ async function main() {
 	}
 
 	// Early exit for read-only, internal, and MCP tools
-	if (READ_ONLY_TOOLS.has(toolName) || INTERNAL_TOOLS.has(toolName) || isMcpTool) {
+	if (readOnlyTools.has(toolName) || internalTools.has(toolName) || isMcpTool) {
 		process.exit(0);
 	}
 
