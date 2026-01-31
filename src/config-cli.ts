@@ -1,0 +1,530 @@
+import path from 'node:path';
+import {
+	getMergedConfig,
+	getConfigDir,
+	readSingleConfigFile,
+	writeSingleConfigFile,
+	findConfigFileForProject,
+	findConfigFileForGroup,
+	expandTilde,
+	type RootConfig,
+	type BaseConfig,
+	type ProjectConfig,
+} from './config.js';
+
+type Action = 'list' | 'get' | 'set' | 'add' | 'unset';
+
+type Scope =
+	| {type: 'project'; path: string}
+	| {type: 'global'}
+	| {type: 'group'; name: string};
+
+type ParsedArgs = {
+	action: Action;
+	scope: Scope;
+	file?: string;
+	key?: string;
+	value?: string;
+};
+
+function parseArgs(argv: string[]): ParsedArgs {
+	const args = [...argv];
+
+	let action: Action | undefined;
+	let scope: Scope | undefined;
+	let file: string | undefined;
+	let key: string | undefined;
+	let value: string | undefined;
+	let isGlobal = false;
+
+	const positionals: string[] = [];
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+
+		if (arg === '--global') {
+			isGlobal = true;
+		} else if (arg === '--project') {
+			i++;
+			const projectPath = args[i];
+			if (!projectPath) {
+				throw new Error('--project requires a path argument');
+			}
+
+			scope = {type: 'project', path: expandTilde(projectPath)};
+		} else if (arg === '--group') {
+			i++;
+			const groupName = args[i];
+			if (!groupName) {
+				throw new Error('--group requires a name argument');
+			}
+
+			scope = {type: 'group', name: groupName};
+		} else if (arg === '--file') {
+			i++;
+			file = args[i];
+			if (!file) {
+				throw new Error('--file requires a path argument');
+			}
+		} else {
+			positionals.push(arg);
+		}
+	}
+
+	if (positionals.length === 0) {
+		throw new Error('Missing action. Usage: claudex config <list|get|set|add|unset> [key] [value]');
+	}
+
+	const actionStr = positionals[0];
+	if (!['list', 'get', 'set', 'add', 'unset'].includes(actionStr)) {
+		throw new Error(`Unknown action: ${actionStr}. Expected one of: list, get, set, add, unset`);
+	}
+
+	action = actionStr as Action;
+	key = positionals[1];
+	value = positionals[2];
+
+	if (isGlobal) {
+		if (scope) {
+			throw new Error('--global cannot be combined with --project or --group');
+		}
+
+		scope = {type: 'global'};
+	}
+
+	scope ??= {type: 'project', path: process.cwd()};
+
+	return {action, scope, file, key, value};
+}
+
+function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfig | undefined {
+	switch (scope.type) {
+		case 'global': {
+			return config;
+		}
+
+		case 'project': {
+			return config.projects?.[scope.path];
+		}
+
+		case 'group': {
+			return config.groups?.[scope.name];
+		}
+
+		default: {
+			return undefined;
+		}
+	}
+}
+
+function ensureSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfig {
+	switch (scope.type) {
+		case 'global': {
+			return config;
+		}
+
+		case 'project': {
+			config.projects ??= {};
+			config.projects[scope.path] ??= {};
+			return config.projects[scope.path];
+		}
+
+		case 'group': {
+			config.groups ??= {};
+			config.groups[scope.name] ??= {};
+			return config.groups[scope.name];
+		}
+
+		// No default
+	}
+}
+
+type KeyInfo = {
+	field: string;
+	subKey?: string;
+};
+
+function parseKey(key: string): KeyInfo {
+	const dotIndex = key.indexOf('.');
+	if (dotIndex === -1) {
+		return {field: key};
+	}
+
+	return {
+		field: key.slice(0, dotIndex),
+		subKey: key.slice(dotIndex + 1),
+	};
+}
+
+function coerceValue(field: string, value: string): string | number | boolean {
+	if (field === 'hostPorts') {
+		const num = Number(value);
+		if (!Number.isInteger(num) || num <= 0) {
+			throw new Error(`Invalid port number: ${value}`);
+		}
+
+		return num;
+	}
+
+	if (field === 'shareVolumes') {
+		if (value === 'true') {
+			return true;
+		}
+
+		if (value === 'false') {
+			return false;
+		}
+
+		throw new Error(`Invalid boolean value: ${value}. Expected 'true' or 'false'`);
+	}
+
+	return value;
+}
+
+async function resolveWriteFile(scope: Scope, file: string | undefined): Promise<string> {
+	const configDir = getConfigDir();
+
+	if (file) {
+		return path.resolve(configDir, file);
+	}
+
+	const defaultFile = path.join(configDir, 'config.json');
+
+	switch (scope.type) {
+		case 'global': {
+			return defaultFile;
+		}
+
+		case 'project': {
+			const result = await findConfigFileForProject(scope.path);
+			if (result === 'ambiguous') {
+				throw new Error(`Project "${scope.path}" is defined in multiple config files. Use --file to specify which one.`);
+			}
+
+			if (result === 'none') {
+				return defaultFile;
+			}
+
+			return result.path;
+		}
+
+		case 'group': {
+			const result = await findConfigFileForGroup(scope.name);
+			if (result === 'ambiguous') {
+				throw new Error(`Group "${scope.name}" is defined in multiple config files. Use --file to specify which one.`);
+			}
+
+			if (result === 'none') {
+				return defaultFile;
+			}
+
+			return result.path;
+		}
+
+		// No default
+	}
+}
+
+function getValue(section: BaseConfig | ProjectConfig | undefined, keyInfo: KeyInfo): unknown {
+	if (!section) {
+		return undefined;
+	}
+
+	const record = section as Record<string, unknown>;
+	const fieldValue = record[keyInfo.field];
+
+	if (keyInfo.subKey && fieldValue && typeof fieldValue === 'object') {
+		return (fieldValue as Record<string, unknown>)[keyInfo.subKey];
+	}
+
+	return fieldValue;
+}
+
+function formatValue(value: unknown): string {
+	if (value === undefined) {
+		return '';
+	}
+
+	if (typeof value === 'string' || typeof value === 'number' || typeof value === 'boolean') {
+		return String(value);
+	}
+
+	return JSON.stringify(value, null, 2);
+}
+
+async function handleList(scope: Scope): Promise<void> {
+	if (scope.type === 'project') {
+		const {config} = await getMergedConfig(scope.path);
+		console.log(JSON.stringify(config, null, 2));
+		return;
+	}
+
+	// For global and group, read merged root config and extract section
+	const {config: rootConfig} = await getMergedConfig(process.cwd());
+
+	if (scope.type === 'global') {
+		const {projects: _, groups: _g, ...base} = rootConfig as unknown as RootConfig;
+		console.log(JSON.stringify(base, null, 2));
+		return;
+	}
+
+	// Group - get from merged root
+	// We need to read the root config directly for group listing
+	const {getMergedConfig: _m, ...rest} = await import('./config.js');
+	const allFiles = await rest.readAllConfigFiles();
+	let merged: RootConfig = {};
+	for (const entry of allFiles) {
+		merged = {...merged, ...entry.config};
+	}
+
+	const groupConfig = merged.groups?.[scope.name];
+	if (groupConfig) {
+		console.log(JSON.stringify(groupConfig, null, 2));
+	} else {
+		console.log('{}');
+	}
+}
+
+async function handleGet(scope: Scope, key: string): Promise<void> {
+	const keyInfo = parseKey(key);
+
+	if (scope.type === 'project') {
+		const {config} = await getMergedConfig(scope.path);
+		const value = getValue(config, keyInfo);
+		const formatted = formatValue(value);
+		if (formatted) {
+			console.log(formatted);
+		}
+
+		return;
+	}
+
+	// For global/group, we need the merged root config
+	const {config} = await getMergedConfig(process.cwd());
+
+	let section: BaseConfig | ProjectConfig | undefined;
+	if (scope.type === 'global') {
+		section = config;
+	} else {
+		// For group, read root and get group section
+		const allFiles = await (await import('./config.js')).readAllConfigFiles();
+		let merged: RootConfig = {};
+		for (const entry of allFiles) {
+			merged = {...merged, ...entry.config};
+		}
+
+		section = merged.groups?.[scope.name];
+	}
+
+	const value = getValue(section, keyInfo);
+	const formatted = formatValue(value);
+	if (formatted) {
+		console.log(formatted);
+	}
+}
+
+async function handleSet(scope: Scope, key: string, value: string, file: string | undefined): Promise<void> {
+	const keyInfo = parseKey(key);
+	const filePath = await resolveWriteFile(scope, file);
+
+	let config: RootConfig;
+	try {
+		config = await readSingleConfigFile(filePath);
+	} catch {
+		config = {};
+	}
+
+	const section = ensureSection(config, scope);
+	const coerced = coerceValue(keyInfo.field, value);
+
+	if (keyInfo.subKey) {
+		// Record field (env.KEY, extraHosts.HOST)
+		const record = section as Record<string, unknown>;
+		const existing = (record[keyInfo.field] ?? {}) as Record<string, unknown>;
+		existing[keyInfo.subKey] = coerced;
+		record[keyInfo.field] = existing;
+	} else {
+		// Scalar field
+		(section as Record<string, unknown>)[keyInfo.field] = coerced;
+	}
+
+	await writeSingleConfigFile(filePath, config);
+}
+
+async function handleAdd(scope: Scope, key: string, value: string, file: string | undefined): Promise<void> {
+	const keyInfo = parseKey(key);
+
+	if (keyInfo.subKey) {
+		// For nested array fields (ssh.keys, ssh.hosts)
+		const filePath = await resolveWriteFile(scope, file);
+		let config: RootConfig;
+		try {
+			config = await readSingleConfigFile(filePath);
+		} catch {
+			config = {};
+		}
+
+		const section = ensureSection(config, scope);
+		const record = section as Record<string, unknown>;
+		const parent = (record[keyInfo.field] ?? {}) as Record<string, unknown>;
+		const existing = (parent[keyInfo.subKey] ?? []) as unknown[];
+		const coerced = coerceValue(keyInfo.field, value);
+		existing.push(coerced);
+		parent[keyInfo.subKey] = existing;
+		record[keyInfo.field] = parent;
+
+		await writeSingleConfigFile(filePath, config);
+		return;
+	}
+
+	const filePath = await resolveWriteFile(scope, file);
+	let config: RootConfig;
+	try {
+		config = await readSingleConfigFile(filePath);
+	} catch {
+		config = {};
+	}
+
+	const section = ensureSection(config, scope);
+	const record = section as Record<string, unknown>;
+	const existing = (record[keyInfo.field] ?? []) as unknown[];
+	const coerced = coerceValue(keyInfo.field, value);
+	existing.push(coerced);
+	record[keyInfo.field] = existing;
+
+	await writeSingleConfigFile(filePath, config);
+}
+
+async function handleUnset(scope: Scope, key: string, value: string | undefined, file: string | undefined): Promise<void> {
+	const keyInfo = parseKey(key);
+	const filePath = await resolveWriteFile(scope, file);
+
+	let config: RootConfig;
+	try {
+		config = await readSingleConfigFile(filePath);
+	} catch {
+		config = {};
+	}
+
+	const section = getSection(config, scope);
+	if (!section) {
+		return;
+	}
+
+	const record = section as Record<string, unknown>;
+
+	if (keyInfo.subKey) {
+		if (value !== undefined) {
+			// Remove specific value from nested array (e.g., ssh.keys <value>)
+			const parent = record[keyInfo.field] as Record<string, unknown> | undefined;
+			if (!parent) {
+				return;
+			}
+
+			const arr = parent[keyInfo.subKey];
+			if (Array.isArray(arr)) {
+				parent[keyInfo.subKey] = arr.filter((v: unknown) => String(v) !== value);
+				if ((parent[keyInfo.subKey] as unknown[]).length === 0) {
+					// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+					delete parent[keyInfo.subKey];
+				}
+			} else {
+				// Delete record entry (e.g., env.KEY, extraHosts.HOST)
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete parent[keyInfo.subKey];
+			}
+
+			if (Object.keys(parent).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete record[keyInfo.field];
+			}
+		} else {
+			// Remove entire sub-key from record
+			const parent = record[keyInfo.field] as Record<string, unknown> | undefined;
+			if (!parent) {
+				return;
+			}
+
+			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+			delete parent[keyInfo.subKey];
+			if (Object.keys(parent).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete record[keyInfo.field];
+			}
+		}
+	} else if (value !== undefined) {
+		// Remove specific value from array
+		const arr = record[keyInfo.field];
+		if (Array.isArray(arr)) {
+			const coerced = coerceValue(keyInfo.field, value);
+			record[keyInfo.field] = arr.filter((v: unknown) => v !== coerced);
+			if ((record[keyInfo.field] as unknown[]).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete record[keyInfo.field];
+			}
+		}
+	} else {
+		// Remove entire key
+		// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+		delete record[keyInfo.field];
+	}
+
+	await writeSingleConfigFile(filePath, config);
+}
+
+export async function configMain(argv: string[]): Promise<void> {
+	const parsed = parseArgs(argv);
+
+	switch (parsed.action) {
+		case 'list': {
+			await handleList(parsed.scope);
+			break;
+		}
+
+		case 'get': {
+			if (!parsed.key) {
+				throw new Error('get requires a key argument');
+			}
+
+			await handleGet(parsed.scope, parsed.key);
+			break;
+		}
+
+		case 'set': {
+			if (!parsed.key) {
+				throw new Error('set requires a key argument');
+			}
+
+			if (parsed.value === undefined) {
+				throw new Error('set requires a value argument');
+			}
+
+			await handleSet(parsed.scope, parsed.key, parsed.value, parsed.file);
+			break;
+		}
+
+		case 'add': {
+			if (!parsed.key) {
+				throw new Error('add requires a key argument');
+			}
+
+			if (parsed.value === undefined) {
+				throw new Error('add requires a value argument');
+			}
+
+			await handleAdd(parsed.scope, parsed.key, parsed.value, parsed.file);
+			break;
+		}
+
+		case 'unset': {
+			if (!parsed.key) {
+				throw new Error('unset requires a key argument');
+			}
+
+			await handleUnset(parsed.scope, parsed.key, parsed.value, parsed.file);
+			break;
+		}
+
+		// No default
+	}
+}

@@ -42,6 +42,8 @@ const RootConfigSchema = BaseConfigSchema.extend({
 	projects: z.record(z.string(), ProjectConfigSchema).optional(),
 });
 
+export { RootConfigSchema };
+
 export type VolumeMount = z.infer<typeof VolumeMountSchema>;
 export type Volume = z.infer<typeof VolumeSchema>;
 export type SshConfig = z.infer<typeof SshConfigSchema>;
@@ -520,4 +522,87 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 // Legacy function for backward compatibility - deprecated
 export async function readConfig(): Promise<MergedConfigResult> {
 	return getMergedConfig(process.cwd());
+}
+
+export function getConfigDir(): string {
+	return paths.config;
+}
+
+export async function readSingleConfigFile(filePath: string): Promise<RootConfig> {
+	const content = await fs.readFile(filePath, 'utf8');
+	return RootConfigSchema.parse(JSON.parse(content));
+}
+
+export async function writeSingleConfigFile(filePath: string, config: RootConfig): Promise<void> {
+	await fs.mkdir(path.dirname(filePath), {recursive: true});
+	await fs.writeFile(filePath, JSON.stringify(config, null, 2) + '\n');
+}
+
+export type ConfigFileEntry = {
+	path: string;
+	config: RootConfig;
+};
+
+export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
+	const configDir = paths.config;
+	const configPath = path.join(configDir, 'config.json');
+	const configDPath = path.join(configDir, 'config.json.d');
+	const entries: ConfigFileEntry[] = [];
+
+	try {
+		const content = await fs.readFile(configPath, 'utf8');
+		entries.push({path: configPath, config: RootConfigSchema.parse(JSON.parse(content))});
+	} catch {
+		// Doesn't exist or invalid
+	}
+
+	try {
+		const files = await fs.readdir(configDPath);
+		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
+		for (const file of jsonFiles) {
+			const filePath = path.join(configDPath, file);
+			try {
+				const content = await fs.readFile(filePath, 'utf8');
+				entries.push({path: filePath, config: RootConfigSchema.parse(JSON.parse(content))});
+			} catch {
+				// Skip invalid files
+			}
+		}
+	} catch {
+		// Directory doesn't exist
+	}
+
+	return entries;
+}
+
+export type FindConfigFileResult = ConfigFileEntry | 'ambiguous' | 'none';
+
+export async function findConfigFileForProject(projectPath: string): Promise<FindConfigFileResult> {
+	const entries = await readAllConfigFiles();
+	const matches = entries.filter(entry => entry.config.projects?.[projectPath] !== undefined);
+
+	if (matches.length === 1) {
+		return matches[0];
+	}
+
+	if (matches.length > 1) {
+		return 'ambiguous';
+	}
+
+	return 'none';
+}
+
+export async function findConfigFileForGroup(groupName: string): Promise<FindConfigFileResult> {
+	const entries = await readAllConfigFiles();
+	const matches = entries.filter(entry => entry.config.groups?.[groupName] !== undefined);
+
+	if (matches.length === 1) {
+		return matches[0];
+	}
+
+	if (matches.length > 1) {
+		return 'ambiguous';
+	}
+
+	return 'none';
 }

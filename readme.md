@@ -108,6 +108,70 @@ Logs user prompts with session context for tracking and debugging.
            └─► user-prompt-submit hook logs interactions
 ```
 
+## Config Management
+
+Manage claudex configuration from the command line with `claudex config`:
+
+```bash
+claudex config <action> [scope flags] [key] [value]
+```
+
+### Actions
+
+- `list` — show effective merged config
+- `get <key>` — get a merged effective value
+- `set <key> <value>` — set a scalar value or record entry
+- `add <key> <value>` — append to an array field
+- `unset <key> [<value>]` — remove a key, or remove a specific value from an array
+
+### Scope Flags
+
+- *(none)* — current project (`projects[<cwd>]` section)
+- `--global` — root-level config
+- `--project <path>` — `projects[<path>]` section (explicit)
+- `--group <name>` — `groups[<name>]` section
+- `--file <path>` — target a specific file (relative to config dir)
+
+### Key Format
+
+| Key | Type | Actions |
+|---|---|---|
+| `packages` | string[] | add, unset |
+| `volumes` | string[] | add, unset |
+| `env.<KEY>` | string | set, unset |
+| `ssh.keys` | string[] | add, unset |
+| `ssh.hosts` | string[] | add, unset |
+| `hostPorts` | number[] | add, unset |
+| `extraHosts.<HOST>` | string | set, unset |
+| `shareVolumes` | boolean | set, unset |
+| `settingSources` | string | set, unset |
+| `group` | string (project only) | set, unset |
+
+### Examples
+
+```bash
+# Add a volume to current project
+claudex config add volumes ~/code/parser
+
+# Set an extra host for a group
+claudex config set --group mygroup extraHosts.gitlab.example.com 127.0.0.1
+
+# Add a host port to a group (in a specific file)
+claudex config add --group mygroup --file config.json.d/99-private.json hostPorts 8443
+
+# Set env var for a project
+claudex config set --project ~/code/foo env.API_KEY '${API_KEY}'
+
+# Remove a volume from a project
+claudex config unset --project ~/code/myproject volumes ~/code/parser
+
+# List merged config for current project
+claudex config list
+
+# Get a specific value
+claudex config get --group mygroup hostPorts
+```
+
 ## Configuration
 
 ### Hook Configuration
