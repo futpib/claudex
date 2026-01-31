@@ -1,0 +1,57 @@
+import type { HooksDetail } from '../../config.js';
+import type { KnownToolInput, PreToolUseHookInput } from '../schemas.js';
+import type * as bashParserHelpers from '../bash-parser-helpers.js';
+import { banGitC } from './ban-git-c.js';
+import { banGitAddAll } from './ban-git-add-all.js';
+import { banGitCommitAmend } from './ban-git-commit-amend.js';
+import { banGitCommitNoVerify } from './ban-git-commit-no-verify.js';
+import { banGitCheckoutRedundantStartPoint } from './ban-git-checkout-redundant-start-point.js';
+import { banBackgroundBash } from './ban-background-bash.js';
+import { banCommandChaining } from './ban-command-chaining.js';
+import { banPipeToFilter } from './ban-pipe-to-filter.js';
+import { banFileOperationCommands } from './ban-file-operation-commands.js';
+import { banOutdatedYearInSearch } from './ban-outdated-year-in-search.js';
+import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
+import { logToolUse } from './log-tool-use.js';
+
+export type RuleViolation = {
+	type: 'violation';
+	messages: string[];
+};
+
+export type RuleResult = RuleViolation | { type: 'pass' } | { type: 'side-effect' };
+
+export type RuleContext = {
+	input: PreToolUseHookInput;
+	knownInput: KnownToolInput | undefined;
+	toolName: string;
+	sessionId: string;
+	transcriptPath: string;
+	command: string;
+	cwd: string;
+	helpers: typeof bashParserHelpers;
+};
+
+export type Rule = {
+	name: string;
+	fn: (context: RuleContext) => Promise<RuleResult> | RuleResult;
+};
+
+export type RuleRegistry = Map<keyof HooksDetail, Rule>;
+
+export function createRuleRegistry(): RuleRegistry {
+	const registry: RuleRegistry = new Map();
+	registry.set('banGitC', banGitC);
+	registry.set('banGitAddAll', banGitAddAll);
+	registry.set('banGitCommitAmend', banGitCommitAmend);
+	registry.set('banGitCommitNoVerify', banGitCommitNoVerify);
+	registry.set('banGitCheckoutRedundantStartPoint', banGitCheckoutRedundantStartPoint);
+	registry.set('banBackgroundBash', banBackgroundBash);
+	registry.set('banCommandChaining', banCommandChaining);
+	registry.set('banPipeToFilter', banPipeToFilter);
+	registry.set('banFileOperationCommands', banFileOperationCommands);
+	registry.set('banOutdatedYearInSearch', banOutdatedYearInSearch);
+	registry.set('requireCoAuthorshipProof', requireCoAuthorshipProof);
+	registry.set('logToolUse', logToolUse);
+	return registry;
+}
