@@ -3,8 +3,9 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import fs from 'node:fs/promises';
-import { execa } from 'execa';
+import { execa, type ResultPromise } from 'execa';
 import meow from 'meow';
+import { z } from 'zod';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
@@ -15,7 +16,7 @@ import { shieldEnvVars } from './secrets.js';
 import { configMain } from './config-cli.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
-const CLAUDE_CODE_BIN_PATH = '/opt/claude-code/.local/bin';
+const claudeCodeBinPath = '/opt/claude-code/.local/bin';
 
 type SshAgentInfo = {
 	socketPath: string;
@@ -44,9 +45,12 @@ async function startSshAgent(keys: string[]): Promise<SshAgentInfo | undefined> 
 	const pid = pidMatch[1];
 
 	// Add keys to the agent
+
 	for (const key of keys) {
 		try {
+			// eslint-disable-next-line no-await-in-loop
 			await execa('ssh-add', [ key ], {
+				// eslint-disable-next-line @typescript-eslint/naming-convention
 				env: { ...process.env, SSH_AUTH_SOCK: socketPath },
 			});
 		} catch (error) {
@@ -386,6 +390,7 @@ export async function main() {
 
 		if (containers.length === 0) {
 			console.error(`No running claudex containers found for ${cwdBasename}.`);
+			// eslint-disable-next-line unicorn/no-process-exit
 			process.exit(1);
 		}
 
@@ -397,6 +402,7 @@ export async function main() {
 
 			console.error('\nPlease stop all but one container, or exec manually with:');
 			console.error('  docker exec -it <container-name> bash');
+			// eslint-disable-next-line unicorn/no-process-exit
 			process.exit(1);
 		}
 
@@ -422,12 +428,12 @@ export async function main() {
 		}
 
 		if (cliVolumes?.length) {
-			const parsedVolumes = cliVolumes.map(parseVolumeSpec);
+			const parsedVolumes = cliVolumes.map(spec => parseVolumeSpec(spec));
 			config.volumes = [ ...(config.volumes ?? []), ...parsedVolumes ];
 		}
 
 		if (cliEnv?.length) {
-			config.env = config.env ?? {};
+			config.env ??= {};
 			for (const spec of cliEnv) {
 				const [ key, value ] = parseEnvSpec(spec);
 				config.env[key] = value;
@@ -435,7 +441,7 @@ export async function main() {
 		}
 
 		if (cliSshKeys?.length) {
-			config.ssh = config.ssh ?? {};
+			config.ssh ??= {};
 			config.ssh.keys = [ ...(config.ssh.keys ?? []), ...cliSshKeys ];
 		}
 
@@ -518,7 +524,7 @@ export async function main() {
 
 		// Ensure Claude Code bin path is always first in PATH
 		const basePath = resolvedEnv.PATH ?? '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
-		resolvedEnv.PATH = `${CLAUDE_CODE_BIN_PATH}:${basePath}`;
+		resolvedEnv.PATH = `${claudeCodeBinPath}:${basePath}`;
 
 		// Add environment variables to docker args
 		for (const [ key, value ] of Object.entries(resolvedEnv)) {
@@ -545,8 +551,7 @@ export async function main() {
 
 		// Configure host port forwarding via socat
 		if (config.hostPorts && config.hostPorts.length > 0) {
-			dockerArgs.push('--add-host', 'host.docker.internal:host-gateway');
-			dockerArgs.push('-e', `CLAUDEX_HOST_PORTS=${config.hostPorts.join(',')}`);
+			dockerArgs.push('--add-host', 'host.docker.internal:host-gateway', '-e', `CLAUDEX_HOST_PORTS=${config.hostPorts.join(',')}`);
 			console.error('Host ports:');
 			for (const port of config.hostPorts) {
 				console.error(`  ${port}`);
@@ -635,13 +640,28 @@ type Settings = {
 	hooks?: Record<string, HookMatcher[]>;
 };
 
+const settingsSchema = z.object({
+	hooks: z.record(z.string(), z.array(z.object({
+		matcher: z.string(),
+		hooks: z.array(z.object({
+			type: z.string(),
+			command: z.string(),
+		})),
+	}))).optional(),
+});
+
+function parseJsonWithSchema<T>(content: string, schema: z.ZodType<T>): T {
+	const parsed: unknown = JSON.parse(content);
+	return schema.parse(parsed);
+}
+
 async function setupHookSymlinks() {
 	const homeDir = os.homedir();
 	const settingsPath = path.join(homeDir, '.claude', 'settings.json');
 
 	try {
 		const settingsContent = await fs.readFile(settingsPath, 'utf8');
-		const settings: Settings = JSON.parse(settingsContent);
+		const settings = parseJsonWithSchema(settingsContent, settingsSchema);
 
 		if (!settings.hooks) {
 			return;
@@ -687,16 +707,19 @@ async function setupHookSymlinks() {
 
 				// Create parent directories if they don't exist
 				const hookDir = path.dirname(hookCommand);
+				// eslint-disable-next-line no-await-in-loop
 				await fs.mkdir(hookDir, { recursive: true });
 
 				// Remove existing symlink/file if it exists
 				try {
+					// eslint-disable-next-line no-await-in-loop
 					await fs.unlink(hookCommand);
 				} catch {
 					// Ignore if file doesn't exist
 				}
 
 				// Create symlink
+				// eslint-disable-next-line no-await-in-loop
 				await fs.symlink(targetPath, hookCommand);
 			} catch (error) {
 				// Skip this hook if we can't create it (e.g., permission denied)
@@ -752,7 +775,7 @@ async function setupHostPortForwarding(): Promise<(() => void) | undefined> {
 		return undefined;
 	}
 
-	const children: Array<import('execa').ResultPromise> = [];
+	const children: ResultPromise[] = [];
 
 	let stopped = false;
 
@@ -768,13 +791,19 @@ async function setupHostPortForwarding(): Promise<(() => void) | undefined> {
 			`TCP:host.docker.internal:${port}`,
 		]);
 		for (const child of [ child4, child6 ]) {
-			child.catch((error: unknown) => {
-				if (stopped) {
-					return;
-				}
+			// Handle errors asynchronously without blocking
+			// eslint-disable-next-line @typescript-eslint/no-loop-func
+			void (async () => {
+				try {
+					await child;
+				} catch (error: unknown) {
+					if (stopped) {
+						return;
+					}
 
-				console.error(`socat port ${port} error:`, error instanceof Error ? error.message : error);
-			});
+					console.error(`socat port ${port} error:`, error instanceof Error ? error.message : error);
+				}
+			})();
 		}
 
 		children.push(child4, child6);

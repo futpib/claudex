@@ -4,8 +4,8 @@ import type { KnownToolInput } from '../schemas.js';
 import type { Rule } from './index.js';
 
 // Skip logging for read-only tools and internal tools
-const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
-const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
+const readOnlyTools = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
+const internalTools = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
 
 function omitLongFields(input: KnownToolInput): unknown {
 	if (input.tool_name === 'Edit') {
@@ -31,7 +31,7 @@ export const logToolUse: Rule = {
 	async fn(context) {
 		const isMcpTool = context.toolName.startsWith('mcp__');
 
-		if (READ_ONLY_TOOLS.has(context.toolName) || INTERNAL_TOOLS.has(context.toolName) || isMcpTool) {
+		if (readOnlyTools.has(context.toolName) || internalTools.has(context.toolName) || isMcpTool) {
 			return { type: 'pass' };
 		}
 

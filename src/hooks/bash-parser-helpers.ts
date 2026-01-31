@@ -62,7 +62,12 @@ function getWordPartLiteralValue(part: BashWordPart): string | undefined {
 			return result;
 		}
 
-		default: {
+		case 'variable':
+		case 'variableBraced':
+		case 'commandSubstitution':
+		case 'backtickSubstitution':
+		case 'arithmeticExpansion': {
+			// These types cannot be resolved to literal values
 			return undefined;
 		}
 	}
@@ -137,6 +142,15 @@ function extractCommandNamesFromWordPart(part: BashWordPart, commands: Set<strin
 				extractCommandNamesFromWordPart(innerPart, commands);
 			}
 
+			break;
+		}
+
+		case 'literal':
+		case 'singleQuoted':
+		case 'variable':
+		case 'variableBraced':
+		case 'arithmeticExpansion': {
+			// These types don't contain commands
 			break;
 		}
 	}
@@ -218,7 +232,8 @@ function someSimpleCommandInUnit(
  * Gets the start-point from a `git checkout -b <branch> <start-point>` command.
  * Returns undefined if not a git checkout -b command or if no start-point is specified.
  */
-export async function getGitCheckoutBStartPoint(command: string): Promise<string | undefined> {
+
+export async function getGitCheckoutBranchStartPoint(command: string): Promise<string | undefined> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
 		return undefined;
@@ -250,12 +265,12 @@ export async function getGitCheckoutBStartPoint(command: string): Promise<string
 		// After -b <branch>, there might be a start-point
 		// Pattern: git checkout -b <branch> [<start-point>]
 		// We need to skip the branch name and get the next positional argument
-		const argsAfterBFlag = argsAfterCheckout.slice(bFlagIndex + 1);
+		const argsAfterBranchFlag = argsAfterCheckout.slice(bFlagIndex + 1);
 
 		// Skip the branch name (first positional arg after -b)
 		// Then look for the start-point (second positional arg, if any)
 		let positionalCount = 0;
-		for (const arg of argsAfterBFlag) {
+		for (const arg of argsAfterBranchFlag) {
 			if (arg.startsWith('-')) {
 				continue; // Skip flags
 			}
@@ -307,7 +322,7 @@ export async function getPipedFilterCommand(command: string): Promise<string | u
 	return undefined;
 }
 
-export async function hasGitCFlag(command: string): Promise<boolean> {
+export async function hasGitChangeDirectoryFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
 		return false;

@@ -3,6 +3,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import process from 'node:process';
 import test from 'ava';
 import { execa } from 'execa';
 
@@ -50,6 +51,7 @@ async function runConfigWithDir(configDir: string, args: string[], cwd?: string)
 	return runConfig(args, {
 		cwd,
 		env: {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			XDG_CONFIG_HOME: configDir,
 		},
 	});
@@ -146,9 +148,11 @@ test('set boolean field (shareVolumes)', async t => {
 test('set record field (env.KEY)', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {
-		await runConfigWithDir(configDir, [ 'set', '--global', 'env.API_KEY', '${API_KEY}' ]);
+		// eslint-disable-next-line no-template-curly-in-string
+		const templateString = '${API_KEY}';
+		await runConfigWithDir(configDir, [ 'set', '--global', 'env.API_KEY', templateString ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
-		t.is((config as { env: Record<string, string> }).env.API_KEY, '${API_KEY}');
+		t.is((config as { env: Record<string, string> }).env.API_KEY, templateString);
 	} finally {
 		await cleanup();
 	}
@@ -210,6 +214,7 @@ test('unset removes record sub-key', async t => {
 		await runConfigWithDir(configDir, [ 'set', '--global', 'env.BAZ', 'qux' ]);
 		await runConfigWithDir(configDir, [ 'unset', '--global', 'env.FOO' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		t.deepEqual((config as { env: Record<string, string> }).env, { BAZ: 'qux' });
 	} finally {
 		await cleanup();
@@ -270,11 +275,11 @@ test('group scope writes to correct file', async t => {
 test('--file writes to specific file in config.json.d', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {
-		const configDDir = path.join(configDir, 'claudex', 'config.json.d');
-		await mkdir(configDDir, { recursive: true });
+		const configJsonDirectory = path.join(configDir, 'claudex', 'config.json.d');
+		await mkdir(configJsonDirectory, { recursive: true });
 
 		await runConfigWithDir(configDir, [ 'add', '--global', '--file', 'config.json.d/99-private.json', 'packages', 'vim' ]);
-		const config = await readJsonFile(path.join(configDDir, '99-private.json'));
+		const config = await readJsonFile(path.join(configJsonDirectory, '99-private.json'));
 		t.deepEqual((config as { packages: string[] }).packages, [ 'vim' ]);
 	} finally {
 		await cleanup();
@@ -285,8 +290,8 @@ test('ambiguous project file errors', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {
 		const claudexDir = path.join(configDir, 'claudex');
-		const configDDir = path.join(claudexDir, 'config.json.d');
-		await mkdir(configDDir, { recursive: true });
+		const configJsonDirectory = path.join(claudexDir, 'config.json.d');
+		await mkdir(configJsonDirectory, { recursive: true });
 
 		const projectPath = '/home/user/code/myproject';
 
@@ -298,7 +303,7 @@ test('ambiguous project file errors', async t => {
 
 		// Write same project to another file
 		await writeFile(
-			path.join(configDDir, '01-extra.json'),
+			path.join(configJsonDirectory, '01-extra.json'),
 			JSON.stringify({ projects: { [projectPath]: { packages: [ 'curl' ] } } }),
 		);
 
@@ -354,6 +359,7 @@ test('list outputs config as JSON', async t => {
 		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'vim' ]);
 		const result = await runConfigWithDir(configDir, [ 'list', '--global' ]);
 		t.is(result.exitCode, 0);
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 		const parsed = JSON.parse(result.stdout);
 		t.is(parsed.settingSources, 'user');
 		t.deepEqual(parsed.packages, [ 'vim' ]);

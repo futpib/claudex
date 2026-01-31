@@ -1,25 +1,26 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import process from 'node:process';
 import { z } from 'zod';
 import { execa } from 'execa';
 import { paths } from './paths.js';
 
 // Volume can be a simple string (same path for host and container)
 // or an object with different paths
-const VolumeMountSchema = z.object({
+const volumeMountSchema = z.object({
 	host: z.string(),
 	container: z.string(),
 });
 
-const VolumeSchema = z.union([ z.string(), VolumeMountSchema ]);
+const volumeSchema = z.union([ z.string(), volumeMountSchema ]);
 
-const SshConfigSchema = z.object({
+const sshConfigSchema = z.object({
 	keys: z.array(z.string()).optional(),
 	hosts: z.array(z.string()).optional(),
 });
 
-const HooksDetailConfigSchema = z.object({
+const hooksDetailConfigSchema = z.object({
 	banGitC: z.boolean().optional(),
 	banGitAddAll: z.boolean().optional(),
 	banGitCommitAmend: z.boolean().optional(),
@@ -34,55 +35,56 @@ const HooksDetailConfigSchema = z.object({
 	logToolUse: z.boolean().optional(),
 });
 
-const HooksConfigSchema = z.union([z.literal(true), HooksDetailConfigSchema]);
+const hooksConfigSchema = z.union([ z.literal(true), hooksDetailConfigSchema ]);
 
-const McpServersDetailConfigSchema = z.object({
+const mcpServersDetailConfigSchema = z.object({
 	claudex: z.boolean().optional(),
 });
 
-const McpServersConfigSchema = z.union([z.literal(true), McpServersDetailConfigSchema]);
+const mcpServersConfigSchema = z.union([ z.literal(true), mcpServersDetailConfigSchema ]);
 
 // Base config schema - can appear at both root and project level
-const BaseConfigSchema = z.object({
+const baseConfigSchema = z.object({
 	packages: z.array(z.string()).optional(),
-	volumes: z.array(VolumeSchema).optional(),
+	volumes: z.array(volumeSchema).optional(),
 	env: z.record(z.string(), z.string()).optional(),
-	ssh: SshConfigSchema.optional(),
+	ssh: sshConfigSchema.optional(),
 	hostPorts: z.array(z.number().int().positive()).optional(),
 	extraHosts: z.record(z.string(), z.string()).optional(),
 	shareVolumes: z.boolean().optional(), // Default true - auto-share volumes between group members
 	settingSources: z.string().optional(), // Default "user,local" - controls --setting-sources flag for Claude Code
-	hooks: HooksConfigSchema.optional(),
-	mcpServers: McpServersConfigSchema.optional(),
+	hooks: hooksConfigSchema.optional(),
+	mcpServers: mcpServersConfigSchema.optional(),
 });
 
 // Project config can reference a group
-const ProjectConfigSchema = BaseConfigSchema.extend({
+const projectConfigSchema = baseConfigSchema.extend({
 	group: z.string().optional(),
 });
 
 // Root config adds projects mapping and groups
-const RootConfigSchema = BaseConfigSchema.extend({
-	groups: z.record(z.string(), BaseConfigSchema).optional(),
-	projects: z.record(z.string(), ProjectConfigSchema).optional(),
+const rootConfigSchema = baseConfigSchema.extend({
+	groups: z.record(z.string(), baseConfigSchema).optional(),
+	projects: z.record(z.string(), projectConfigSchema).optional(),
 });
 
-export { RootConfigSchema };
+export { rootConfigSchema };
 
-export type VolumeMount = z.infer<typeof VolumeMountSchema>;
-export type Volume = z.infer<typeof VolumeSchema>;
-export type SshConfig = z.infer<typeof SshConfigSchema>;
-export type HooksDetail = z.infer<typeof HooksDetailConfigSchema>;
-export type HooksConfig = z.infer<typeof HooksConfigSchema>;
-export type McpServersDetail = z.infer<typeof McpServersDetailConfigSchema>;
-export type McpServersConfig = z.infer<typeof McpServersConfigSchema>;
-export type BaseConfig = z.infer<typeof BaseConfigSchema>;
-export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
-export type RootConfig = z.infer<typeof RootConfigSchema>;
+export type VolumeMount = z.infer<typeof volumeMountSchema>;
+export type Volume = z.infer<typeof volumeSchema>;
+export type SshConfig = z.infer<typeof sshConfigSchema>;
+export type HooksDetail = z.infer<typeof hooksDetailConfigSchema>;
+export type HooksConfig = z.infer<typeof hooksConfigSchema>;
+export type McpServersDetail = z.infer<typeof mcpServersDetailConfigSchema>;
+export type McpServersConfig = z.infer<typeof mcpServersConfigSchema>;
+export type BaseConfig = z.infer<typeof baseConfigSchema>;
+export type ProjectConfig = z.infer<typeof projectConfigSchema>;
+export type RootConfig = z.infer<typeof rootConfigSchema>;
 
 // Merged config is the same as base config (after merging root + project)
 export type ClaudexConfig = BaseConfig;
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const ALL_HOOK_FLAGS: Array<keyof HooksDetail> = [
 	'banGitC',
 	'banGitAddAll',
@@ -98,32 +100,32 @@ const ALL_HOOK_FLAGS: Array<keyof HooksDetail> = [
 	'logToolUse',
 ];
 
-const ALL_MCP_SERVER_FLAGS: Array<keyof McpServersDetail> = [
+const allMcpServerFlags: Array<keyof McpServersDetail> = [
 	'claudex',
 ];
 
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {
-		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [k, true])) as Required<HooksDetail>;
+		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, true ])) as Required<HooksDetail>;
 	}
 
 	if (!hooks) {
-		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [k, false])) as Required<HooksDetail>;
+		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, false ])) as Required<HooksDetail>;
 	}
 
-	return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [k, hooks[k] ?? false])) as Required<HooksDetail>;
+	return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, hooks[k] ?? false ])) as Required<HooksDetail>;
 }
 
 export function resolveMcpServers(mcpServers: McpServersConfig | undefined): Required<McpServersDetail> {
 	if (mcpServers === true) {
-		return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [k, true])) as Required<McpServersDetail>;
+		return Object.fromEntries(allMcpServerFlags.map(k => [ k, true ])) as Required<McpServersDetail>;
 	}
 
 	if (!mcpServers) {
-		return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [k, false])) as Required<McpServersDetail>;
+		return Object.fromEntries(allMcpServerFlags.map(k => [ k, false ])) as Required<McpServersDetail>;
 	}
 
-	return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [k, mcpServers[k] ?? false])) as Required<McpServersDetail>;
+	return Object.fromEntries(allMcpServerFlags.map(k => [ k, mcpServers[k] ?? false ])) as Required<McpServersDetail>;
 }
 
 export function expandTilde(filePath: string): string {
@@ -275,7 +277,7 @@ function mergeHooksConfigs(base: HooksConfig | undefined, overlay: HooksConfig |
 
 	const baseResolved = resolveHooks(base);
 	const overlayResolved = overlay === undefined
-		? Object.fromEntries(ALL_HOOK_FLAGS.map(k => [k, undefined]))
+		? Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, undefined ]))
 		: resolveHooks(overlay);
 
 	const merged: Record<string, boolean> = {};
@@ -293,11 +295,11 @@ function mergeMcpServersConfigs(base: McpServersConfig | undefined, overlay: Mcp
 
 	const baseResolved = resolveMcpServers(base);
 	const overlayResolved = overlay === undefined
-		? Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [k, undefined]))
+		? Object.fromEntries(allMcpServerFlags.map(k => [ k, undefined ]))
 		: resolveMcpServers(overlay);
 
 	const merged: Record<string, boolean> = {};
-	for (const key of ALL_MCP_SERVER_FLAGS) {
+	for (const key of allMcpServerFlags) {
 		merged[key] = (overlayResolved as Record<string, boolean | undefined>)[key] ?? baseResolved[key];
 	}
 
@@ -394,7 +396,7 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 	// Merge groups: combine keys, merge configs for same group name
 	let groups: Record<string, BaseConfig> | undefined;
 
-	if (base.groups || overlay.groups) {
+	if (base.groups ?? overlay.groups) {
 		groups = {};
 		const allGroupNames = new Set([
 			...Object.keys(base.groups ?? {}),
@@ -412,7 +414,7 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 	// Merge projects: combine keys, merge configs for same project path
 	let projects: Record<string, ProjectConfig> | undefined;
 
-	if (base.projects || overlay.projects) {
+	if (base.projects ?? overlay.projects) {
 		projects = {};
 		const allPaths = new Set([
 			...Object.keys(base.projects ?? {}),
@@ -482,7 +484,7 @@ type ReadRootConfigResult = {
 async function readRootConfig(): Promise<ReadRootConfigResult> {
 	const configDir = paths.config;
 	const configPath = path.join(configDir, 'config.json');
-	const configDPath = path.join(configDir, 'config.json.d');
+	const configJsonDirectoryPath = path.join(configDir, 'config.json.d');
 
 	let merged: RootConfig = {};
 	const configFiles: string[] = [];
@@ -490,7 +492,7 @@ async function readRootConfig(): Promise<ReadRootConfigResult> {
 	// Read main config.json
 	try {
 		const content = await fs.readFile(configPath, 'utf8');
-		merged = RootConfigSchema.parse(JSON.parse(content));
+		merged = rootConfigSchema.parse(JSON.parse(content));
 		configFiles.push(configPath);
 	} catch {
 		// Doesn't exist or invalid
@@ -498,14 +500,15 @@ async function readRootConfig(): Promise<ReadRootConfigResult> {
 
 	// Read all .json files from config.json.d/
 	try {
-		const files = await fs.readdir(configDPath);
+		const files = await fs.readdir(configJsonDirectoryPath);
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
 
 		for (const file of jsonFiles) {
-			const filePath = path.join(configDPath, file);
+			const filePath = path.join(configJsonDirectoryPath, file);
 			try {
+				// eslint-disable-next-line no-await-in-loop
 				const content = await fs.readFile(filePath, 'utf8');
-				const parsed = RootConfigSchema.parse(JSON.parse(content));
+				const parsed = rootConfigSchema.parse(JSON.parse(content));
 				merged = mergeRootConfigs(merged, parsed);
 				configFiles.push(filePath);
 			} catch {
@@ -644,7 +647,7 @@ export function getConfigDir(): string {
 
 export async function readSingleConfigFile(filePath: string): Promise<RootConfig> {
 	const content = await fs.readFile(filePath, 'utf8');
-	return RootConfigSchema.parse(JSON.parse(content));
+	return rootConfigSchema.parse(JSON.parse(content));
 }
 
 export async function writeSingleConfigFile(filePath: string, config: RootConfig): Promise<void> {
@@ -660,24 +663,26 @@ export type ConfigFileEntry = {
 export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
 	const configDir = paths.config;
 	const configPath = path.join(configDir, 'config.json');
-	const configDPath = path.join(configDir, 'config.json.d');
+	const configJsonDirectoryPath = path.join(configDir, 'config.json.d');
 	const entries: ConfigFileEntry[] = [];
 
 	try {
 		const content = await fs.readFile(configPath, 'utf8');
-		entries.push({ path: configPath, config: RootConfigSchema.parse(JSON.parse(content)) });
+		entries.push({ path: configPath, config: rootConfigSchema.parse(JSON.parse(content)) });
 	} catch {
 		// Doesn't exist or invalid
 	}
 
 	try {
-		const files = await fs.readdir(configDPath);
+		const files = await fs.readdir(configJsonDirectoryPath);
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
+
 		for (const file of jsonFiles) {
-			const filePath = path.join(configDPath, file);
+			const filePath = path.join(configJsonDirectoryPath, file);
 			try {
+				// eslint-disable-next-line no-await-in-loop
 				const content = await fs.readFile(filePath, 'utf8');
-				entries.push({ path: filePath, config: RootConfigSchema.parse(JSON.parse(content)) });
+				entries.push({ path: filePath, config: rootConfigSchema.parse(JSON.parse(content)) });
 			} catch {
 				// Skip invalid files
 			}

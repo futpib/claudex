@@ -12,8 +12,8 @@ import * as helpers from './bash-parser-helpers.js';
 import { createRuleRegistry } from './rules/index.js';
 
 // Skip all checks for read-only tools and internal tools
-const READ_ONLY_TOOLS = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
-const INTERNAL_TOOLS = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
+const readOnlyTools = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
+const internalTools = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
 
 async function main() {
 	const input = await readStdin();
@@ -45,7 +45,7 @@ async function main() {
 	};
 
 	// Rules that run before the read-only/internal/MCP early exit
-	const preExitRules: Array<keyof typeof hooks> = ['banOutdatedYearInSearch', 'logToolUse'];
+	const preExitRules: Array<keyof typeof hooks> = [ 'banOutdatedYearInSearch', 'logToolUse' ];
 
 	for (const flag of preExitRules) {
 		if (!hooks[flag]) {
@@ -54,6 +54,7 @@ async function main() {
 
 		const rule = registry.get(flag);
 		if (rule) {
+			// eslint-disable-next-line no-await-in-loop
 			const result = await rule.fn(context);
 			if (result.type === 'violation') {
 				for (const message of result.messages) {
@@ -66,11 +67,12 @@ async function main() {
 	}
 
 	// Early exit for read-only, internal, and MCP tools
-	if (READ_ONLY_TOOLS.has(toolName) || INTERNAL_TOOLS.has(toolName) || isMcpTool) {
+	if (readOnlyTools.has(toolName) || internalTools.has(toolName) || isMcpTool) {
 		process.exit(0);
 	}
 
 	// Run all other enabled rules
+
 	for (const [ flag, rule ] of registry) {
 		if (preExitRules.includes(flag)) {
 			continue;
@@ -80,6 +82,7 @@ async function main() {
 			continue;
 		}
 
+		// eslint-disable-next-line no-await-in-loop
 		const result = await rule.fn(context);
 
 		if (result.type === 'violation') {

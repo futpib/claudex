@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitCFlag, getPipedFilterCommand,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getPipedFilterCommand,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -147,30 +147,30 @@ test('hasChainOperators - handles simple commands', async t => {
 	t.false(await hasChainOperators('npm install'));
 });
 
-test('hasGitCFlag - detects git -C', async t => {
-	t.true(await hasGitCFlag('git -C /some/path status'));
+test('hasGitChangeDirectoryFlag - detects git -C', async t => {
+	t.true(await hasGitChangeDirectoryFlag('git -C /some/path status'));
 });
 
-test('hasGitCFlag - detects git -C with flags before', async t => {
-	t.true(await hasGitCFlag('git -v -C /some/path status'));
+test('hasGitChangeDirectoryFlag - detects git -C with flags before', async t => {
+	t.true(await hasGitChangeDirectoryFlag('git -v -C /some/path status'));
 });
 
-test('hasGitCFlag - does not detect -C in strings', async t => {
-	t.false(await hasGitCFlag('git commit -m "Block git -C flag"'));
+test('hasGitChangeDirectoryFlag - does not detect -C in strings', async t => {
+	t.false(await hasGitChangeDirectoryFlag('git commit -m "Block git -C flag"'));
 });
 
-test('hasGitCFlag - does not detect -C in heredoc', async t => {
+test('hasGitChangeDirectoryFlag - does not detect -C in heredoc', async t => {
 	const command = `git commit -m "$(cat <<'EOF'
 Block git -C flag
 EOF
 )"`;
-	t.false(await hasGitCFlag(command));
+	t.false(await hasGitChangeDirectoryFlag(command));
 });
 
-test('hasGitCFlag - does not trigger on regular git commands', async t => {
-	t.false(await hasGitCFlag('git status'));
-	t.false(await hasGitCFlag('git commit -m "message"'));
-	t.false(await hasGitCFlag('git add .'));
+test('hasGitChangeDirectoryFlag - does not trigger on regular git commands', async t => {
+	t.false(await hasGitChangeDirectoryFlag('git status'));
+	t.false(await hasGitChangeDirectoryFlag('git commit -m "message"'));
+	t.false(await hasGitChangeDirectoryFlag('git add .'));
 });
 
 test('getPipedFilterCommand - detects pipe to grep', async t => {

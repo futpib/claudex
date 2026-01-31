@@ -1,4 +1,5 @@
 import path from 'node:path';
+import process from 'node:process';
 import {
 	getMergedConfig,
 	getConfigDir,
@@ -30,11 +31,8 @@ type ParsedArgs = {
 function parseArgs(argv: string[]): ParsedArgs {
 	const args = [ ...argv ];
 
-	let action: Action | undefined;
 	let scope: Scope | undefined;
 	let file: string | undefined;
-	let key: string | undefined;
-	let value: string | undefined;
 	let isGlobal = false;
 
 	const positionals: string[] = [];
@@ -98,9 +96,9 @@ function parseArgs(argv: string[]): ParsedArgs {
 		throw new Error(`Unknown action: ${actionString}. Expected one of: list, get, set, add, unset`);
 	}
 
-	action = actionString as Action;
-	key = positionals[1];
-	value = positionals[2];
+	const action = actionString as Action;
+	const key = positionals[1];
+	const value = positionals[2];
 
 	if (isGlobal) {
 		if (scope) {
@@ -130,10 +128,6 @@ function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfi
 		case 'group': {
 			return config.groups?.[scope.name];
 		}
-
-		default: {
-			return undefined;
-		}
 	}
 }
 
@@ -154,8 +148,6 @@ function ensureSection(config: RootConfig, scope: Scope): BaseConfig | ProjectCo
 			config.groups[scope.name] ??= {};
 			return config.groups[scope.name];
 		}
-
-		// No default
 	}
 }
 
@@ -240,8 +232,6 @@ async function resolveWriteFile(scope: Scope, file: string | undefined): Promise
 
 			return result.path;
 		}
-
-		// No default
 	}
 }
 
@@ -327,7 +317,8 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 		section = config;
 	} else {
 		// For group, read root and get group section
-		const allFiles = await (await import('./config.js')).readAllConfigFiles();
+		const configModule = await import('./config.js');
+		const allFiles = await configModule.readAllConfigFiles();
 		let merged: RootConfig = {};
 		for (const entry of allFiles) {
 			merged = { ...merged, ...entry.config };
@@ -544,7 +535,5 @@ export async function configMain(argv: string[]): Promise<void> {
 			await handleUnset(parsed.scope, parsed.key, parsed.value, parsed.file);
 			break;
 		}
-
-		// No default
 	}
 }

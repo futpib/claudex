@@ -1,4 +1,6 @@
-import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises';
+import {
+	mkdir, mkdtemp, rm, writeFile,
+} from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
 import { execa } from 'execa';
@@ -17,9 +19,7 @@ type HooksConfigEnv = {
 	cleanup: () => Promise<void>;
 };
 
-async function createHooksConfig(
-	hooks: Record<string, boolean>,
-): Promise<HooksConfigEnv> {
+async function createHooksConfig(hooks: Record<string, boolean>): Promise<HooksConfigEnv> {
 	const configDir = await mkdtemp(path.join(tmpdir(), 'claudex-hook-test-'));
 	const claudexDir = path.join(configDir, 'claudex');
 	await mkdir(claudexDir, { recursive: true });
@@ -27,14 +27,15 @@ async function createHooksConfig(
 		path.join(claudexDir, 'config.json'),
 		JSON.stringify({ hooks }),
 	);
-	return { configDir, cleanup: () => rm(configDir, { recursive: true }) };
+	return { configDir, cleanup: async () => rm(configDir, { recursive: true }) };
 }
 
 async function runHook(input: Record<string, unknown>, cwd?: string, env?: Record<string, string>): Promise<HookResult> {
-	const result = await execa('node', [hookPath], {
+	const result = await execa('node', [ hookPath ], {
 		input: JSON.stringify(input),
 		cwd,
 		reject: false,
+		// eslint-disable-next-line n/prefer-global/process
 		env: { ...process.env, ...env },
 	});
 	return {
@@ -46,9 +47,13 @@ async function runHook(input: Record<string, unknown>, cwd?: string, env?: Recor
 
 function createBashToolInput(command: string, options: Record<string, unknown> = {}): Record<string, unknown> {
 	return {
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		session_id: 'test-session',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		transcript_path: '/tmp/test-transcript',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		tool_name: 'Bash',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		tool_input: {
 			command,
 			...options,
@@ -58,12 +63,12 @@ function createBashToolInput(command: string, options: Record<string, unknown> =
 
 async function createTemporaryGitRepo(): Promise<string> {
 	const temporaryDir = await mkdtemp(path.join(tmpdir(), 'claudex-test-'));
-	await execa('git', ['init'], { cwd: temporaryDir });
-	await execa('git', ['config', 'user.email', 'test@test.com'], { cwd: temporaryDir });
-	await execa('git', ['config', 'user.name', 'Test'], { cwd: temporaryDir });
+	await execa('git', [ 'init' ], { cwd: temporaryDir });
+	await execa('git', [ 'config', 'user.email', 'test@test.com' ], { cwd: temporaryDir });
+	await execa('git', [ 'config', 'user.name', 'Test' ], { cwd: temporaryDir });
 	await writeFile(path.join(temporaryDir, 'README.md'), '# Test');
-	await execa('git', ['add', '.'], { cwd: temporaryDir });
-	await execa('git', ['commit', '-m', 'Initial commit'], { cwd: temporaryDir });
+	await execa('git', [ 'add', '.' ], { cwd: temporaryDir });
+	await execa('git', [ 'commit', '-m', 'Initial commit' ], { cwd: temporaryDir });
 	return temporaryDir;
 }
 
@@ -72,15 +77,18 @@ test('rejects git checkout -b with redundant start-point on detached HEAD', asyn
 	const { configDir, cleanup } = await createHooksConfig({ banGitCheckoutRedundantStartPoint: true });
 	try {
 		// Create a branch to use as start-point
-		await execa('git', ['branch', 'feature-branch'], { cwd: temporaryDir });
+		await execa('git', [ 'branch', 'feature-branch' ], { cwd: temporaryDir });
 
 		// Detach HEAD at feature-branch
-		await execa('git', ['checkout', '--detach', 'feature-branch'], { cwd: temporaryDir });
+		await execa('git', [ 'checkout', '--detach', 'feature-branch' ], { cwd: temporaryDir });
 
 		const result = await runHook(
 			createBashToolInput('git checkout -b new-branch feature-branch'),
 			temporaryDir,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -97,20 +105,23 @@ test('allows git checkout -b with start-point on detached HEAD at different poin
 	const { configDir, cleanup } = await createHooksConfig({ banGitCheckoutRedundantStartPoint: true });
 	try {
 		// Create two branches
-		await execa('git', ['branch', 'branch-a'], { cwd: temporaryDir });
+		await execa('git', [ 'branch', 'branch-a' ], { cwd: temporaryDir });
 		await writeFile(path.join(temporaryDir, 'file.txt'), 'content');
-		await execa('git', ['add', '.'], { cwd: temporaryDir });
-		await execa('git', ['commit', '-m', 'Second commit'], { cwd: temporaryDir });
-		await execa('git', ['branch', 'branch-b'], { cwd: temporaryDir });
+		await execa('git', [ 'add', '.' ], { cwd: temporaryDir });
+		await execa('git', [ 'commit', '-m', 'Second commit' ], { cwd: temporaryDir });
+		await execa('git', [ 'branch', 'branch-b' ], { cwd: temporaryDir });
 
 		// Detach HEAD at branch-a
-		await execa('git', ['checkout', '--detach', 'branch-a'], { cwd: temporaryDir });
+		await execa('git', [ 'checkout', '--detach', 'branch-a' ], { cwd: temporaryDir });
 
 		// Try to create branch from branch-b (different point)
 		const result = await runHook(
 			createBashToolInput('git checkout -b new-branch branch-b'),
 			temporaryDir,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 0);
@@ -127,7 +138,10 @@ test('allows git checkout -b without start-point', async t => {
 		const result = await runHook(
 			createBashToolInput('git checkout -b new-branch'),
 			temporaryDir,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 0);
@@ -144,7 +158,10 @@ test('allows git checkout -b with start-point when on regular branch', async t =
 		const result = await runHook(
 			createBashToolInput('git checkout -b new-branch master'),
 			temporaryDir,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 0);
@@ -160,7 +177,10 @@ test('rejects git -C flag', async t => {
 		const result = await runHook(
 			createBashToolInput('git -C /some/path status'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -176,7 +196,10 @@ test('rejects git add -A', async t => {
 		const result = await runHook(
 			createBashToolInput('git add -A'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -192,7 +215,10 @@ test('rejects git add --all', async t => {
 		const result = await runHook(
 			createBashToolInput('git add --all'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -208,7 +234,10 @@ test('rejects git commit --amend', async t => {
 		const result = await runHook(
 			createBashToolInput('git commit --amend -m "message"'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -224,7 +253,10 @@ test('rejects git commit --no-verify', async t => {
 		const result = await runHook(
 			createBashToolInput('git commit --no-verify -m "message"'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -238,9 +270,13 @@ test('rejects run_in_background', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banBackgroundBash: true });
 	try {
 		const result = await runHook(
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			createBashToolInput('sleep 10', { run_in_background: true }),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -256,7 +292,10 @@ test('rejects chained commands with &&', async t => {
 		const result = await runHook(
 			createBashToolInput('npm install && npm test'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -272,7 +311,10 @@ test('rejects chained commands with ||', async t => {
 		const result = await runHook(
 			createBashToolInput('npm test || echo "failed"'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -288,7 +330,10 @@ test('rejects chained commands with ;', async t => {
 		const result = await runHook(
 			createBashToolInput('cd /tmp; ls'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -304,7 +349,10 @@ test('rejects cat command', async t => {
 		const result = await runHook(
 			createBashToolInput('cat file.txt'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -320,7 +368,10 @@ test('rejects sed command', async t => {
 		const result = await runHook(
 			createBashToolInput('sed -i "s/foo/bar/" file.txt'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -336,7 +387,10 @@ test('rejects head command', async t => {
 		const result = await runHook(
 			createBashToolInput('head -n 10 file.txt'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -352,7 +406,10 @@ test('rejects tail command', async t => {
 		const result = await runHook(
 			createBashToolInput('tail -f log.txt'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -368,7 +425,10 @@ test('rejects awk command', async t => {
 		const result = await runHook(
 			createBashToolInput('awk \'{print $1}\' file.txt'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -388,7 +448,10 @@ Test message
 EOF
 )"`),
 			temporaryDir,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		// Should not be rejected for cat usage (may fail for other reasons like nothing to commit)
@@ -403,14 +466,21 @@ test('allows Grep tool', async t => {
 	const { configDir, cleanup } = await createHooksConfig({});
 	try {
 		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_name: 'Grep',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_input: {
 				pattern: 'test',
 				path: '/tmp',
 			},
-		}, undefined, { XDG_CONFIG_HOME: configDir });
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
 
 		t.is(result.exitCode, 0);
 	} finally {
@@ -425,7 +495,10 @@ test('allows git status', async t => {
 		const result = await runHook(
 			createBashToolInput('git status'),
 			temporaryDir,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 		t.is(result.exitCode, 0);
 	} finally {
@@ -441,7 +514,10 @@ test('allows git add .', async t => {
 		const result = await runHook(
 			createBashToolInput('git add .'),
 			temporaryDir,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 		t.is(result.exitCode, 0);
 	} finally {
@@ -454,13 +530,20 @@ test('rejects WebSearch with 2024', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banOutdatedYearInSearch: true });
 	try {
 		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_name: 'WebSearch',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_input: {
 				query: 'react documentation 2024',
 			},
-		}, undefined, { XDG_CONFIG_HOME: configDir });
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
 
 		t.is(result.exitCode, 2);
 		t.true(result.stderr.includes('2024'));
@@ -473,13 +556,20 @@ test('rejects WebSearch with any outdated year', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banOutdatedYearInSearch: true });
 	try {
 		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_name: 'WebSearch',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_input: {
 				query: 'python tutorial 2023',
 			},
-		}, undefined, { XDG_CONFIG_HOME: configDir });
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
 
 		t.is(result.exitCode, 2);
 		t.true(result.stderr.includes('2023'));
@@ -493,13 +583,20 @@ test('allows WebSearch with current year', async t => {
 	try {
 		const currentYear = new Date().getFullYear();
 		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_name: 'WebSearch',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_input: {
 				query: `react documentation ${currentYear}`,
 			},
-		}, undefined, { XDG_CONFIG_HOME: configDir });
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
 
 		t.is(result.exitCode, 0);
 	} finally {
@@ -511,13 +608,20 @@ test('allows WebSearch with old non-recent year', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banOutdatedYearInSearch: true });
 	try {
 		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_name: 'WebSearch',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			tool_input: {
 				query: 'history of computing 1995',
 			},
-		}, undefined, { XDG_CONFIG_HOME: configDir });
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
 
 		t.is(result.exitCode, 0);
 	} finally {
@@ -531,7 +635,10 @@ test('allows git commit --amend when hooks not configured', async t => {
 		const result = await runHook(
 			createBashToolInput('git commit --amend -m "message"'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 		t.is(result.exitCode, 0);
 	} finally {
@@ -545,7 +652,10 @@ test('allows git commit --no-verify when hooks not configured', async t => {
 		const result = await runHook(
 			createBashToolInput('git commit --no-verify -m "message"'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 		t.is(result.exitCode, 0);
 	} finally {
@@ -559,7 +669,10 @@ test('allows cat command when hooks not configured', async t => {
 		const result = await runHook(
 			createBashToolInput('cat file.txt'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 		t.is(result.exitCode, 0);
 	} finally {
@@ -573,7 +686,10 @@ test('allows chained commands when hooks not configured', async t => {
 		const result = await runHook(
 			createBashToolInput('npm install && npm test'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 		t.is(result.exitCode, 0);
 	} finally {
@@ -593,7 +709,10 @@ test('enables all checks with hooks: true', async t => {
 		const result = await runHook(
 			createBashToolInput('git commit --amend -m "message"'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 		t.is(result.exitCode, 2);
 		t.true(result.stderr.includes('--amend is not allowed'));
@@ -608,7 +727,10 @@ test('rejects piping to grep', async t => {
 		const result = await runHook(
 			createBashToolInput('ls | grep foo'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 2);
@@ -624,7 +746,10 @@ test('allows piping to grep when hooks not configured', async t => {
 		const result = await runHook(
 			createBashToolInput('ls | grep foo'),
 			undefined,
-			{ XDG_CONFIG_HOME: configDir },
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
 		);
 
 		t.is(result.exitCode, 0);
@@ -632,3 +757,4 @@ test('allows piping to grep when hooks not configured', async t => {
 		await cleanup();
 	}
 });
+
