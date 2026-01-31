@@ -74,7 +74,7 @@ async function main() {
 	}
 
 	// Run all other enabled rules
-	// eslint-disable-next-line no-await-in-loop
+
 	for (const [ flag, rule ] of registry) {
 		if (preExitRules.includes(flag)) {
 			continue;

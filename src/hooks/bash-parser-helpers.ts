@@ -232,8 +232,8 @@ function someSimpleCommandInUnit(
  * Gets the start-point from a `git checkout -b <branch> <start-point>` command.
  * Returns undefined if not a git checkout -b command or if no start-point is specified.
  */
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export async function getGitCheckoutBStartPoint(command: string): Promise<string | undefined> {
+
+export async function getGitCheckoutBranchStartPoint(command: string): Promise<string | undefined> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
 		return undefined;

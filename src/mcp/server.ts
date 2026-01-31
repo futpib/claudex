@@ -16,7 +16,7 @@ export async function startServer() {
 		server.registerTool(name, {
 			title: handler.definition.name,
 			description: handler.definition.description,
-			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment, @typescript-eslint/no-explicit-any
+			// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
 			inputSchema: handler.definition.inputSchema as any,
 		}, async (args: unknown) => {
 			const content = await handler.handle(args as Record<string, unknown>);

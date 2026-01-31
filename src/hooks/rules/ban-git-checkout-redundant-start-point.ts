@@ -8,7 +8,7 @@ export const banGitCheckoutRedundantStartPoint: Rule = {
 			return { type: 'pass' };
 		}
 
-		const startPoint = await context.helpers.getGitCheckoutBStartPoint(context.command);
+		const startPoint = await context.helpers.getGitCheckoutBranchStartPoint(context.command);
 		if (!startPoint) {
 			return { type: 'pass' };
 		}
