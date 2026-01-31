@@ -8,7 +8,9 @@ import meow from 'meow';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
-import { getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, type Volume, type ClaudexConfig } from './config.js';
+import {
+	getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, type Volume, type ClaudexConfig,
+} from './config.js';
 import { shieldEnvVars } from './secrets.js';
 import { configMain } from './config-cli.js';
 
@@ -30,8 +32,8 @@ async function startSshAgent(keys: string[]): Promise<SshAgentInfo | undefined> 
 	const agentResult = await execa('ssh-agent', [ '-s' ]);
 	const output = agentResult.stdout;
 
-	const socketMatch = output.match(/SSH_AUTH_SOCK=([^;]+)/);
-	const pidMatch = output.match(/SSH_AGENT_PID=(\d+)/);
+	const socketMatch = /SSH_AUTH_SOCK=([^;]+)/.exec(output);
+	const pidMatch = /SSH_AGENT_PID=(\d+)/.exec(output);
 
 	if (!socketMatch || !pidMatch) {
 		console.error('Failed to parse ssh-agent output');
@@ -134,7 +136,9 @@ async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = fals
 		stderr: process.stderr,
 	});
 
-	return { userId, username, projectRoot, imageName };
+	return {
+		userId, username, projectRoot, imageName,
+	};
 }
 
 async function isUnsafeDirectory(dir: string): Promise<{ unsafe: boolean; reason: string }> {
@@ -174,9 +178,10 @@ async function isUnsafeDirectory(dir: string): Promise<{ unsafe: boolean; reason
 
 function parseVolumeSpec(spec: string): Volume {
 	if (spec.includes(':')) {
-		const [host, container] = spec.split(':', 2);
+		const [ host, container ] = spec.split(':', 2);
 		return { host, container };
 	}
+
 	return spec;
 }
 
@@ -184,9 +189,10 @@ function parseEnvSpec(spec: string): [string, string] {
 	const idx = spec.indexOf('=');
 	if (idx === -1) {
 		// Shorthand: FOO → FOO=${FOO}
-		return [spec, `\${${spec}}`];
+		return [ spec, `\${${spec}}` ];
 	}
-	return [spec.slice(0, idx), spec.slice(idx + 1)];
+
+	return [ spec.slice(0, idx), spec.slice(idx + 1) ];
 }
 
 export async function main() {
@@ -283,11 +289,11 @@ export async function main() {
 	const knownBooleanFlags = new Set<string>();
 	const knownStringFlags = new Set<string>();
 
-	for (const [key, config] of Object.entries(flagsConfig)) {
-		const kebab = key.replace(/([A-Z])/g, '-$1').toLowerCase();
+	for (const [ key, config ] of Object.entries(flagsConfig)) {
+		const kebab = key.replaceAll(/([A-Z])/g, '-$1').toLowerCase();
 		if (config.type === 'boolean') {
 			knownBooleanFlags.add(`--${kebab}`);
-			if ('default' in config && config.default === true) {
+			if ('default' in config && config.default) {
 				knownBooleanFlags.add(`--no-${kebab}`);
 			}
 		} else if (config.type === 'string') {
@@ -327,11 +333,13 @@ export async function main() {
 			// Skip boolean flag
 			continue;
 		}
+
 		if (knownStringFlags.has(arg)) {
 			// Skip string flag and its value
 			i++;
 			continue;
 		}
+
 		// Check for --flag=value format
 		const eqIdx = arg.indexOf('=');
 		if (eqIdx !== -1) {
@@ -340,20 +348,21 @@ export async function main() {
 				continue;
 			}
 		}
+
 		claudeArgs.push(arg);
 	}
 
 	// Check directory safety and potentially create temp directory
 	let cwd = process.cwd();
-	let tempDirCreated: string | undefined;
+	let temporaryDirCreated: string | undefined;
 
 	if (!allowUnsafeDirectory) {
 		const safetyCheck = await isUnsafeDirectory(cwd);
 		if (safetyCheck.unsafe) {
-			tempDirCreated = await fs.mkdtemp(path.join(os.tmpdir(), 'claudex-'));
+			temporaryDirCreated = await fs.mkdtemp(path.join(os.tmpdir(), 'claudex-'));
 			console.error(`Warning: Running in ${safetyCheck.reason} (${cwd}).`);
-			console.error(`Creating temporary directory: ${tempDirCreated}`);
-			cwd = tempDirCreated;
+			console.error(`Creating temporary directory: ${temporaryDirCreated}`);
+			cwd = temporaryDirCreated;
 		}
 	}
 
@@ -375,6 +384,7 @@ export async function main() {
 			for (const container of containers) {
 				console.error(`  ${container}`);
 			}
+
 			console.error('\nPlease stop all but one container, or exec manually with:');
 			console.error('  docker exec -it <container-name> bash');
 			process.exit(1);
@@ -398,22 +408,25 @@ export async function main() {
 
 		// Merge CLI flags with config
 		if (cliPackages?.length) {
-			config.packages = [...(config.packages ?? []), ...cliPackages];
+			config.packages = [ ...(config.packages ?? []), ...cliPackages ];
 		}
+
 		if (cliVolumes?.length) {
 			const parsedVolumes = cliVolumes.map(parseVolumeSpec);
-			config.volumes = [...(config.volumes ?? []), ...parsedVolumes];
+			config.volumes = [ ...(config.volumes ?? []), ...parsedVolumes ];
 		}
+
 		if (cliEnv?.length) {
 			config.env = config.env ?? {};
 			for (const spec of cliEnv) {
-				const [key, value] = parseEnvSpec(spec);
+				const [ key, value ] = parseEnvSpec(spec);
 				config.env[key] = value;
 			}
 		}
+
 		if (cliSshKeys?.length) {
 			config.ssh = config.ssh ?? {};
-			config.ssh.keys = [...(config.ssh.keys ?? []), ...cliSshKeys];
+			config.ssh.keys = [ ...(config.ssh.keys ?? []), ...cliSshKeys ];
 		}
 
 		const { username, projectRoot, imageName } = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
@@ -428,7 +441,7 @@ export async function main() {
 			'run',
 			'--rm',
 			'-it',
-			...(dockerSudo ? [] : ['--cap-drop', 'ALL', '--security-opt', 'no-new-privileges']),
+			...(dockerSudo ? [] : [ '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges' ]),
 			'--name',
 			containerName,
 			'-v',
@@ -467,9 +480,9 @@ export async function main() {
 		// Resolve environment variables from config
 		const resolvedEnv: Record<string, string> = {};
 		if (config.env) {
-			for (const [key, value] of Object.entries(config.env)) {
+			for (const [ key, value ] of Object.entries(config.env)) {
 				// Check if value is a reference to host environment variable
-				const match = value.match(/^\$\{(.+)\}$/);
+				const match = /^\${(.+)}$/.exec(value);
 				if (match) {
 					const hostVarName = match[1];
 					const hostValue = process.env[hostVarName];
@@ -498,7 +511,7 @@ export async function main() {
 		resolvedEnv.PATH = `${CLAUDE_CODE_BIN_PATH}:${basePath}`;
 
 		// Add environment variables to docker args
-		for (const [key, value] of Object.entries(resolvedEnv)) {
+		for (const [ key, value ] of Object.entries(resolvedEnv)) {
 			dockerArgs.push('-e', `${key}=${value}`);
 		}
 
@@ -506,8 +519,7 @@ export async function main() {
 		const sshKeys = getSshKeys(config);
 		sshAgent = await startSshAgent(sshKeys);
 		if (sshAgent) {
-			dockerArgs.push('-v', `${sshAgent.socketPath}:/ssh-agent`);
-			dockerArgs.push('-e', 'SSH_AUTH_SOCK=/ssh-agent');
+			dockerArgs.push('-v', `${sshAgent.socketPath}:/ssh-agent`, '-e', 'SSH_AUTH_SOCK=/ssh-agent');
 		}
 
 		// Get filtered known_hosts content for configured SSH hosts
@@ -534,7 +546,7 @@ export async function main() {
 		// Add extra host entries to container /etc/hosts
 		if (config.extraHosts && Object.keys(config.extraHosts).length > 0) {
 			console.error('Extra hosts:');
-			for (const [hostname, ip] of Object.entries(config.extraHosts)) {
+			for (const [ hostname, ip ] of Object.entries(config.extraHosts)) {
 				dockerArgs.push('--add-host', `${hostname}:${ip}`);
 				console.error(`  ${hostname} → ${ip}`);
 			}
@@ -563,7 +575,7 @@ export async function main() {
 		const settingSources = config.settingSources ?? 'user,local';
 		console.error(`Setting sources: ${settingSources}`);
 
-		const claudeFullArgs = ['--setting-sources', settingSources, ...claudeArgs];
+		const claudeFullArgs = [ '--setting-sources', settingSources, ...claudeArgs ];
 
 		claudeChildProcess = execa('claude', claudeFullArgs, {
 			stdin: process.stdin,
@@ -587,8 +599,8 @@ export async function main() {
 		await claudeChildProcess;
 	} finally {
 		// Remind user about temp directory
-		if (tempDirCreated) {
-			console.log(`Temporary directory used: ${tempDirCreated}`);
+		if (temporaryDirCreated) {
+			console.log(`Temporary directory used: ${temporaryDirCreated}`);
 		}
 
 		// Cleanup SSH agent if we started one
@@ -599,21 +611,19 @@ export async function main() {
 	}
 }
 
-interface HookConfig {
+type HookConfig = {
 	type: string;
 	command: string;
-}
+};
 
-interface HookMatcher {
+type HookMatcher = {
 	matcher: string;
 	hooks: HookConfig[];
-}
+};
 
-interface Settings {
-	hooks?: {
-		[key: string]: HookMatcher[];
-	};
-}
+type Settings = {
+	hooks?: Record<string, HookMatcher[]>;
+};
 
 async function setupHookSymlinks() {
 	const homeDir = os.homedir();
@@ -732,7 +742,7 @@ async function setupHostPortForwarding(): Promise<(() => void) | undefined> {
 		return undefined;
 	}
 
-	const children: import('execa').ResultPromise[] = [];
+	const children: Array<import('execa').ResultPromise> = [];
 
 	let stopped = false;
 
@@ -747,7 +757,7 @@ async function setupHostPortForwarding(): Promise<(() => void) | undefined> {
 			`TCP6-LISTEN:${port},fork,reuseaddr,bind=::1`,
 			`TCP:host.docker.internal:${port}`,
 		]);
-		for (const child of [child4, child6]) {
+		for (const child of [ child4, child6 ]) {
 			child.catch((error: unknown) => {
 				if (stopped) {
 					return;

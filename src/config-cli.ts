@@ -15,9 +15,9 @@ import {
 type Action = 'list' | 'get' | 'set' | 'add' | 'unset';
 
 type Scope =
-	| {type: 'project'; path: string}
-	| {type: 'global'}
-	| {type: 'group'; name: string};
+	| { type: 'project'; path: string }
+	| { type: 'global' }
+	| { type: 'group'; name: string };
 
 type ParsedArgs = {
 	action: Action;
@@ -28,7 +28,7 @@ type ParsedArgs = {
 };
 
 function parseArgs(argv: string[]): ParsedArgs {
-	const args = [...argv];
+	const args = [ ...argv ];
 
 	let action: Action | undefined;
 	let scope: Scope | undefined;
@@ -42,32 +42,50 @@ function parseArgs(argv: string[]): ParsedArgs {
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 
-		if (arg === '--global') {
-			isGlobal = true;
-		} else if (arg === '--project') {
-			i++;
-			const projectPath = args[i];
-			if (!projectPath) {
-				throw new Error('--project requires a path argument');
+		switch (arg) {
+			case '--global': {
+				isGlobal = true;
+
+				break;
 			}
 
-			scope = {type: 'project', path: expandTilde(projectPath)};
-		} else if (arg === '--group') {
-			i++;
-			const groupName = args[i];
-			if (!groupName) {
-				throw new Error('--group requires a name argument');
+			case '--project': {
+				i++;
+				const projectPath = args[i];
+				if (!projectPath) {
+					throw new Error('--project requires a path argument');
+				}
+
+				scope = { type: 'project', path: expandTilde(projectPath) };
+
+				break;
 			}
 
-			scope = {type: 'group', name: groupName};
-		} else if (arg === '--file') {
-			i++;
-			file = args[i];
-			if (!file) {
-				throw new Error('--file requires a path argument');
+			case '--group': {
+				i++;
+				const groupName = args[i];
+				if (!groupName) {
+					throw new Error('--group requires a name argument');
+				}
+
+				scope = { type: 'group', name: groupName };
+
+				break;
 			}
-		} else {
-			positionals.push(arg);
+
+			case '--file': {
+				i++;
+				file = args[i];
+				if (!file) {
+					throw new Error('--file requires a path argument');
+				}
+
+				break;
+			}
+
+			default: {
+				positionals.push(arg);
+			}
 		}
 	}
 
@@ -75,12 +93,12 @@ function parseArgs(argv: string[]): ParsedArgs {
 		throw new Error('Missing action. Usage: claudex config <list|get|set|add|unset> [key] [value]');
 	}
 
-	const actionStr = positionals[0];
-	if (!['list', 'get', 'set', 'add', 'unset'].includes(actionStr)) {
-		throw new Error(`Unknown action: ${actionStr}. Expected one of: list, get, set, add, unset`);
+	const actionString = positionals[0];
+	if (![ 'list', 'get', 'set', 'add', 'unset' ].includes(actionString)) {
+		throw new Error(`Unknown action: ${actionString}. Expected one of: list, get, set, add, unset`);
 	}
 
-	action = actionStr as Action;
+	action = actionString as Action;
 	key = positionals[1];
 	value = positionals[2];
 
@@ -89,12 +107,14 @@ function parseArgs(argv: string[]): ParsedArgs {
 			throw new Error('--global cannot be combined with --project or --group');
 		}
 
-		scope = {type: 'global'};
+		scope = { type: 'global' };
 	}
 
-	scope ??= {type: 'project', path: process.cwd()};
+	scope ??= { type: 'project', path: process.cwd() };
 
-	return {action, scope, file, key, value};
+	return {
+		action, scope, file, key, value,
+	};
 }
 
 function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfig | undefined {
@@ -147,7 +167,7 @@ type KeyInfo = {
 function parseKey(key: string): KeyInfo {
 	const dotIndex = key.indexOf('.');
 	if (dotIndex === -1) {
-		return {field: key};
+		return { field: key };
 	}
 
 	return {
@@ -158,12 +178,12 @@ function parseKey(key: string): KeyInfo {
 
 function coerceValue(field: string, value: string): string | number | boolean {
 	if (field === 'hostPorts') {
-		const num = Number(value);
-		if (!Number.isInteger(num) || num <= 0) {
+		const number_ = Number(value);
+		if (!Number.isInteger(number_) || number_ <= 0) {
 			throw new Error(`Invalid port number: ${value}`);
 		}
 
-		return num;
+		return number_;
 	}
 
 	if (field === 'shareVolumes') {
@@ -254,27 +274,27 @@ function formatValue(value: unknown): string {
 
 async function handleList(scope: Scope): Promise<void> {
 	if (scope.type === 'project') {
-		const {config} = await getMergedConfig(scope.path);
+		const { config } = await getMergedConfig(scope.path);
 		console.log(JSON.stringify(config, null, 2));
 		return;
 	}
 
 	// For global and group, read merged root config and extract section
-	const {config: rootConfig} = await getMergedConfig(process.cwd());
+	const { config: rootConfig } = await getMergedConfig(process.cwd());
 
 	if (scope.type === 'global') {
-		const {projects: _, groups: _g, ...base} = rootConfig as unknown as RootConfig;
+		const { projects: _, groups: _g, ...base } = rootConfig as unknown as RootConfig;
 		console.log(JSON.stringify(base, null, 2));
 		return;
 	}
 
 	// Group - get from merged root
 	// We need to read the root config directly for group listing
-	const {getMergedConfig: _m, ...rest} = await import('./config.js');
+	const { getMergedConfig: _m, ...rest } = await import('./config.js');
 	const allFiles = await rest.readAllConfigFiles();
 	let merged: RootConfig = {};
 	for (const entry of allFiles) {
-		merged = {...merged, ...entry.config};
+		merged = { ...merged, ...entry.config };
 	}
 
 	const groupConfig = merged.groups?.[scope.name];
@@ -289,7 +309,7 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 	const keyInfo = parseKey(key);
 
 	if (scope.type === 'project') {
-		const {config} = await getMergedConfig(scope.path);
+		const { config } = await getMergedConfig(scope.path);
 		const value = getValue(config, keyInfo);
 		const formatted = formatValue(value);
 		if (formatted) {
@@ -300,7 +320,7 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 	}
 
 	// For global/group, we need the merged root config
-	const {config} = await getMergedConfig(process.cwd());
+	const { config } = await getMergedConfig(process.cwd());
 
 	let section: BaseConfig | ProjectConfig | undefined;
 	if (scope.type === 'global') {
@@ -310,7 +330,7 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 		const allFiles = await (await import('./config.js')).readAllConfigFiles();
 		let merged: RootConfig = {};
 		for (const entry of allFiles) {
-			merged = {...merged, ...entry.config};
+			merged = { ...merged, ...entry.config };
 		}
 
 		section = merged.groups?.[scope.name];
@@ -414,16 +434,29 @@ async function handleUnset(scope: Scope, key: string, value: string | undefined,
 	const record = section as Record<string, unknown>;
 
 	if (keyInfo.subKey) {
-		if (value !== undefined) {
+		if (value === undefined) {
+			// Remove entire sub-key from record
+			const parent = record[keyInfo.field] as Record<string, unknown> | undefined;
+			if (!parent) {
+				return;
+			}
+
+			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+			delete parent[keyInfo.subKey];
+			if (Object.keys(parent).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete record[keyInfo.field];
+			}
+		} else {
 			// Remove specific value from nested array (e.g., ssh.keys <value>)
 			const parent = record[keyInfo.field] as Record<string, unknown> | undefined;
 			if (!parent) {
 				return;
 			}
 
-			const arr = parent[keyInfo.subKey];
-			if (Array.isArray(arr)) {
-				parent[keyInfo.subKey] = arr.filter((v: unknown) => String(v) !== value);
+			const array = parent[keyInfo.subKey];
+			if (Array.isArray(array)) {
+				parent[keyInfo.subKey] = array.filter((v: unknown) => String(v) !== value);
 				if ((parent[keyInfo.subKey] as unknown[]).length === 0) {
 					// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
 					delete parent[keyInfo.subKey];
@@ -438,35 +471,22 @@ async function handleUnset(scope: Scope, key: string, value: string | undefined,
 				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
 				delete record[keyInfo.field];
 			}
-		} else {
-			// Remove entire sub-key from record
-			const parent = record[keyInfo.field] as Record<string, unknown> | undefined;
-			if (!parent) {
-				return;
-			}
-
-			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-			delete parent[keyInfo.subKey];
-			if (Object.keys(parent).length === 0) {
-				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-				delete record[keyInfo.field];
-			}
 		}
-	} else if (value !== undefined) {
+	} else if (value === undefined) {
+		// Remove entire key
+		// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+		delete record[keyInfo.field];
+	} else {
 		// Remove specific value from array
-		const arr = record[keyInfo.field];
-		if (Array.isArray(arr)) {
+		const array = record[keyInfo.field];
+		if (Array.isArray(array)) {
 			const coerced = coerceValue(keyInfo.field, value);
-			record[keyInfo.field] = arr.filter((v: unknown) => v !== coerced);
+			record[keyInfo.field] = array.filter((v: unknown) => v !== coerced);
 			if ((record[keyInfo.field] as unknown[]).length === 0) {
 				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
 				delete record[keyInfo.field];
 			}
 		}
-	} else {
-		// Remove entire key
-		// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
-		delete record[keyInfo.field];
 	}
 
 	await writeSingleConfigFile(filePath, config);

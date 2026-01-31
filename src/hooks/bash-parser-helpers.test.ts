@@ -1,5 +1,7 @@
 import test from 'ava';
-import { extractCommandNames, hasChainOperators, hasGitCFlag, getPipedFilterCommand } from './bash-parser-helpers.js';
+import {
+	extractCommandNames, hasChainOperators, hasGitCFlag, getPipedFilterCommand,
+} from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
 	const commands = await extractCommandNames('cat file.txt');
