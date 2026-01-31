@@ -9,7 +9,7 @@ import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
 import {
-	getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, type Volume, type ClaudexConfig,
+	getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, resolveHooks, resolveMcpServers, type Volume, type ClaudexConfig,
 } from './config.js';
 import { shieldEnvVars } from './secrets.js';
 import { configMain } from './config-cli.js';
@@ -301,13 +301,23 @@ export async function main() {
 		}
 	}
 
-	await ensureHookSetup();
+	// Read config early for hook/mcp gating
+	const earlyConfig = await getMergedConfig(process.cwd());
+	const hooksResolved = resolveHooks(earlyConfig.config.hooks);
+	const mcpServersResolved = resolveMcpServers(earlyConfig.config.mcpServers);
+
+	const anyHooksEnabled = Object.values(hooksResolved).some(Boolean);
+	if (anyHooksEnabled) {
+		await ensureHookSetup();
+	}
 
 	// Ensure MCP server is configured in ~/.claude.json
 	const currentFileUrl = import.meta.url;
 	const currentFilePath = fileURLToPath(currentFileUrl);
 	const projectRoot = path.resolve(path.dirname(currentFilePath), '..');
-	await ensureMcpServerConfig(projectRoot);
+	if (mcpServersResolved.claudex) {
+		await ensureMcpServerConfig(projectRoot);
+	}
 
 	const {
 		docker: useDocker,

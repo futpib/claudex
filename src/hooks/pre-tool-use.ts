@@ -8,6 +8,7 @@ import { execa } from 'execa';
 import invariant from 'invariant';
 import { z } from 'zod';
 import { paths } from '../paths.js';
+import { getMergedConfig, resolveHooks } from '../config.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
 } from './shared.js';
@@ -169,8 +170,12 @@ async function main() {
 	// Check if this is an MCP tool
 	const isMcpTool = toolName.startsWith('mcp__');
 
+	// Load config and resolve hooks
+	const { config } = await getMergedConfig(process.cwd());
+	const hooks = resolveHooks(config.hooks);
+
 	// Ban web searches containing "2024" to encourage using current year
-	if (preToolUseHookWithKnownToolInput?.tool_name === 'WebSearch') {
+	if (hooks.banOutdatedYearInSearch && preToolUseHookWithKnownToolInput?.tool_name === 'WebSearch') {
 		const { query } = preToolUseHookWithKnownToolInput.tool_input;
 		if (/\b2024\b/.test(query)) {
 			const currentYear = new Date().getFullYear();
@@ -180,20 +185,24 @@ async function main() {
 		}
 	}
 
+	if (!hooks.logToolUse || READ_ONLY_TOOLS.has(toolName) || INTERNAL_TOOLS.has(toolName) || isMcpTool) {
+		// Skip logging
+	} else {
+		invariant(preToolUseHookWithKnownToolInput, 'Expected preToolUseHookInput to match knownToolInputSchema');
+		const filteredInput = omitLongFields(preToolUseHookWithKnownToolInput);
+
+		const toolInputString = JSON.stringify(filteredInput);
+		const transcriptInfo = formatTranscriptInfo(sessionId, transcriptPath);
+		const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
+		await logMessage(message);
+	}
+
 	if (READ_ONLY_TOOLS.has(toolName) || INTERNAL_TOOLS.has(toolName) || isMcpTool) {
 		process.exit(0);
 	}
 
-	invariant(preToolUseHookWithKnownToolInput, 'Expected preToolUseHookInput to match knownToolInputSchema');
-	const filteredInput = omitLongFields(preToolUseHookWithKnownToolInput);
-
-	const toolInputString = JSON.stringify(filteredInput);
-	const transcriptInfo = formatTranscriptInfo(sessionId, transcriptPath);
-	const message = `Session: ${sessionId}${transcriptInfo}, Tool: ${toolName}, Input: ${toolInputString}`;
-	await logMessage(message);
-
 	// Ban git -C commands (running git in a different directory)
-	if (toolName === 'Bash' && typeof command === 'string' && await hasGitCFlag(command)) {
+	if (hooks.banGitC && toolName === 'Bash' && typeof command === 'string' && await hasGitCFlag(command)) {
 		console.error('❌ git -C is not allowed');
 		console.error('Running git commands in a different directory is not permitted.');
 		console.error('Please cd to the target directory and run git commands there instead.');
@@ -201,7 +210,7 @@ async function main() {
 	}
 
 	// Check for git checkout -b with start-point when already on detached HEAD at that point
-	if (toolName === 'Bash' && typeof command === 'string') {
+	if (hooks.banGitCheckoutRedundantStartPoint && toolName === 'Bash' && typeof command === 'string') {
 		const startPoint = await getGitCheckoutBStartPoint(command);
 		if (startPoint) {
 			try {
@@ -229,7 +238,7 @@ async function main() {
 	}
 
 	// Ban git add -A commands
-	if (toolName === 'Bash' && typeof command === 'string') {
+	if (hooks.banGitAddAll && toolName === 'Bash' && typeof command === 'string') {
 		const actualCommands = await extractCommandNames(command);
 		if (actualCommands.has('git')) {
 			// Check if this is a git add command with banned flags
@@ -249,35 +258,35 @@ async function main() {
 	}
 
 	// Ban git commit --amend commands entirely
-	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('--amend')) {
+	if (hooks.banGitCommitAmend && toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('--amend')) {
 		console.error('❌ git commit --amend is not allowed');
 		console.error('Amending commits can alter git history and is not permitted.');
 		process.exit(2);
 	}
 
 	// Ban git commit --no-verify commands
-	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('--no-verify')) {
+	if (hooks.banGitCommitNoVerify && toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('--no-verify')) {
 		console.error('❌ git commit --no-verify is not allowed');
 		console.error('Bypassing pre-commit hooks can introduce code quality issues and is not permitted.');
 		process.exit(2);
 	}
 
 	// Ban running bash commands in background
-	if (preToolUseHookWithKnownToolInput.tool_name === 'Bash' && preToolUseHookWithKnownToolInput.tool_input.run_in_background === true) {
+	if (hooks.banBackgroundBash && preToolUseHookWithKnownToolInput?.tool_name === 'Bash' && preToolUseHookWithKnownToolInput.tool_input.run_in_background === true) {
 		console.error('❌ Running bash commands in background is not allowed');
 		console.error('Background bash processes cannot be monitored properly and may cause issues.');
 		process.exit(2);
 	}
 
 	// Ban bash commands using &&, ||, or ; operators
-	if (toolName === 'Bash' && typeof command === 'string' && await hasChainOperators(command)) {
+	if (hooks.banCommandChaining && toolName === 'Bash' && typeof command === 'string' && await hasChainOperators(command)) {
 		console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
 		console.error('Please run commands separately for better tracking and error handling.');
 		process.exit(2);
 	}
 
 	// Ban piping command output to filter commands (grep, head, tail, etc.)
-	if (toolName === 'Bash' && typeof command === 'string') {
+	if (hooks.banPipeToFilter && toolName === 'Bash' && typeof command === 'string') {
 		const pipedFilter = await getPipedFilterCommand(command);
 		if (pipedFilter) {
 			console.error(`❌ Piping output to ${pipedFilter} is not allowed`);
@@ -288,7 +297,7 @@ async function main() {
 	}
 
 	// Ban using bash commands for file operations that have dedicated tools
-	if (toolName === 'Bash' && typeof command === 'string') {
+	if (hooks.banFileOperationCommands && toolName === 'Bash' && typeof command === 'string') {
 		const fileOperationCommands = new Set([ 'cat', 'sed', 'head', 'tail', 'awk' ]);
 
 		// Extract actual command invocations (not commands in strings or comments)
@@ -316,7 +325,7 @@ async function main() {
 		}
 	}
 
-	if (toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
+	if (hooks.requireCoAuthorshipProof && toolName === 'Bash' && typeof command === 'string' && command.toLowerCase().includes('git commit') && command.toLowerCase().includes('co-authored-by')) {
 		const markerPattern = /x-claude-code-co-authorship-proof:\s*([a-f\d]{64})/i;
 		const match = markerPattern.exec(command);
 		if (match) {
