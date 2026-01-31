@@ -39,7 +39,6 @@ function getWordLiteralValue(word: BashWord): string | undefined {
 }
 
 function getWordPartLiteralValue(part: BashWordPart): string | undefined {
-	// eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
 	switch (part.type) {
 		case 'literal': {
 			return part.value;
@@ -63,8 +62,12 @@ function getWordPartLiteralValue(part: BashWordPart): string | undefined {
 			return result;
 		}
 
-		default: {
-			// Intentionally non-exhaustive: other types return undefined
+		case 'variable':
+		case 'variableBraced':
+		case 'commandSubstitution':
+		case 'backtickSubstitution':
+		case 'arithmeticExpansion': {
+			// These types cannot be resolved to literal values
 			return undefined;
 		}
 	}
@@ -123,7 +126,6 @@ function extractCommandNamesFromWord(word: BashWord, commands: Set<string>): voi
 }
 
 function extractCommandNamesFromWordPart(part: BashWordPart, commands: Set<string>): void {
-	// eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
 	switch (part.type) {
 		case 'commandSubstitution':
 		case 'backtickSubstitution': {
@@ -143,8 +145,12 @@ function extractCommandNamesFromWordPart(part: BashWordPart, commands: Set<strin
 			break;
 		}
 
-		default: {
-			// Intentionally non-exhaustive: other types don't contain commands
+		case 'literal':
+		case 'singleQuoted':
+		case 'variable':
+		case 'variableBraced':
+		case 'arithmeticExpansion': {
+			// These types don't contain commands
 			break;
 		}
 	}
@@ -259,13 +265,12 @@ export async function getGitCheckoutBStartPoint(command: string): Promise<string
 		// After -b <branch>, there might be a start-point
 		// Pattern: git checkout -b <branch> [<start-point>]
 		// We need to skip the branch name and get the next positional argument
-		// eslint-disable-next-line @typescript-eslint/naming-convention
-		const argsAfterBFlag = argsAfterCheckout.slice(bFlagIndex + 1);
+		const argsAfterBranchFlag = argsAfterCheckout.slice(bFlagIndex + 1);
 
 		// Skip the branch name (first positional arg after -b)
 		// Then look for the start-point (second positional arg, if any)
 		let positionalCount = 0;
-		for (const arg of argsAfterBFlag) {
+		for (const arg of argsAfterBranchFlag) {
 			if (arg.startsWith('-')) {
 				continue; // Skip flags
 			}
@@ -317,8 +322,7 @@ export async function getPipedFilterCommand(command: string): Promise<string | u
 	return undefined;
 }
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
-export async function hasGitCFlag(command: string): Promise<boolean> {
+export async function hasGitCommitFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
 		return false;

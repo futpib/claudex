@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitCFlag, getPipedFilterCommand,
+	extractCommandNames, hasChainOperators, hasGitCommitFlag, getPipedFilterCommand,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -147,30 +147,30 @@ test('hasChainOperators - handles simple commands', async t => {
 	t.false(await hasChainOperators('npm install'));
 });
 
-test('hasGitCFlag - detects git -C', async t => {
-	t.true(await hasGitCFlag('git -C /some/path status'));
+test('hasGitCommitFlag - detects git -C', async t => {
+	t.true(await hasGitCommitFlag('git -C /some/path status'));
 });
 
-test('hasGitCFlag - detects git -C with flags before', async t => {
-	t.true(await hasGitCFlag('git -v -C /some/path status'));
+test('hasGitCommitFlag - detects git -C with flags before', async t => {
+	t.true(await hasGitCommitFlag('git -v -C /some/path status'));
 });
 
-test('hasGitCFlag - does not detect -C in strings', async t => {
-	t.false(await hasGitCFlag('git commit -m "Block git -C flag"'));
+test('hasGitCommitFlag - does not detect -C in strings', async t => {
+	t.false(await hasGitCommitFlag('git commit -m "Block git -C flag"'));
 });
 
-test('hasGitCFlag - does not detect -C in heredoc', async t => {
+test('hasGitCommitFlag - does not detect -C in heredoc', async t => {
 	const command = `git commit -m "$(cat <<'EOF'
 Block git -C flag
 EOF
 )"`;
-	t.false(await hasGitCFlag(command));
+	t.false(await hasGitCommitFlag(command));
 });
 
-test('hasGitCFlag - does not trigger on regular git commands', async t => {
-	t.false(await hasGitCFlag('git status'));
-	t.false(await hasGitCFlag('git commit -m "message"'));
-	t.false(await hasGitCFlag('git add .'));
+test('hasGitCommitFlag - does not trigger on regular git commands', async t => {
+	t.false(await hasGitCommitFlag('git status'));
+	t.false(await hasGitCommitFlag('git commit -m "message"'));
+	t.false(await hasGitCommitFlag('git add .'));
 });
 
 test('getPipedFilterCommand - detects pipe to grep', async t => {
