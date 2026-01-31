@@ -16,8 +16,7 @@ import { shieldEnvVars } from './secrets.js';
 import { configMain } from './config-cli.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const CLAUDE_CODE_BIN_PATH = '/opt/claude-code/.local/bin';
+const claudeCodeBinPath = '/opt/claude-code/.local/bin';
 
 type SshAgentInfo = {
 	socketPath: string;
@@ -525,7 +524,7 @@ export async function main() {
 
 		// Ensure Claude Code bin path is always first in PATH
 		const basePath = resolvedEnv.PATH ?? '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
-		resolvedEnv.PATH = `${CLAUDE_CODE_BIN_PATH}:${basePath}`;
+		resolvedEnv.PATH = `${claudeCodeBinPath}:${basePath}`;
 
 		// Add environment variables to docker args
 		for (const [ key, value ] of Object.entries(resolvedEnv)) {
