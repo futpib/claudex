@@ -46,10 +46,6 @@ async function readJsonFile(filePath: string): Promise<unknown> {
 	return JSON.parse(content);
 }
 
-// Template string literal for testing
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const TEMPLATE_STRING = '$' + String.fromCodePoint(123) + 'API_KEY' + String.fromCodePoint(125);
-
 // Helper to run config commands with a custom config dir
 async function runConfigWithDir(configDir: string, args: string[], cwd?: string): Promise<CliResult> {
 	return runConfig(args, {
@@ -152,9 +148,11 @@ test('set boolean field (shareVolumes)', async t => {
 test('set record field (env.KEY)', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {
-		await runConfigWithDir(configDir, [ 'set', '--global', 'env.API_KEY', TEMPLATE_STRING ]);
+		// eslint-disable-next-line no-template-curly-in-string
+		const templateString = '${API_KEY}';
+		await runConfigWithDir(configDir, [ 'set', '--global', 'env.API_KEY', templateString ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
-		t.is((config as { env: Record<string, string> }).env.API_KEY, TEMPLATE_STRING);
+		t.is((config as { env: Record<string, string> }).env.API_KEY, templateString);
 	} finally {
 		await cleanup();
 	}
