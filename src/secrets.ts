@@ -9,7 +9,7 @@ async function isGitleaksAvailable(): Promise<boolean> {
 	}
 
 	try {
-		await execa('gitleaks', ['version']);
+		await execa('gitleaks', [ 'version' ]);
 		gitleaksAvailable = true;
 	} catch {
 		gitleaksAvailable = false;
@@ -33,12 +33,12 @@ export async function isSecret(value: string): Promise<boolean> {
 	}
 
 	try {
-		// gitleaks stdin exits with 0 if no secrets found, non-zero if secrets found
-		await execa('gitleaks', ['stdin', '--no-banner'], {
+		// Gitleaks stdin exits with 0 if no secrets found, non-zero if secrets found
+		await execa('gitleaks', [ 'stdin', '--no-banner' ], {
 			input: value,
 		});
 		return false;
-	} catch (error) {
+	} catch {
 		// Non-zero exit code means secrets were found (or other error - assume secret to be safe)
 		return true;
 	}
@@ -49,10 +49,8 @@ export async function isSecret(value: string): Promise<boolean> {
  * Returns a Map of value -> isSecret.
  */
 export async function checkSecrets(values: string[]): Promise<Map<string, boolean>> {
-	const uniqueValues = [...new Set(values)];
-	const results = await Promise.all(
-		uniqueValues.map(async (value) => [value, await isSecret(value)] as const)
-	);
+	const uniqueValues = [ ...new Set(values) ];
+	const results = await Promise.all(uniqueValues.map(async value => [ value, await isSecret(value) ] as const));
 	return new Map(results);
 }
 
@@ -73,10 +71,10 @@ export function shieldValue(value: string, isSecretValue: boolean): string {
  */
 export async function shieldEnvVars(env: Record<string, string>): Promise<string[]> {
 	const entries = Object.entries(env);
-	const values = entries.map(([_, value]) => value);
+	const values = entries.map(([ _, value ]) => value);
 	const secretMap = await checkSecrets(values);
 
-	return entries.map(([key, value]) => {
+	return entries.map(([ key, value ]) => {
 		const isSecretValue = secretMap.get(value) ?? true;
 		return `${key}=${shieldValue(value, isSecretValue)}`;
 	});

@@ -5,7 +5,7 @@ export type ToolHandler = {
 	handle: (args: unknown) => Promise<Array<{ type: 'text'; text: string }>>;
 };
 
-export const tools: Map<string, ToolHandler> = new Map();
+export const tools = new Map<string, ToolHandler>();
 
 export function registerTool(handler: ToolHandler) {
 	tools.set(handler.definition.name, handler);

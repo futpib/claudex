@@ -1,25 +1,30 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import process from 'node:process';
 import { z } from 'zod';
 import { execa } from 'execa';
 import { paths } from './paths.js';
 
 // Volume can be a simple string (same path for host and container)
 // or an object with different paths
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const VolumeMountSchema = z.object({
 	host: z.string(),
 	container: z.string(),
 });
 
-const VolumeSchema = z.union([z.string(), VolumeMountSchema]);
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const VolumeSchema = z.union([ z.string(), VolumeMountSchema ]);
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const SshConfigSchema = z.object({
 	keys: z.array(z.string()).optional(),
 	hosts: z.array(z.string()).optional(),
 });
 
 // Base config schema - can appear at both root and project level
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const BaseConfigSchema = z.object({
 	packages: z.array(z.string()).optional(),
 	volumes: z.array(VolumeSchema).optional(),
@@ -27,16 +32,18 @@ const BaseConfigSchema = z.object({
 	ssh: SshConfigSchema.optional(),
 	hostPorts: z.array(z.number().int().positive()).optional(),
 	extraHosts: z.record(z.string(), z.string()).optional(),
-	shareVolumes: z.boolean().optional(), // default true - auto-share volumes between group members
-	settingSources: z.string().optional(), // default "user,local" - controls --setting-sources flag for Claude Code
+	shareVolumes: z.boolean().optional(), // Default true - auto-share volumes between group members
+	settingSources: z.string().optional(), // Default "user,local" - controls --setting-sources flag for Claude Code
 });
 
 // Project config can reference a group
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const ProjectConfigSchema = BaseConfigSchema.extend({
 	group: z.string().optional(),
 });
 
 // Root config adds projects mapping and groups
+// eslint-disable-next-line @typescript-eslint/naming-convention
 const RootConfigSchema = BaseConfigSchema.extend({
 	groups: z.record(z.string(), BaseConfigSchema).optional(),
 	projects: z.record(z.string(), ProjectConfigSchema).optional(),
@@ -58,6 +65,7 @@ export function expandTilde(filePath: string): string {
 	if (filePath.startsWith('~/')) {
 		return path.join(os.homedir(), filePath.slice(2));
 	}
+
 	return filePath;
 }
 
@@ -70,9 +78,10 @@ export function expandPathEnv(value: string): string {
 
 export function expandEnvValues(env: Record<string, string>): Record<string, string> {
 	const result: Record<string, string> = {};
-	for (const [key, value] of Object.entries(env)) {
+	for (const [ key, value ] of Object.entries(env)) {
 		result[key] = key === 'PATH' ? expandPathEnv(value) : value;
 	}
+
 	return result;
 }
 
@@ -106,13 +115,13 @@ export async function getFilteredKnownHosts(hosts: string[]): Promise<string> {
 				continue;
 			}
 
-			// known_hosts format: hostname[,hostname...] keytype key [comment]
+			// Known_hosts format: hostname[,hostname...] keytype key [comment]
 			const firstSpace = trimmed.indexOf(' ');
 			if (firstSpace === -1) {
 				continue;
 			}
 
-			const hostPart = trimmed.substring(0, firstSpace);
+			const hostPart = trimmed.slice(0, Math.max(0, firstSpace));
 			const hostnames = hostPart.split(',');
 
 			// Check if any of the hostnames match our configured hosts
@@ -126,7 +135,7 @@ export async function getFilteredKnownHosts(hosts: string[]): Promise<string> {
 
 		return filtered.join('\n') + (filtered.length > 0 ? '\n' : '');
 	} catch {
-		// known_hosts doesn't exist or can't be read
+		// Known_hosts doesn't exist or can't be read
 		return '';
 	}
 }
@@ -147,7 +156,7 @@ export function expandVolumePaths(volume: Volume): VolumeMount {
 }
 
 function sortVolumes(volumes: Volume[]): Volume[] {
-	return volumes.slice().sort((a, b) => {
+	return [ ...volumes ].sort((a, b) => {
 		const aKey = typeof a === 'string' ? a : a.host;
 		const bKey = typeof b === 'string' ? b : b.host;
 		return aKey.localeCompare(bKey);
@@ -160,11 +169,12 @@ function sortEnv(env: Record<string, string>): Record<string, string> {
 	for (const key of sortedKeys) {
 		sortedEnv[key] = env[key];
 	}
+
 	return sortedEnv;
 }
 
-function dedupeStrings(arr: string[]): string[] {
-	return [...new Set(arr)];
+function dedupeStrings(array: string[]): string[] {
+	return [ ...new Set(array) ];
 }
 
 function mergeEnv(base: Record<string, string>, overlay: Record<string, string>): Record<string, string> {
@@ -218,30 +228,32 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 
 	const hasSsh = sshKeys.length > 0 || sshHosts.length > 0;
 
-	const hostPorts = [...new Set([
+	const hostPorts = [ ...new Set([
 		...(base.hostPorts ?? []),
 		...(overlay.hostPorts ?? []),
-	])];
+	]) ];
 
 	const extraHosts = {
-		...(base.extraHosts ?? {}),
-		...(overlay.extraHosts ?? {}),
+		...base.extraHosts,
+		...overlay.extraHosts,
 	};
 
-	// shareVolumes: overlay takes precedence if defined, otherwise use base
+	// ShareVolumes: overlay takes precedence if defined, otherwise use base
 	const shareVolumes = overlay.shareVolumes ?? base.shareVolumes;
 
-	// settingSources: overlay takes precedence if defined, otherwise use base
+	// SettingSources: overlay takes precedence if defined, otherwise use base
 	const settingSources = overlay.settingSources ?? base.settingSources;
 
 	return {
 		packages: packages.length > 0 ? packages : undefined,
 		volumes: volumes.length > 0 ? volumes : undefined,
 		env: Object.keys(env).length > 0 ? env : undefined,
-		ssh: hasSsh ? {
-			keys: sshKeys.length > 0 ? sshKeys : undefined,
-			hosts: sshHosts.length > 0 ? sshHosts : undefined,
-		} : undefined,
+		ssh: hasSsh
+			? {
+				keys: sshKeys.length > 0 ? sshKeys : undefined,
+				hosts: sshHosts.length > 0 ? sshHosts : undefined,
+			}
+			: undefined,
 		hostPorts: hostPorts.length > 0 ? hostPorts : undefined,
 		extraHosts: Object.keys(extraHosts).length > 0 ? extraHosts : undefined,
 		shareVolumes,
@@ -273,7 +285,7 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 	// Merge groups: combine keys, merge configs for same group name
 	let groups: Record<string, BaseConfig> | undefined;
 
-	if (base.groups || overlay.groups) {
+	if (base.groups ?? overlay.groups) {
 		groups = {};
 		const allGroupNames = new Set([
 			...Object.keys(base.groups ?? {}),
@@ -284,18 +296,14 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 			const baseGroup = base.groups?.[groupName];
 			const overlayGroup = overlay.groups?.[groupName];
 
-			if (baseGroup && overlayGroup) {
-				groups[groupName] = mergeBaseConfigs(baseGroup, overlayGroup);
-			} else {
-				groups[groupName] = (overlayGroup ?? baseGroup)!;
-			}
+			groups[groupName] = baseGroup && overlayGroup ? mergeBaseConfigs(baseGroup, overlayGroup) : (overlayGroup ?? baseGroup)!;
 		}
 	}
 
 	// Merge projects: combine keys, merge configs for same project path
 	let projects: Record<string, ProjectConfig> | undefined;
 
-	if (base.projects || overlay.projects) {
+	if (base.projects ?? overlay.projects) {
 		projects = {};
 		const allPaths = new Set([
 			...Object.keys(base.projects ?? {}),
@@ -306,11 +314,7 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 			const baseProject = base.projects?.[projectPath];
 			const overlayProject = overlay.projects?.[projectPath];
 
-			if (baseProject && overlayProject) {
-				projects[projectPath] = mergeProjectConfigs(baseProject, overlayProject);
-			} else {
-				projects[projectPath] = (overlayProject ?? baseProject)!;
-			}
+			projects[projectPath] = baseProject && overlayProject ? mergeProjectConfigs(baseProject, overlayProject) : (overlayProject ?? baseProject)!;
 		}
 	}
 
@@ -329,12 +333,10 @@ function findMatchingProject(rootConfig: RootConfig, cwd: string): ProjectConfig
 	// Find the most specific matching project (longest path prefix)
 	let bestMatch: { path: string; config: ProjectConfig } | undefined;
 
-	for (const [projectPath, projectConfig] of Object.entries(rootConfig.projects)) {
+	for (const [ projectPath, projectConfig ] of Object.entries(rootConfig.projects)) {
 		const expandedPath = expandTilde(projectPath);
-		if (cwd === expandedPath || cwd.startsWith(expandedPath + '/')) {
-			if (!bestMatch || expandedPath.length > bestMatch.path.length) {
-				bestMatch = { path: expandedPath, config: projectConfig };
-			}
+		if ((cwd === expandedPath || cwd.startsWith(expandedPath + '/')) && (!bestMatch || expandedPath.length > bestMatch.path.length)) {
+			bestMatch = { path: expandedPath, config: projectConfig };
 		}
 	}
 
@@ -351,7 +353,7 @@ function getGroupSiblingPaths(
 	currentProjectPath: string,
 ): string[] {
 	const siblings: string[] = [];
-	for (const [projectPath, projectConfig] of Object.entries(rootConfig.projects ?? {})) {
+	for (const [ projectPath, projectConfig ] of Object.entries(rootConfig.projects ?? {})) {
 		if (projectConfig.group === groupName) {
 			const expandedPath = expandTilde(projectPath);
 			if (expandedPath !== currentProjectPath) {
@@ -359,6 +361,7 @@ function getGroupSiblingPaths(
 			}
 		}
 	}
+
 	return siblings;
 }
 
@@ -370,6 +373,7 @@ type ReadRootConfigResult = {
 async function readRootConfig(): Promise<ReadRootConfigResult> {
 	const configDir = paths.config;
 	const configPath = path.join(configDir, 'config.json');
+	// eslint-disable-next-line @typescript-eslint/naming-convention
 	const configDPath = path.join(configDir, 'config.json.d');
 
 	let merged: RootConfig = {};
@@ -389,9 +393,11 @@ async function readRootConfig(): Promise<ReadRootConfigResult> {
 		const files = await fs.readdir(configDPath);
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
 
+		// eslint-disable-next-line no-await-in-loop
 		for (const file of jsonFiles) {
 			const filePath = path.join(configDPath, file);
 			try {
+				// eslint-disable-next-line no-await-in-loop
 				const content = await fs.readFile(filePath, 'utf8');
 				const parsed = RootConfigSchema.parse(JSON.parse(content));
 				merged = mergeRootConfigs(merged, parsed);
@@ -409,7 +415,7 @@ async function readRootConfig(): Promise<ReadRootConfigResult> {
 
 async function getGitRoot(cwd: string): Promise<string | undefined> {
 	try {
-		const { stdout } = await execa('git', ['rev-parse', '--show-toplevel'], { cwd });
+		const { stdout } = await execa('git', [ 'rev-parse', '--show-toplevel' ], { cwd });
 		return stdout.trim();
 	} catch {
 		// Not a git repo
@@ -419,12 +425,12 @@ async function getGitRoot(cwd: string): Promise<string | undefined> {
 
 export async function getGitWorktreeParentPath(cwd: string): Promise<string | undefined> {
 	try {
-		const { stdout: gitCommonDir } = await execa('git', ['rev-parse', '--git-common-dir'], { cwd });
-		const { stdout: gitDir } = await execa('git', ['rev-parse', '--git-dir'], { cwd });
+		const { stdout: gitCommonDir } = await execa('git', [ 'rev-parse', '--git-common-dir' ], { cwd });
+		const { stdout: gitDir } = await execa('git', [ 'rev-parse', '--git-dir' ], { cwd });
 
 		// If they differ, we're in a worktree
 		if (gitCommonDir !== gitDir) {
-			// gitCommonDir is like /path/to/main/.git, we need /path/to/main
+			// GitCommonDir is like /path/to/main/.git, we need /path/to/main
 			const absoluteCommonDir = path.resolve(cwd, gitCommonDir);
 			return path.dirname(absoluteCommonDir);
 		}
@@ -438,11 +444,11 @@ export async function getGitWorktreeParentPath(cwd: string): Promise<string | un
 function sortConfig(config: ClaudexConfig): ClaudexConfig {
 	// Note: shareVolumes is excluded from final output (only used during resolution)
 	return {
-		packages: config.packages ? [...config.packages].sort((a, b) => a.localeCompare(b)) : undefined,
+		packages: config.packages ? [ ...config.packages ].sort((a, b) => a.localeCompare(b)) : undefined,
 		volumes: config.volumes ? sortVolumes(config.volumes) : undefined,
 		env: config.env ? sortEnv(config.env) : undefined,
 		ssh: config.ssh,
-		hostPorts: config.hostPorts ? [...config.hostPorts].sort((a, b) => a - b) : undefined,
+		hostPorts: config.hostPorts ? [ ...config.hostPorts ].sort((a, b) => a - b) : undefined,
 		extraHosts: config.extraHosts ? sortEnv(config.extraHosts) : undefined,
 		settingSources: config.settingSources,
 	};
@@ -534,7 +540,7 @@ export async function readSingleConfigFile(filePath: string): Promise<RootConfig
 }
 
 export async function writeSingleConfigFile(filePath: string, config: RootConfig): Promise<void> {
-	await fs.mkdir(path.dirname(filePath), {recursive: true});
+	await fs.mkdir(path.dirname(filePath), { recursive: true });
 	await fs.writeFile(filePath, JSON.stringify(config, null, 2) + '\n');
 }
 
@@ -546,12 +552,13 @@ export type ConfigFileEntry = {
 export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
 	const configDir = paths.config;
 	const configPath = path.join(configDir, 'config.json');
+	// eslint-disable-next-line @typescript-eslint/naming-convention
 	const configDPath = path.join(configDir, 'config.json.d');
 	const entries: ConfigFileEntry[] = [];
 
 	try {
 		const content = await fs.readFile(configPath, 'utf8');
-		entries.push({path: configPath, config: RootConfigSchema.parse(JSON.parse(content))});
+		entries.push({ path: configPath, config: RootConfigSchema.parse(JSON.parse(content)) });
 	} catch {
 		// Doesn't exist or invalid
 	}
@@ -559,11 +566,13 @@ export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
 	try {
 		const files = await fs.readdir(configDPath);
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
+		// eslint-disable-next-line no-await-in-loop
 		for (const file of jsonFiles) {
 			const filePath = path.join(configDPath, file);
 			try {
+				// eslint-disable-next-line no-await-in-loop
 				const content = await fs.readFile(filePath, 'utf8');
-				entries.push({path: filePath, config: RootConfigSchema.parse(JSON.parse(content))});
+				entries.push({ path: filePath, config: RootConfigSchema.parse(JSON.parse(content)) });
 			} catch {
 				// Skip invalid files
 			}

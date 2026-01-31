@@ -11,7 +11,9 @@ import { paths } from '../paths.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema, ParseJsonWithSchemaError,
 } from './shared.js';
-import { extractCommandNames, hasChainOperators, hasGitCFlag, getGitCheckoutBStartPoint, getPipedFilterCommand } from './bash-parser-helpers.js';
+import {
+	extractCommandNames, hasChainOperators, hasGitCFlag, getGitCheckoutBStartPoint, getPipedFilterCommand,
+} from './bash-parser-helpers.js';
 
 const editToolInputSchema = z.object({
 	file_path: z.string(),
@@ -169,10 +171,10 @@ async function main() {
 
 	// Ban web searches containing "2024" to encourage using current year
 	if (preToolUseHookWithKnownToolInput?.tool_name === 'WebSearch') {
-		const query = preToolUseHookWithKnownToolInput.tool_input.query;
+		const { query } = preToolUseHookWithKnownToolInput.tool_input;
 		if (/\b2024\b/.test(query)) {
 			const currentYear = new Date().getFullYear();
-			console.error(`❌ Web searches containing "2024" are not allowed`);
+			console.error('❌ Web searches containing "2024" are not allowed');
 			console.error(`The current year is ${currentYear}. Please update your search query to use the current year.`);
 			process.exit(2);
 		}
@@ -191,13 +193,11 @@ async function main() {
 	await logMessage(message);
 
 	// Ban git -C commands (running git in a different directory)
-	if (toolName === 'Bash' && typeof command === 'string') {
-		if (await hasGitCFlag(command)) {
-			console.error('❌ git -C is not allowed');
-			console.error('Running git commands in a different directory is not permitted.');
-			console.error('Please cd to the target directory and run git commands there instead.');
-			process.exit(2);
-		}
+	if (toolName === 'Bash' && typeof command === 'string' && await hasGitCFlag(command)) {
+		console.error('❌ git -C is not allowed');
+		console.error('Running git commands in a different directory is not permitted.');
+		console.error('Please cd to the target directory and run git commands there instead.');
+		process.exit(2);
 	}
 
 	// Check for git checkout -b with start-point when already on detached HEAD at that point
@@ -215,9 +215,9 @@ async function main() {
 						execa('git', [ 'rev-parse', startPoint ]),
 					]);
 					if (headResult.stdout.trim() === startPointResult.stdout.trim()) {
-						console.error(`❌ Unnecessary start-point in git checkout -b`);
+						console.error('❌ Unnecessary start-point in git checkout -b');
 						console.error(`You are already on a detached HEAD at ${startPoint}.`);
-						console.error(`Just use: git checkout -b <branch-name>`);
+						console.error('Just use: git checkout -b <branch-name>');
 						console.error(`Instead of: git checkout -b <branch-name> ${startPoint}`);
 						process.exit(2);
 					}
@@ -270,12 +270,10 @@ async function main() {
 	}
 
 	// Ban bash commands using &&, ||, or ; operators
-	if (toolName === 'Bash' && typeof command === 'string') {
-		if (await hasChainOperators(command)) {
-			console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
-			console.error('Please run commands separately for better tracking and error handling.');
-			process.exit(2);
-		}
+	if (toolName === 'Bash' && typeof command === 'string' && await hasChainOperators(command)) {
+		console.error('❌ Chaining bash commands with &&, ||, or ; is not allowed');
+		console.error('Please run commands separately for better tracking and error handling.');
+		process.exit(2);
 	}
 
 	// Ban piping command output to filter commands (grep, head, tail, etc.)

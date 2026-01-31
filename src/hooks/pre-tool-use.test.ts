@@ -1,8 +1,8 @@
-import test from 'ava';
-import { execa } from 'execa';
 import { mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import path from 'node:path';
+import { execa } from 'execa';
+import test from 'ava';
 
 const hookPath = path.join(import.meta.dirname, '../../build/hooks/pre-tool-use.js');
 
@@ -27,9 +27,13 @@ async function runHook(input: Record<string, unknown>, cwd?: string): Promise<Ho
 
 function createBashToolInput(command: string, options: Record<string, unknown> = {}): Record<string, unknown> {
 	return {
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		session_id: 'test-session',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		transcript_path: '/tmp/test-transcript',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		tool_name: 'Bash',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		tool_input: {
 			command,
 			...options,
@@ -37,89 +41,89 @@ function createBashToolInput(command: string, options: Record<string, unknown> =
 	};
 }
 
-async function createTempGitRepo(): Promise<string> {
-	const tempDir = await mkdtemp(path.join(tmpdir(), 'claudex-test-'));
-	await execa('git', [ 'init' ], { cwd: tempDir });
-	await execa('git', [ 'config', 'user.email', 'test@test.com' ], { cwd: tempDir });
-	await execa('git', [ 'config', 'user.name', 'Test' ], { cwd: tempDir });
-	await writeFile(path.join(tempDir, 'README.md'), '# Test');
-	await execa('git', [ 'add', '.' ], { cwd: tempDir });
-	await execa('git', [ 'commit', '-m', 'Initial commit' ], { cwd: tempDir });
-	return tempDir;
+async function createTemporaryGitRepo(): Promise<string> {
+	const temporaryDir = await mkdtemp(path.join(tmpdir(), 'claudex-test-'));
+	await execa('git', [ 'init' ], { cwd: temporaryDir });
+	await execa('git', [ 'config', 'user.email', 'test@test.com' ], { cwd: temporaryDir });
+	await execa('git', [ 'config', 'user.name', 'Test' ], { cwd: temporaryDir });
+	await writeFile(path.join(temporaryDir, 'README.md'), '# Test');
+	await execa('git', [ 'add', '.' ], { cwd: temporaryDir });
+	await execa('git', [ 'commit', '-m', 'Initial commit' ], { cwd: temporaryDir });
+	return temporaryDir;
 }
 
 test('rejects git checkout -b with redundant start-point on detached HEAD', async t => {
-	const tempDir = await createTempGitRepo();
+	const temporaryDir = await createTemporaryGitRepo();
 	try {
 		// Create a branch to use as start-point
-		await execa('git', [ 'branch', 'feature-branch' ], { cwd: tempDir });
+		await execa('git', [ 'branch', 'feature-branch' ], { cwd: temporaryDir });
 
 		// Detach HEAD at feature-branch
-		await execa('git', [ 'checkout', '--detach', 'feature-branch' ], { cwd: tempDir });
+		await execa('git', [ 'checkout', '--detach', 'feature-branch' ], { cwd: temporaryDir });
 
 		const result = await runHook(
 			createBashToolInput('git checkout -b new-branch feature-branch'),
-			tempDir,
+			temporaryDir,
 		);
 
 		t.is(result.exitCode, 2);
 		t.true(result.stderr.includes('Unnecessary start-point'));
 		t.true(result.stderr.includes('git checkout -b <branch-name>'));
 	} finally {
-		await rm(tempDir, { recursive: true });
+		await rm(temporaryDir, { recursive: true });
 	}
 });
 
 test('allows git checkout -b with start-point on detached HEAD at different point', async t => {
-	const tempDir = await createTempGitRepo();
+	const temporaryDir = await createTemporaryGitRepo();
 	try {
 		// Create two branches
-		await execa('git', [ 'branch', 'branch-a' ], { cwd: tempDir });
-		await writeFile(path.join(tempDir, 'file.txt'), 'content');
-		await execa('git', [ 'add', '.' ], { cwd: tempDir });
-		await execa('git', [ 'commit', '-m', 'Second commit' ], { cwd: tempDir });
-		await execa('git', [ 'branch', 'branch-b' ], { cwd: tempDir });
+		await execa('git', [ 'branch', 'branch-a' ], { cwd: temporaryDir });
+		await writeFile(path.join(temporaryDir, 'file.txt'), 'content');
+		await execa('git', [ 'add', '.' ], { cwd: temporaryDir });
+		await execa('git', [ 'commit', '-m', 'Second commit' ], { cwd: temporaryDir });
+		await execa('git', [ 'branch', 'branch-b' ], { cwd: temporaryDir });
 
 		// Detach HEAD at branch-a
-		await execa('git', [ 'checkout', '--detach', 'branch-a' ], { cwd: tempDir });
+		await execa('git', [ 'checkout', '--detach', 'branch-a' ], { cwd: temporaryDir });
 
 		// Try to create branch from branch-b (different point)
 		const result = await runHook(
 			createBashToolInput('git checkout -b new-branch branch-b'),
-			tempDir,
+			temporaryDir,
 		);
 
 		t.is(result.exitCode, 0);
 	} finally {
-		await rm(tempDir, { recursive: true });
+		await rm(temporaryDir, { recursive: true });
 	}
 });
 
 test('allows git checkout -b without start-point', async t => {
-	const tempDir = await createTempGitRepo();
+	const temporaryDir = await createTemporaryGitRepo();
 	try {
 		const result = await runHook(
 			createBashToolInput('git checkout -b new-branch'),
-			tempDir,
+			temporaryDir,
 		);
 
 		t.is(result.exitCode, 0);
 	} finally {
-		await rm(tempDir, { recursive: true });
+		await rm(temporaryDir, { recursive: true });
 	}
 });
 
 test('allows git checkout -b with start-point when on regular branch', async t => {
-	const tempDir = await createTempGitRepo();
+	const temporaryDir = await createTemporaryGitRepo();
 	try {
 		const result = await runHook(
 			createBashToolInput('git checkout -b new-branch master'),
-			tempDir,
+			temporaryDir,
 		);
 
 		t.is(result.exitCode, 0);
 	} finally {
-		await rm(tempDir, { recursive: true });
+		await rm(temporaryDir, { recursive: true });
 	}
 });
 
@@ -159,6 +163,7 @@ test('rejects git commit --no-verify', async t => {
 });
 
 test('rejects run_in_background', async t => {
+	// eslint-disable-next-line @typescript-eslint/naming-convention
 	const result = await runHook(createBashToolInput('sleep 10', { run_in_background: true }));
 
 	t.is(result.exitCode, 2);
@@ -215,35 +220,39 @@ test('rejects tail command', async t => {
 });
 
 test('rejects awk command', async t => {
-	const result = await runHook(createBashToolInput("awk '{print $1}' file.txt"));
+	const result = await runHook(createBashToolInput('awk \'{print $1}\' file.txt'));
 
 	t.is(result.exitCode, 2);
 	t.true(result.stderr.includes('awk'));
 });
 
 test('allows cat with heredoc', async t => {
-	const tempDir = await createTempGitRepo();
+	const temporaryDir = await createTemporaryGitRepo();
 	try {
 		const result = await runHook(
 			createBashToolInput(`git commit -m "$(cat <<'EOF'
 Test message
 EOF
 )"`),
-			tempDir,
+			temporaryDir,
 		);
 
 		// Should not be rejected for cat usage (may fail for other reasons like nothing to commit)
 		t.false(result.stderr.includes('cat, sed, head, tail, awk'));
 	} finally {
-		await rm(tempDir, { recursive: true });
+		await rm(temporaryDir, { recursive: true });
 	}
 });
 
 test('allows Grep tool', async t => {
 	const result = await runHook({
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		session_id: 'test-session',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		transcript_path: '/tmp/test-transcript',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		tool_name: 'Grep',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		tool_input: {
 			pattern: 'test',
 			path: '/tmp',
@@ -254,30 +263,34 @@ test('allows Grep tool', async t => {
 });
 
 test('allows git status', async t => {
-	const tempDir = await createTempGitRepo();
+	const temporaryDir = await createTemporaryGitRepo();
 	try {
-		const result = await runHook(createBashToolInput('git status'), tempDir);
+		const result = await runHook(createBashToolInput('git status'), temporaryDir);
 		t.is(result.exitCode, 0);
 	} finally {
-		await rm(tempDir, { recursive: true });
+		await rm(temporaryDir, { recursive: true });
 	}
 });
 
 test('allows git add .', async t => {
-	const tempDir = await createTempGitRepo();
+	const temporaryDir = await createTemporaryGitRepo();
 	try {
-		const result = await runHook(createBashToolInput('git add .'), tempDir);
+		const result = await runHook(createBashToolInput('git add .'), temporaryDir);
 		t.is(result.exitCode, 0);
 	} finally {
-		await rm(tempDir, { recursive: true });
+		await rm(temporaryDir, { recursive: true });
 	}
 });
 
 test('rejects WebSearch with 2024', async t => {
 	const result = await runHook({
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		session_id: 'test-session',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		transcript_path: '/tmp/test-transcript',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		tool_name: 'WebSearch',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		tool_input: {
 			query: 'react documentation 2024',
 		},

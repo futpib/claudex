@@ -39,6 +39,7 @@ function getWordLiteralValue(word: BashWord): string | undefined {
 }
 
 function getWordPartLiteralValue(part: BashWordPart): string | undefined {
+	// eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
 	switch (part.type) {
 		case 'literal': {
 			return part.value;
@@ -63,6 +64,7 @@ function getWordPartLiteralValue(part: BashWordPart): string | undefined {
 		}
 
 		default: {
+			// Intentionally non-exhaustive: other types return undefined
 			return undefined;
 		}
 	}
@@ -121,6 +123,7 @@ function extractCommandNamesFromWord(word: BashWord, commands: Set<string>): voi
 }
 
 function extractCommandNamesFromWordPart(part: BashWordPart, commands: Set<string>): void {
+	// eslint-disable-next-line @typescript-eslint/switch-exhaustiveness-check
 	switch (part.type) {
 		case 'commandSubstitution':
 		case 'backtickSubstitution': {
@@ -137,6 +140,11 @@ function extractCommandNamesFromWordPart(part: BashWordPart, commands: Set<strin
 				extractCommandNamesFromWordPart(innerPart, commands);
 			}
 
+			break;
+		}
+
+		default: {
+			// Intentionally non-exhaustive: other types don't contain commands
 			break;
 		}
 	}
@@ -218,6 +226,7 @@ function someSimpleCommandInUnit(
  * Gets the start-point from a `git checkout -b <branch> <start-point>` command.
  * Returns undefined if not a git checkout -b command or if no start-point is specified.
  */
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export async function getGitCheckoutBStartPoint(command: string): Promise<string | undefined> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
@@ -250,6 +259,7 @@ export async function getGitCheckoutBStartPoint(command: string): Promise<string
 		// After -b <branch>, there might be a start-point
 		// Pattern: git checkout -b <branch> [<start-point>]
 		// We need to skip the branch name and get the next positional argument
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		const argsAfterBFlag = argsAfterCheckout.slice(bFlagIndex + 1);
 
 		// Skip the branch name (first positional arg after -b)
@@ -307,6 +317,7 @@ export async function getPipedFilterCommand(command: string): Promise<string | u
 	return undefined;
 }
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
 export async function hasGitCFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
