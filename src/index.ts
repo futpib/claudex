@@ -778,14 +778,19 @@ async function setupHostPortForwarding(): Promise<(() => void) | undefined> {
 			`TCP:host.docker.internal:${port}`,
 		]);
 		for (const child of [ child4, child6 ]) {
-			// eslint-disable-next-line promise/prefer-await-to-then, @typescript-eslint/no-loop-func
-			child.catch((error: unknown) => {
-				if (stopped) {
-					return;
-				}
+			// Handle errors asynchronously without blocking
+			// eslint-disable-next-line @typescript-eslint/no-loop-func
+			void (async () => {
+				try {
+					await child;
+				} catch (error: unknown) {
+					if (stopped) {
+						return;
+					}
 
-				console.error(`socat port ${port} error:`, error instanceof Error ? error.message : error);
-			});
+					console.error(`socat port ${port} error:`, error instanceof Error ? error.message : error);
+				}
+			})();
 		}
 
 		children.push(child4, child6);
