@@ -54,7 +54,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 					throw new Error('--project requires a path argument');
 				}
 
-				scope = { type: 'project', path: expandTilde(projectPath) };
+				scope = { type: 'project', path: projectPath };
 
 				break;
 			}
@@ -115,6 +115,11 @@ function parseArgs(argv: string[]): ParsedArgs {
 	};
 }
 
+function findProjectKey(projects: Record<string, unknown>, scopePath: string): string | undefined {
+	const expandedScopePath = expandTilde(scopePath);
+	return Object.keys(projects).find(key => expandTilde(key) === expandedScopePath);
+}
+
 function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfig | undefined {
 	switch (scope.type) {
 		case 'global': {
@@ -122,7 +127,12 @@ function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfi
 		}
 
 		case 'project': {
-			return config.projects?.[scope.path];
+			if (!config.projects) {
+				return undefined;
+			}
+
+			const key = findProjectKey(config.projects, scope.path);
+			return key ? config.projects[key] : undefined;
 		}
 
 		case 'group': {
@@ -139,8 +149,10 @@ function ensureSection(config: RootConfig, scope: Scope): BaseConfig | ProjectCo
 
 		case 'project': {
 			config.projects ??= {};
-			config.projects[scope.path] ??= {};
-			return config.projects[scope.path];
+			const existingKey = findProjectKey(config.projects, scope.path);
+			const key = existingKey ?? scope.path;
+			config.projects[key] ??= {};
+			return config.projects[key];
 		}
 
 		case 'group': {

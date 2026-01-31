@@ -698,7 +698,14 @@ export type FindConfigFileResult = ConfigFileEntry | 'ambiguous' | 'none';
 
 export async function findConfigFileForProject(projectPath: string): Promise<FindConfigFileResult> {
 	const entries = await readAllConfigFiles();
-	const matches = entries.filter(entry => entry.config.projects?.[projectPath] !== undefined);
+	const expandedProjectPath = expandTilde(projectPath);
+	const matches = entries.filter(entry => {
+		if (!entry.config.projects) {
+			return false;
+		}
+
+		return Object.keys(entry.config.projects).some(key => expandTilde(key) === expandedProjectPath);
+	});
 
 	if (matches.length === 1) {
 		return matches[0];
