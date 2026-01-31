@@ -322,7 +322,7 @@ export async function getPipedFilterCommand(command: string): Promise<string | u
 	return undefined;
 }
 
-export async function hasGitCommitFlag(command: string): Promise<boolean> {
+export async function hasGitChangeDirectoryFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
 		return false;

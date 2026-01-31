@@ -7,7 +7,7 @@ export const banGitC: Rule = {
 			return { type: 'pass' };
 		}
 
-		if (await context.helpers.hasGitCommitFlag(context.command)) {
+		if (await context.helpers.hasGitChangeDirectoryFlag(context.command)) {
 			return {
 				type: 'violation',
 				messages: [
