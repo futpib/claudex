@@ -469,6 +469,62 @@ test('rejects WebSearch with 2024', async t => {
 	}
 });
 
+test('rejects WebSearch with any outdated year', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banOutdatedYearInSearch: true });
+	try {
+		const result = await runHook({
+			session_id: 'test-session',
+			transcript_path: '/tmp/test-transcript',
+			tool_name: 'WebSearch',
+			tool_input: {
+				query: 'python tutorial 2023',
+			},
+		}, undefined, { XDG_CONFIG_HOME: configDir });
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('2023'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows WebSearch with current year', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banOutdatedYearInSearch: true });
+	try {
+		const currentYear = new Date().getFullYear();
+		const result = await runHook({
+			session_id: 'test-session',
+			transcript_path: '/tmp/test-transcript',
+			tool_name: 'WebSearch',
+			tool_input: {
+				query: `react documentation ${currentYear}`,
+			},
+		}, undefined, { XDG_CONFIG_HOME: configDir });
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows WebSearch with old non-recent year', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banOutdatedYearInSearch: true });
+	try {
+		const result = await runHook({
+			session_id: 'test-session',
+			transcript_path: '/tmp/test-transcript',
+			tool_name: 'WebSearch',
+			tool_input: {
+				query: 'history of computing 1995',
+			},
+		}, undefined, { XDG_CONFIG_HOME: configDir });
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
 test('allows git commit --amend when hooks not configured', async t => {
 	const { configDir, cleanup } = await createHooksConfig({});
 	try {

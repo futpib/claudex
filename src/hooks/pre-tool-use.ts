@@ -174,12 +174,13 @@ async function main() {
 	const { config } = await getMergedConfig(process.cwd());
 	const hooks = resolveHooks(config.hooks);
 
-	// Ban web searches containing "2024" to encourage using current year
+	// Ban web searches containing recent but outdated years (LLM training data artifacts)
 	if (hooks.banOutdatedYearInSearch && preToolUseHookWithKnownToolInput?.tool_name === 'WebSearch') {
 		const { query } = preToolUseHookWithKnownToolInput.tool_input;
-		if (/\b2024\b/.test(query)) {
-			const currentYear = new Date().getFullYear();
-			console.error('❌ Web searches containing "2024" are not allowed');
+		const currentYear = new Date().getFullYear();
+		const yearMatch = /\b(20[2-9]\d)\b/.exec(query);
+		if (yearMatch && Number(yearMatch[1]) < currentYear) {
+			console.error(`❌ Web searches containing outdated year "${yearMatch[1]}" are not allowed`);
 			console.error(`The current year is ${currentYear}. Please update your search query to use the current year.`);
 			process.exit(2);
 		}

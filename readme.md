@@ -221,7 +221,7 @@ Or in `config.json`:
 | `banCommandChaining` | Ban `&&`, `\|\|`, `;` command chaining |
 | `banPipeToFilter` | Ban piping to filter commands (grep, head, tail, etc.) |
 | `banFileOperationCommands` | Ban cat, sed, head, tail, awk (use dedicated tools) |
-| `banOutdatedYearInSearch` | Ban web searches containing "2024" |
+| `banOutdatedYearInSearch` | Ban web searches containing recent but outdated years (2020+ but before current) |
 | `requireCoAuthorshipProof` | Require co-authorship proof PIN for Co-authored-by commits |
 | `logToolUse` | Log non-read-only tool usage |
 
