@@ -178,7 +178,7 @@ function coerceValue(field: string, value: string): string | number | boolean {
 		return number_;
 	}
 
-	if (field === 'shareVolumes') {
+	if (field === 'shareVolumes' || field === 'hooks' || field === 'mcpServers') {
 		if (value === 'true') {
 			return true;
 		}

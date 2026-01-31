@@ -1,0 +1,39 @@
+import type { Rule } from './index.js';
+
+export const banFileOperationCommands: Rule = {
+	name: 'ban-file-operation-commands',
+	async fn(context) {
+		if (context.toolName !== 'Bash' || !context.command) {
+			return { type: 'pass' };
+		}
+
+		const fileOperationCommands = new Set([ 'cat', 'sed', 'head', 'tail', 'awk' ]);
+
+		const actualCommands = await context.helpers.extractCommandNames(context.command);
+
+		const bannedCommands = [ ...actualCommands ].filter(cmd => fileOperationCommands.has(cmd));
+
+		if (bannedCommands.length > 0) {
+			// Allow cat with heredoc syntax (e.g., cat <<'EOF' or cat <<EOF)
+			const catHeredocPattern = /\bcat\s+<<-?['"]?\w+['"]?/;
+			if (bannedCommands.includes('cat') && catHeredocPattern.test(context.command)) {
+				return { type: 'pass' };
+			}
+
+			return {
+				type: 'violation',
+				messages: [
+					'❌ Using bash commands (cat, sed, head, tail, awk) for file operations is not allowed',
+					`Found: ${bannedCommands.join(', ')}`,
+					'Please use the dedicated tools instead:',
+					'  - Read tool: for reading files (supports offset/limit for specific line ranges)',
+					'  - Edit tool: for editing files (instead of sed/awk)',
+					'  - Write tool: for creating files (instead of cat/echo redirection)',
+					'  - Grep tool: for searching file contents (instead of grep)',
+				],
+			};
+		}
+
+		return { type: 'pass' };
+	},
+};

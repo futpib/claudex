@@ -145,6 +145,10 @@ claudex config <action> [scope flags] [key] [value]
 | `extraHosts.<HOST>` | string | set, unset |
 | `shareVolumes` | boolean | set, unset |
 | `settingSources` | string | set, unset |
+| `hooks` | boolean / object | set, unset |
+| `hooks.<FLAG>` | boolean | set, unset |
+| `mcpServers` | boolean / object | set, unset |
+| `mcpServers.<NAME>` | boolean | set, unset |
 | `group` | string (project only) | set, unset |
 
 ### Examples
@@ -174,9 +178,64 @@ claudex config get --group mygroup hostPorts
 
 ## Configuration
 
+### Hooks and MCP Servers
+
+Pre-tool-use hook checks and MCP server registration are **off by default**. Enable them in your claudex config:
+
+```bash
+# Enable all hook checks and MCP servers
+claudex config set --global hooks true
+claudex config set --global mcpServers true
+
+# Enable a single hook check
+claudex config set --global hooks.banGitCommitAmend true
+
+# Enable the claudex MCP server
+claudex config set --global mcpServers.claudex true
+```
+
+Or in `config.json`:
+
+```jsonc
+{
+  // Enable everything:
+  "hooks": true,
+  "mcpServers": true
+
+  // Or granular:
+  // "hooks": { "banGitCommitAmend": true, "logToolUse": true },
+  // "mcpServers": { "claudex": true }
+}
+```
+
+**Hook flags:**
+
+| Flag | Description |
+|---|---|
+| `banGitC` | Ban `git -C` (running git in a different directory) |
+| `banGitAddAll` | Ban `git add -A` / `--all` / `--no-ignore-removal` |
+| `banGitCommitAmend` | Ban `git commit --amend` |
+| `banGitCommitNoVerify` | Ban `git commit --no-verify` |
+| `banGitCheckoutRedundantStartPoint` | Ban redundant start-point in `git checkout -b` on detached HEAD |
+| `banBackgroundBash` | Ban `run_in_background` bash commands |
+| `banCommandChaining` | Ban `&&`, `\|\|`, `;` command chaining |
+| `banPipeToFilter` | Ban piping to filter commands (grep, head, tail, etc.) |
+| `banFileOperationCommands` | Ban cat, sed, head, tail, awk (use dedicated tools) |
+| `banOutdatedYearInSearch` | Ban web searches containing recent but outdated years (2020+ but before current) |
+| `requireCoAuthorshipProof` | Require co-authorship proof PIN for Co-authored-by commits |
+| `logToolUse` | Log non-read-only tool usage |
+
+**MCP server flags:**
+
+| Flag | Description |
+|---|---|
+| `claudex` | Register the claudex MCP server in `~/.claude.json` |
+
+Setting `hooks: true` enables all 12 checks and registers hooks in `~/.claude/settings.json`. Setting `hooks: { ... }` enables only listed checks; any truthy value triggers hook registration. When `hooks` is not set (default), no checks fire and no hooks are registered.
+
 ### Hook Configuration
 
-Hooks are automatically configured in `~/.claude/settings.json`:
+Hooks are configured in `~/.claude/settings.json` when any hook flag is enabled:
 
 ```json
 {

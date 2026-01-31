@@ -23,6 +23,33 @@ const SshConfigSchema = z.object({
 	hosts: z.array(z.string()).optional(),
 });
 
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const HooksDetailConfigSchema = z.object({
+	banGitC: z.boolean().optional(),
+	banGitAddAll: z.boolean().optional(),
+	banGitCommitAmend: z.boolean().optional(),
+	banGitCommitNoVerify: z.boolean().optional(),
+	banGitCheckoutRedundantStartPoint: z.boolean().optional(),
+	banBackgroundBash: z.boolean().optional(),
+	banCommandChaining: z.boolean().optional(),
+	banPipeToFilter: z.boolean().optional(),
+	banFileOperationCommands: z.boolean().optional(),
+	banOutdatedYearInSearch: z.boolean().optional(),
+	requireCoAuthorshipProof: z.boolean().optional(),
+	logToolUse: z.boolean().optional(),
+});
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const HooksConfigSchema = z.union([ z.literal(true), HooksDetailConfigSchema ]);
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const McpServersDetailConfigSchema = z.object({
+	claudex: z.boolean().optional(),
+});
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const McpServersConfigSchema = z.union([ z.literal(true), McpServersDetailConfigSchema ]);
+
 // Base config schema - can appear at both root and project level
 // eslint-disable-next-line @typescript-eslint/naming-convention
 const BaseConfigSchema = z.object({
@@ -34,6 +61,8 @@ const BaseConfigSchema = z.object({
 	extraHosts: z.record(z.string(), z.string()).optional(),
 	shareVolumes: z.boolean().optional(), // Default true - auto-share volumes between group members
 	settingSources: z.string().optional(), // Default "user,local" - controls --setting-sources flag for Claude Code
+	hooks: HooksConfigSchema.optional(),
+	mcpServers: McpServersConfigSchema.optional(),
 });
 
 // Project config can reference a group
@@ -54,12 +83,61 @@ export { RootConfigSchema };
 export type VolumeMount = z.infer<typeof VolumeMountSchema>;
 export type Volume = z.infer<typeof VolumeSchema>;
 export type SshConfig = z.infer<typeof SshConfigSchema>;
+export type HooksDetail = z.infer<typeof HooksDetailConfigSchema>;
+export type HooksConfig = z.infer<typeof HooksConfigSchema>;
+export type McpServersDetail = z.infer<typeof McpServersDetailConfigSchema>;
+export type McpServersConfig = z.infer<typeof McpServersConfigSchema>;
 export type BaseConfig = z.infer<typeof BaseConfigSchema>;
 export type ProjectConfig = z.infer<typeof ProjectConfigSchema>;
 export type RootConfig = z.infer<typeof RootConfigSchema>;
 
 // Merged config is the same as base config (after merging root + project)
 export type ClaudexConfig = BaseConfig;
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const ALL_HOOK_FLAGS: Array<keyof HooksDetail> = [
+	'banGitC',
+	'banGitAddAll',
+	'banGitCommitAmend',
+	'banGitCommitNoVerify',
+	'banGitCheckoutRedundantStartPoint',
+	'banBackgroundBash',
+	'banCommandChaining',
+	'banPipeToFilter',
+	'banFileOperationCommands',
+	'banOutdatedYearInSearch',
+	'requireCoAuthorshipProof',
+	'logToolUse',
+];
+
+// eslint-disable-next-line @typescript-eslint/naming-convention
+const ALL_MCP_SERVER_FLAGS: Array<keyof McpServersDetail> = [
+	'claudex',
+];
+
+export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
+	if (hooks === true) {
+		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, true ])) as Required<HooksDetail>;
+	}
+
+	if (!hooks) {
+		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, false ])) as Required<HooksDetail>;
+	}
+
+	return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, hooks[k] ?? false ])) as Required<HooksDetail>;
+}
+
+export function resolveMcpServers(mcpServers: McpServersConfig | undefined): Required<McpServersDetail> {
+	if (mcpServers === true) {
+		return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [ k, true ])) as Required<McpServersDetail>;
+	}
+
+	if (!mcpServers) {
+		return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [ k, false ])) as Required<McpServersDetail>;
+	}
+
+	return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [ k, mcpServers[k] ?? false ])) as Required<McpServersDetail>;
+}
 
 export function expandTilde(filePath: string): string {
 	if (filePath.startsWith('~/')) {
@@ -203,6 +281,42 @@ function dedupeVolumes(volumes: Volume[]): Volume[] {
 	return result;
 }
 
+function mergeHooksConfigs(base: HooksConfig | undefined, overlay: HooksConfig | undefined): HooksConfig | undefined {
+	if (base === undefined && overlay === undefined) {
+		return undefined;
+	}
+
+	const baseResolved = resolveHooks(base);
+	const overlayResolved = overlay === undefined
+		? Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, undefined ]))
+		: resolveHooks(overlay);
+
+	const merged: Record<string, boolean> = {};
+	for (const key of ALL_HOOK_FLAGS) {
+		merged[key] = (overlayResolved as Record<string, boolean | undefined>)[key] ?? baseResolved[key];
+	}
+
+	return merged as HooksDetail;
+}
+
+function mergeMcpServersConfigs(base: McpServersConfig | undefined, overlay: McpServersConfig | undefined): McpServersConfig | undefined {
+	if (base === undefined && overlay === undefined) {
+		return undefined;
+	}
+
+	const baseResolved = resolveMcpServers(base);
+	const overlayResolved = overlay === undefined
+		? Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [ k, undefined ]))
+		: resolveMcpServers(overlay);
+
+	const merged: Record<string, boolean> = {};
+	for (const key of ALL_MCP_SERVER_FLAGS) {
+		merged[key] = (overlayResolved as Record<string, boolean | undefined>)[key] ?? baseResolved[key];
+	}
+
+	return merged as McpServersDetail;
+}
+
 function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	const packages = dedupeStrings([
 		...(base.packages ?? []),
@@ -244,6 +358,12 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	// SettingSources: overlay takes precedence if defined, otherwise use base
 	const settingSources = overlay.settingSources ?? base.settingSources;
 
+	// Hooks: merge detail objects per-key, overlay wins
+	const hooks = mergeHooksConfigs(base.hooks, overlay.hooks);
+
+	// McpServers: merge detail objects per-key, overlay wins
+	const mcpServers = mergeMcpServersConfigs(base.mcpServers, overlay.mcpServers);
+
 	return {
 		packages: packages.length > 0 ? packages : undefined,
 		volumes: volumes.length > 0 ? volumes : undefined,
@@ -258,6 +378,8 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 		extraHosts: Object.keys(extraHosts).length > 0 ? extraHosts : undefined,
 		shareVolumes,
 		settingSources,
+		hooks,
+		mcpServers,
 	};
 }
 
@@ -393,7 +515,6 @@ async function readRootConfig(): Promise<ReadRootConfigResult> {
 		const files = await fs.readdir(configDPath);
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
 
-		// eslint-disable-next-line no-await-in-loop
 		for (const file of jsonFiles) {
 			const filePath = path.join(configDPath, file);
 			try {
@@ -451,6 +572,8 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		hostPorts: config.hostPorts ? [ ...config.hostPorts ].sort((a, b) => a - b) : undefined,
 		extraHosts: config.extraHosts ? sortEnv(config.extraHosts) : undefined,
 		settingSources: config.settingSources,
+		hooks: config.hooks,
+		mcpServers: config.mcpServers,
 	};
 }
 
@@ -566,7 +689,7 @@ export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
 	try {
 		const files = await fs.readdir(configDPath);
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
-		// eslint-disable-next-line no-await-in-loop
+
 		for (const file of jsonFiles) {
 			const filePath = path.join(configDPath, file);
 			try {
