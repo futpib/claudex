@@ -1,7 +1,7 @@
 import {
-	mkdtemp, rm, readFile, writeFile, mkdir,
+	mkdtemp, rm, readFile, writeFile, mkdir, realpath,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import { tmpdir, homedir } from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import test from 'ava';
@@ -480,6 +480,125 @@ test('implicit project scope uses tilde path as project key', async t => {
 		t.deepEqual(projects[projectDir].volumes, [ '~/code/parser' ]);
 	} finally {
 		await rm(projectDir, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('implicit scope from git worktree resolves to parent repo project', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const claudexDir = path.join(configDir, 'claudex');
+	const configDDir = path.join(claudexDir, 'config.json.d');
+	await mkdir(configDDir, { recursive: true });
+
+	// Create a git repo and a worktree
+	const repoDir = await mkdtemp(path.join(tmpdir(), 'claudex-repo-'));
+	await execa('git', [ 'init' ], { cwd: repoDir });
+	await execa('git', [ 'config', 'user.email', 'test@test.com' ], { cwd: repoDir });
+	await execa('git', [ 'config', 'user.name', 'Test' ], { cwd: repoDir });
+	await writeFile(path.join(repoDir, 'README.md'), '# Test');
+	await execa('git', [ 'add', '.' ], { cwd: repoDir });
+	await execa('git', [ 'commit', '-m', 'Initial commit' ], { cwd: repoDir });
+
+	const worktreeDir = repoDir + '.worktree';
+	await execa('git', [ 'worktree', 'add', worktreeDir, '-b', 'worktree-branch' ], { cwd: repoDir });
+
+	// Pre-create a config file with the main repo as a project
+	await writeFile(
+		path.join(configDDir, '99-private.json'),
+		JSON.stringify({ projects: { [repoDir]: { packages: [ 'git' ] } } }),
+	);
+
+	try {
+		// Run from the worktree directory without --project flag
+		const result = await runConfigWithDir(configDir, [ 'add', 'packages', 'zig' ], worktreeDir);
+		t.is(result.exitCode, 0);
+
+		// Should write to the parent repo's project entry, not create a new one
+		const config = await readJsonFile(path.join(configDDir, '99-private.json'));
+		const projects = (config as { projects: Record<string, { packages?: string[] }> }).projects;
+		t.deepEqual(projects[repoDir].packages, [ 'git', 'zig' ]);
+
+		// config.json should not exist (nothing should have been written there)
+		try {
+			await readJsonFile(path.join(claudexDir, 'config.json'));
+			t.fail('config.json should not have been created');
+		} catch {
+			t.pass('config.json correctly does not exist');
+		}
+	} finally {
+		await rm(worktreeDir, { recursive: true });
+		await rm(repoDir, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('implicit scope from cwd under home directory uses tilde in project key', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const claudexDir = path.join(configDir, 'claudex');
+
+	const home = homedir();
+	const realHome = await realpath(home);
+	// Use a real subdirectory under $HOME as cwd
+	const projectDir = await mkdtemp(path.join(home, '.claudex-test-project-'));
+	const realProjectDir = await realpath(projectDir);
+	const expectedTildePath = '~' + realProjectDir.slice(realHome.length);
+
+	try {
+		const result = await runConfigWithDir(configDir, [ 'add', 'packages', 'vim' ], projectDir);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(claudexDir, 'config.json'));
+		const projects = (config as { projects?: Record<string, unknown> }).projects ?? {};
+		const projectKeys = Object.keys(projects);
+
+		t.log('homedir:', home);
+		t.log('realHome:', realHome);
+		t.log('projectDir:', projectDir);
+		t.log('realProjectDir:', realProjectDir);
+		t.log('expectedTildePath:', expectedTildePath);
+		t.log('projectKeys:', projectKeys);
+
+		// Should use tilde path as key, not absolute path
+		t.truthy(projects[expectedTildePath], `expected project key ${expectedTildePath}`);
+		t.is(projects[projectDir], undefined, `should not have absolute path key ${projectDir}`);
+	} finally {
+		await rm(projectDir, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('implicit scope from git worktree creates project under parent repo path', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const claudexDir = path.join(configDir, 'claudex');
+
+	// Create a git repo and a worktree
+	const repoDir = await mkdtemp(path.join(tmpdir(), 'claudex-repo-'));
+	await execa('git', [ 'init' ], { cwd: repoDir });
+	await execa('git', [ 'config', 'user.email', 'test@test.com' ], { cwd: repoDir });
+	await execa('git', [ 'config', 'user.name', 'Test' ], { cwd: repoDir });
+	await writeFile(path.join(repoDir, 'README.md'), '# Test');
+	await execa('git', [ 'add', '.' ], { cwd: repoDir });
+	await execa('git', [ 'commit', '-m', 'Initial commit' ], { cwd: repoDir });
+
+	const worktreeDir = repoDir + '.worktree';
+	await execa('git', [ 'worktree', 'add', worktreeDir, '-b', 'worktree-branch' ], { cwd: repoDir });
+
+	try {
+		// Run from the worktree directory without --project flag
+		// No existing project entry for the parent repo
+		const result = await runConfigWithDir(configDir, [ 'add', 'packages', 'zig' ], worktreeDir);
+		t.is(result.exitCode, 0);
+
+		// Should create project under the parent repo path, not the worktree path
+		const config = await readJsonFile(path.join(claudexDir, 'config.json'));
+		const projects = (config as { projects?: Record<string, unknown> }).projects ?? {};
+		t.deepEqual((projects[repoDir] as { packages?: string[] })?.packages, [ 'zig' ]);
+
+		// Should NOT have an entry for the worktree path
+		t.is(projects[worktreeDir], undefined);
+	} finally {
+		await rm(worktreeDir, { recursive: true });
+		await rm(repoDir, { recursive: true });
 		await cleanup();
 	}
 });

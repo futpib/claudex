@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import {
@@ -7,6 +9,7 @@ import {
 	writeSingleConfigFile,
 	findConfigFileForProject,
 	findConfigFileForGroup,
+	getGitWorktreeParentPath,
 	expandTilde,
 	type RootConfig,
 	type BaseConfig,
@@ -16,7 +19,7 @@ import {
 type Action = 'list' | 'get' | 'set' | 'add' | 'unset';
 
 type Scope =
-	| { type: 'project'; path: string }
+	| { type: 'project'; path: string; fromCwd?: boolean }
 	| { type: 'global' }
 	| { type: 'group'; name: string };
 
@@ -108,11 +111,21 @@ function parseArgs(argv: string[]): ParsedArgs {
 		scope = { type: 'global' };
 	}
 
-	scope ??= { type: 'project', path: process.cwd() };
+	scope ??= { type: 'project', path: process.cwd(), fromCwd: true };
 
 	return {
 		action, scope, file, key, value,
 	};
+}
+
+function collapseTilde(filePath: string): string {
+	const homedir = fs.realpathSync(os.homedir());
+	const realPath = fs.realpathSync(filePath);
+	if (realPath === homedir || realPath.startsWith(homedir + '/')) {
+		return '~' + realPath.slice(homedir.length);
+	}
+
+	return filePath;
 }
 
 function findProjectKey(projects: Record<string, unknown>, scopePath: string): string | undefined {
@@ -497,6 +510,16 @@ async function handleUnset(scope: Scope, key: string, value: string | undefined,
 
 export async function configMain(argv: string[]): Promise<void> {
 	const parsed = parseArgs(argv);
+
+	// Resolve implicit cwd scope: worktree → parent repo, absolute → tilde
+	if (parsed.scope.type === 'project' && parsed.scope.fromCwd) {
+		const worktreeParent = await getGitWorktreeParentPath(parsed.scope.path);
+		if (worktreeParent) {
+			parsed.scope.path = worktreeParent;
+		}
+
+		parsed.scope.path = collapseTilde(parsed.scope.path);
+	}
 
 	switch (parsed.action) {
 		case 'list': {
