@@ -100,8 +100,7 @@ const ALL_HOOK_FLAGS: Array<keyof HooksDetail> = [
 	'logToolUse',
 ];
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const ALL_MCP_SERVER_FLAGS: Array<keyof McpServersDetail> = [
+const allMcpServerFlags: Array<keyof McpServersDetail> = [
 	'claudex',
 ];
 
@@ -119,14 +118,14 @@ export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDeta
 
 export function resolveMcpServers(mcpServers: McpServersConfig | undefined): Required<McpServersDetail> {
 	if (mcpServers === true) {
-		return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [ k, true ])) as Required<McpServersDetail>;
+		return Object.fromEntries(allMcpServerFlags.map(k => [ k, true ])) as Required<McpServersDetail>;
 	}
 
 	if (!mcpServers) {
-		return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [ k, false ])) as Required<McpServersDetail>;
+		return Object.fromEntries(allMcpServerFlags.map(k => [ k, false ])) as Required<McpServersDetail>;
 	}
 
-	return Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [ k, mcpServers[k] ?? false ])) as Required<McpServersDetail>;
+	return Object.fromEntries(allMcpServerFlags.map(k => [ k, mcpServers[k] ?? false ])) as Required<McpServersDetail>;
 }
 
 export function expandTilde(filePath: string): string {
@@ -296,11 +295,11 @@ function mergeMcpServersConfigs(base: McpServersConfig | undefined, overlay: Mcp
 
 	const baseResolved = resolveMcpServers(base);
 	const overlayResolved = overlay === undefined
-		? Object.fromEntries(ALL_MCP_SERVER_FLAGS.map(k => [ k, undefined ]))
+		? Object.fromEntries(allMcpServerFlags.map(k => [ k, undefined ]))
 		: resolveMcpServers(overlay);
 
 	const merged: Record<string, boolean> = {};
-	for (const key of ALL_MCP_SERVER_FLAGS) {
+	for (const key of allMcpServerFlags) {
 		merged[key] = (overlayResolved as Record<string, boolean | undefined>)[key] ?? baseResolved[key];
 	}
 
@@ -485,8 +484,7 @@ type ReadRootConfigResult = {
 async function readRootConfig(): Promise<ReadRootConfigResult> {
 	const configDir = paths.config;
 	const configPath = path.join(configDir, 'config.json');
-	// eslint-disable-next-line @typescript-eslint/naming-convention
-	const configDPath = path.join(configDir, 'config.json.d');
+	const configJsonDirectoryPath = path.join(configDir, 'config.json.d');
 
 	let merged: RootConfig = {};
 	const configFiles: string[] = [];
@@ -502,11 +500,11 @@ async function readRootConfig(): Promise<ReadRootConfigResult> {
 
 	// Read all .json files from config.json.d/
 	try {
-		const files = await fs.readdir(configDPath);
+		const files = await fs.readdir(configJsonDirectoryPath);
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
 
 		for (const file of jsonFiles) {
-			const filePath = path.join(configDPath, file);
+			const filePath = path.join(configJsonDirectoryPath, file);
 			try {
 				// eslint-disable-next-line no-await-in-loop
 				const content = await fs.readFile(filePath, 'utf8');
@@ -665,8 +663,7 @@ export type ConfigFileEntry = {
 export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
 	const configDir = paths.config;
 	const configPath = path.join(configDir, 'config.json');
-	// eslint-disable-next-line @typescript-eslint/naming-convention
-	const configDPath = path.join(configDir, 'config.json.d');
+	const configJsonDirectoryPath = path.join(configDir, 'config.json.d');
 	const entries: ConfigFileEntry[] = [];
 
 	try {
@@ -677,11 +674,11 @@ export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
 	}
 
 	try {
-		const files = await fs.readdir(configDPath);
+		const files = await fs.readdir(configJsonDirectoryPath);
 		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
 
 		for (const file of jsonFiles) {
-			const filePath = path.join(configDPath, file);
+			const filePath = path.join(configJsonDirectoryPath, file);
 			try {
 				// eslint-disable-next-line no-await-in-loop
 				const content = await fs.readFile(filePath, 'utf8');
