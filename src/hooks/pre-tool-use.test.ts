@@ -785,6 +785,33 @@ test('accepts TaskCreate tool', async t => {
 	}
 });
 
+test('accepts TaskCreate tool with logToolUse enabled', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ logToolUse: true });
+	try {
+		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			tool_name: 'TaskCreate',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			tool_input: {
+				subject: 'Test task',
+				description: 'Test description',
+				activeForm: 'Creating test task',
+			},
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
 test('accepts TaskUpdate tool', async t => {
 	const { configDir, cleanup } = await createHooksConfig({});
 	try {

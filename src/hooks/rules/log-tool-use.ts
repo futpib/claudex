@@ -1,4 +1,3 @@
-import invariant from 'invariant';
 import { formatTranscriptInfo, logMessage } from '../shared.js';
 import type { KnownToolInput } from '../schemas.js';
 import type { Rule } from './index.js';
@@ -35,8 +34,7 @@ export const logToolUse: Rule = {
 			return { type: 'pass' };
 		}
 
-		invariant(context.knownInput, 'Expected input to match knownToolInputSchema');
-		const filteredInput = omitLongFields(context.knownInput);
+		const filteredInput = context.knownInput ? omitLongFields(context.knownInput) : context.input.tool_input;
 
 		const toolInputString = JSON.stringify(filteredInput);
 		const transcriptInfo = formatTranscriptInfo(context.sessionId, context.transcriptPath);
