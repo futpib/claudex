@@ -758,3 +758,79 @@ test('allows piping to grep when hooks not configured', async t => {
 	}
 });
 
+test('accepts TaskCreate tool', async t => {
+	const { configDir, cleanup } = await createHooksConfig({});
+	try {
+		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			tool_name: 'TaskCreate',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			tool_input: {
+				subject: 'Test task',
+				description: 'Test description',
+				activeForm: 'Creating test task',
+			},
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('accepts TaskUpdate tool', async t => {
+	const { configDir, cleanup } = await createHooksConfig({});
+	try {
+		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			tool_name: 'TaskUpdate',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			tool_input: {
+				taskId: '1',
+				status: 'in_progress',
+			},
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('accepts unknown tool names not in any schema', async t => {
+	const { configDir, cleanup } = await createHooksConfig({});
+	try {
+		const result = await runHook({
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			session_id: 'test-session',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			transcript_path: '/tmp/test-transcript',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			tool_name: 'SomeNewUnknownTool',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			tool_input: { foo: 'bar' },
+		}, undefined, {
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: configDir,
+		});
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+

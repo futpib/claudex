@@ -121,17 +121,10 @@ export const knownToolInputSchema = z.union([
 	z.object({ tool_name: z.literal('KillBash'), tool_input: killBashToolInputSchema }),
 ]);
 
-export const mcpToolInputSchema = z.object({
-	tool_name: z.string().regex(/^mcp__.*__.*$/),
+export const unknownToolInputSchema = z.object({
+	tool_name: z.string(),
 	tool_input: z.unknown(),
 });
-
-export const unknownToolInputSchema = z.union([
-	z.object({ tool_name: z.literal('TodoWrite'), tool_input: z.unknown() }),
-	z.object({ tool_name: z.literal('Task'), tool_input: z.unknown() }),
-	z.object({ tool_name: z.literal('AskUserQuestion'), tool_input: z.unknown() }),
-	mcpToolInputSchema,
-]);
 
 export const preToolUseHookInputSchema = baseToolInputSchema.and(z.union([ knownToolInputSchema, unknownToolInputSchema ]));
 

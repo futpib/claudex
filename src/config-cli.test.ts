@@ -551,13 +551,6 @@ test('implicit scope from cwd under home directory uses tilde in project key', a
 		const projects = (config as { projects?: Record<string, unknown> }).projects ?? {};
 		const projectKeys = Object.keys(projects);
 
-		t.log('homedir:', home);
-		t.log('realHome:', realHome);
-		t.log('projectDir:', projectDir);
-		t.log('realProjectDir:', realProjectDir);
-		t.log('expectedTildePath:', expectedTildePath);
-		t.log('projectKeys:', projectKeys);
-
 		// Should use tilde path as key, not absolute path
 		t.truthy(projects[expectedTildePath], `expected project key ${expectedTildePath}`);
 		t.is(projects[projectDir], undefined, `should not have absolute path key ${projectDir}`);
