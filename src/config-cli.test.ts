@@ -75,6 +75,22 @@ test('add appends to packages array', async t => {
 	}
 });
 
+test('add does not duplicate existing package', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'zig' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config as { packages: string[] }).packages, [ 'zig' ]);
+
+		// Add the same package again
+		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'zig' ]);
+		const config2 = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config2 as { packages: string[] }).packages, [ 'zig' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
 test('add appends to volumes array', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {

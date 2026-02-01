@@ -405,7 +405,10 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 		const parent = (record[keyInfo.field] ?? {}) as Record<string, unknown>;
 		const existing = (parent[keyInfo.subKey] ?? []) as unknown[];
 		const coerced = coerceValue(keyInfo.field, value);
-		existing.push(coerced);
+		if (!existing.includes(coerced)) {
+			existing.push(coerced);
+		}
+
 		parent[keyInfo.subKey] = existing;
 		record[keyInfo.field] = parent;
 
@@ -425,7 +428,10 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 	const record = section as Record<string, unknown>;
 	const existing = (record[keyInfo.field] ?? []) as unknown[];
 	const coerced = coerceValue(keyInfo.field, value);
-	existing.push(coerced);
+	if (!existing.includes(coerced)) {
+		existing.push(coerced);
+	}
+
 	record[keyInfo.field] = existing;
 
 	await writeSingleConfigFile(filePath, config);
