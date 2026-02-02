@@ -104,9 +104,13 @@ const allMcpServerFlags: Array<keyof McpServersDetail> = [
 	'claudex',
 ];
 
+const HOOKS_DISABLED_BY_DEFAULT: ReadonlySet<keyof HooksDetail> = new Set([
+	'requireCoAuthorshipProof',
+]);
+
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {
-		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, true ])) as Required<HooksDetail>;
+		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, !HOOKS_DISABLED_BY_DEFAULT.has(k) ])) as Required<HooksDetail>;
 	}
 
 	if (!hooks) {
