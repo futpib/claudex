@@ -1,7 +1,12 @@
 import type { Rule } from './index.js';
 
 export const banPipeToFilter: Rule = {
-	name: 'ban-pipe-to-filter',
+	meta: {
+		name: 'ban-pipe-to-filter',
+		configKey: 'banPipeToFilter',
+		recommended: true,
+		phase: 'main',
+	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
 			return { type: 'pass' };

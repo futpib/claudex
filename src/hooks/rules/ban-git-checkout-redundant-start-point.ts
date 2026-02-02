@@ -2,7 +2,12 @@ import { execa } from 'execa';
 import type { Rule } from './index.js';
 
 export const banGitCheckoutRedundantStartPoint: Rule = {
-	name: 'ban-git-checkout-redundant-start-point',
+	meta: {
+		name: 'ban-git-checkout-redundant-start-point',
+		configKey: 'banGitCheckoutRedundantStartPoint',
+		recommended: true,
+		phase: 'main',
+	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
 			return { type: 'pass' };

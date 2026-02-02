@@ -1,7 +1,12 @@
 import type { Rule } from './index.js';
 
 export const banOutdatedYearInSearch: Rule = {
-	name: 'ban-outdated-year-in-search',
+	meta: {
+		name: 'ban-outdated-year-in-search',
+		configKey: 'banOutdatedYearInSearch',
+		recommended: true,
+		phase: 'pre-exit',
+	},
 	fn(context) {
 		if (context.knownInput?.tool_name !== 'WebSearch') {
 			return { type: 'pass' };

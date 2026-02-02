@@ -472,15 +472,15 @@ test('add volumes stores tilde path without expanding', async t => {
 test('implicit project scope uses tilde path as project key', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	const claudexDir = path.join(configDir, 'claudex');
-	const configDDir = path.join(claudexDir, 'config.json.d');
-	await mkdir(configDDir, { recursive: true });
+	const configFragmentsDir = path.join(claudexDir, 'config.json.d');
+	await mkdir(configFragmentsDir, { recursive: true });
 
 	// Create a temporary project directory to use as cwd
 	const projectDir = await mkdtemp(path.join(tmpdir(), 'claudex-project-'));
 
 	// Pre-create a config file with a project using the absolute path
 	await writeFile(
-		path.join(configDDir, '99-private.json'),
+		path.join(configFragmentsDir, '99-private.json'),
 		JSON.stringify({ projects: { [projectDir]: { packages: [ 'git' ] } } }),
 	);
 
@@ -491,8 +491,8 @@ test('implicit project scope uses tilde path as project key', async t => {
 
 		// Should write to the file where the project is defined (99-private.json),
 		// not to config.json
-		const config = await readJsonFile(path.join(configDDir, '99-private.json'));
-		const projects = (config as { projects: Record<string, { volumes?: string[] }> }).projects;
+		const config = await readJsonFile(path.join(configFragmentsDir, '99-private.json'));
+		const { projects } = (config as { projects: Record<string, { volumes?: string[] }> });
 		t.deepEqual(projects[projectDir].volumes, [ '~/code/parser' ]);
 	} finally {
 		await rm(projectDir, { recursive: true });
@@ -503,8 +503,8 @@ test('implicit project scope uses tilde path as project key', async t => {
 test('implicit scope from git worktree resolves to parent repo project', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	const claudexDir = path.join(configDir, 'claudex');
-	const configDDir = path.join(claudexDir, 'config.json.d');
-	await mkdir(configDDir, { recursive: true });
+	const configFragmentsDir = path.join(claudexDir, 'config.json.d');
+	await mkdir(configFragmentsDir, { recursive: true });
 
 	// Create a git repo and a worktree
 	const repoDir = await mkdtemp(path.join(tmpdir(), 'claudex-repo-'));
@@ -520,7 +520,7 @@ test('implicit scope from git worktree resolves to parent repo project', async t
 
 	// Pre-create a config file with the main repo as a project
 	await writeFile(
-		path.join(configDDir, '99-private.json'),
+		path.join(configFragmentsDir, '99-private.json'),
 		JSON.stringify({ projects: { [repoDir]: { packages: [ 'git' ] } } }),
 	);
 
@@ -530,11 +530,11 @@ test('implicit scope from git worktree resolves to parent repo project', async t
 		t.is(result.exitCode, 0);
 
 		// Should write to the parent repo's project entry, not create a new one
-		const config = await readJsonFile(path.join(configDDir, '99-private.json'));
-		const projects = (config as { projects: Record<string, { packages?: string[] }> }).projects;
+		const config = await readJsonFile(path.join(configFragmentsDir, '99-private.json'));
+		const { projects } = (config as { projects: Record<string, { packages?: string[] }> });
 		t.deepEqual(projects[repoDir].packages, [ 'git', 'zig' ]);
 
-		// config.json should not exist (nothing should have been written there)
+		// Config.json should not exist (nothing should have been written there)
 		try {
 			await readJsonFile(path.join(claudexDir, 'config.json'));
 			t.fail('config.json should not have been created');
@@ -615,13 +615,14 @@ test('implicit scope from git worktree creates project under parent repo path', 
 test('add to project defined with tilde path writes to correct config file', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	const claudexDir = path.join(configDir, 'claudex');
-	const configDDir = path.join(claudexDir, 'config.json.d');
-	await mkdir(configDDir, { recursive: true });
+	const configFragmentsDir = path.join(claudexDir, 'config.json.d');
+	await mkdir(configFragmentsDir, { recursive: true });
 
 	// Pre-create a config file with a project using tilde path
+	const tildePath = '~/code/lix';
 	await writeFile(
-		path.join(configDDir, '99-private.json'),
-		JSON.stringify({ projects: { '~/code/lix': { packages: [ 'git' ] } } }),
+		path.join(configFragmentsDir, '99-private.json'),
+		JSON.stringify({ projects: { [tildePath]: { packages: [ 'git' ] } } }),
 	);
 
 	try {
@@ -630,11 +631,11 @@ test('add to project defined with tilde path writes to correct config file', asy
 		t.is(result.exitCode, 0);
 
 		// Should write to 99-private.json where the project is defined
-		const config = await readJsonFile(path.join(configDDir, '99-private.json'));
-		const projects = (config as { projects: Record<string, { volumes?: string[] }> }).projects;
+		const config = await readJsonFile(path.join(configFragmentsDir, '99-private.json'));
+		const { projects } = (config as { projects: Record<string, { volumes?: string[] }> });
 		t.deepEqual(projects['~/code/lix'].volumes, [ '~/code/parser' ]);
 
-		// config.json should not exist (nothing should have been written there)
+		// Config.json should not exist (nothing should have been written there)
 		try {
 			await readJsonFile(path.join(claudexDir, 'config.json'));
 			t.fail('config.json should not have been created');

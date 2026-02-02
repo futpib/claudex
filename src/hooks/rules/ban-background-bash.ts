@@ -1,7 +1,12 @@
 import type { Rule } from './index.js';
 
 export const banBackgroundBash: Rule = {
-	name: 'ban-background-bash',
+	meta: {
+		name: 'ban-background-bash',
+		configKey: 'banBackgroundBash',
+		recommended: true,
+		phase: 'main',
+	},
 	fn(context) {
 		if (context.knownInput?.tool_name !== 'Bash') {
 			return { type: 'pass' };

@@ -1,7 +1,12 @@
 import type { Rule } from './index.js';
 
 export const banFileOperationCommands: Rule = {
-	name: 'ban-file-operation-commands',
+	meta: {
+		name: 'ban-file-operation-commands',
+		configKey: 'banFileOperationCommands',
+		recommended: true,
+		phase: 'main',
+	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
 			return { type: 'pass' };

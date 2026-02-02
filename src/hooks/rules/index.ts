@@ -1,4 +1,3 @@
-import type { HooksDetail } from '../../config.js';
 import type { KnownToolInput, PreToolUseHookInput } from '../schemas.js';
 import type * as bashParserHelpers from '../bash-parser-helpers.js';
 import { banGitC } from './ban-git-c.js';
@@ -32,26 +31,33 @@ export type RuleContext = {
 	helpers: typeof bashParserHelpers;
 };
 
-export type Rule = {
+export type RuleMeta = {
 	name: string;
+	configKey: string;
+	recommended: boolean;
+	phase: 'pre-exit' | 'main';
+};
+
+export type Rule = {
+	meta: RuleMeta;
 	fn: (context: RuleContext) => Promise<RuleResult> | RuleResult;
 };
 
-export type RuleRegistry = Map<keyof HooksDetail, Rule>;
+export const allRules: Rule[] = [
+	banGitC,
+	banGitAddAll,
+	banGitCommitAmend,
+	banGitCommitNoVerify,
+	banGitCheckoutRedundantStartPoint,
+	banBackgroundBash,
+	banCommandChaining,
+	banPipeToFilter,
+	banFileOperationCommands,
+	banOutdatedYearInSearch,
+	requireCoAuthorshipProof,
+	logToolUse,
+];
 
-export function createRuleRegistry(): RuleRegistry {
-	const registry: RuleRegistry = new Map();
-	registry.set('banGitC', banGitC);
-	registry.set('banGitAddAll', banGitAddAll);
-	registry.set('banGitCommitAmend', banGitCommitAmend);
-	registry.set('banGitCommitNoVerify', banGitCommitNoVerify);
-	registry.set('banGitCheckoutRedundantStartPoint', banGitCheckoutRedundantStartPoint);
-	registry.set('banBackgroundBash', banBackgroundBash);
-	registry.set('banCommandChaining', banCommandChaining);
-	registry.set('banPipeToFilter', banPipeToFilter);
-	registry.set('banFileOperationCommands', banFileOperationCommands);
-	registry.set('banOutdatedYearInSearch', banOutdatedYearInSearch);
-	registry.set('requireCoAuthorshipProof', requireCoAuthorshipProof);
-	registry.set('logToolUse', logToolUse);
-	return registry;
-}
+export const rulesByConfigKey = new Map<string, Rule>(allRules.map(r => [ r.meta.configKey, r ]));
+
+export const allConfigKeys: string[] = allRules.map(r => r.meta.configKey);

@@ -4,7 +4,12 @@ import { paths } from '../../paths.js';
 import type { Rule, RuleResult } from './index.js';
 
 export const requireCoAuthorshipProof: Rule = {
-	name: 'require-co-authorship-proof',
+	meta: {
+		name: 'require-co-authorship-proof',
+		configKey: 'requireCoAuthorshipProof',
+		recommended: false,
+		phase: 'main',
+	},
 	async fn(context): Promise<RuleResult> {
 		if (context.toolName !== 'Bash' || !context.command) {
 			return { type: 'pass' };

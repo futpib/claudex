@@ -1,7 +1,12 @@
 import type { Rule } from './index.js';
 
 export const banGitAddAll: Rule = {
-	name: 'ban-git-add-all',
+	meta: {
+		name: 'ban-git-add-all',
+		configKey: 'banGitAddAll',
+		recommended: true,
+		phase: 'main',
+	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
 			return { type: 'pass' };

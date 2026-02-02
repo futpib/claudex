@@ -1,7 +1,12 @@
 import type { Rule } from './index.js';
 
 export const banGitCommitNoVerify: Rule = {
-	name: 'ban-git-commit-no-verify',
+	meta: {
+		name: 'ban-git-commit-no-verify',
+		configKey: 'banGitCommitNoVerify',
+		recommended: true,
+		phase: 'main',
+	},
 	fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
 			return { type: 'pass' };

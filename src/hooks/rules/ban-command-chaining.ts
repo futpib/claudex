@@ -1,7 +1,12 @@
 import type { Rule } from './index.js';
 
 export const banCommandChaining: Rule = {
-	name: 'ban-command-chaining',
+	meta: {
+		name: 'ban-command-chaining',
+		configKey: 'banCommandChaining',
+		recommended: true,
+		phase: 'main',
+	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
 			return { type: 'pass' };

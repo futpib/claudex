@@ -5,6 +5,7 @@ import process from 'node:process';
 import { z } from 'zod';
 import { execa } from 'execa';
 import { paths } from './paths.js';
+import { allRules, allConfigKeys } from './hooks/rules/index.js';
 
 // Volume can be a simple string (same path for host and container)
 // or an object with different paths
@@ -20,20 +21,7 @@ const sshConfigSchema = z.object({
 	hosts: z.array(z.string()).optional(),
 });
 
-const hooksDetailConfigSchema = z.object({
-	banGitC: z.boolean().optional(),
-	banGitAddAll: z.boolean().optional(),
-	banGitCommitAmend: z.boolean().optional(),
-	banGitCommitNoVerify: z.boolean().optional(),
-	banGitCheckoutRedundantStartPoint: z.boolean().optional(),
-	banBackgroundBash: z.boolean().optional(),
-	banCommandChaining: z.boolean().optional(),
-	banPipeToFilter: z.boolean().optional(),
-	banFileOperationCommands: z.boolean().optional(),
-	banOutdatedYearInSearch: z.boolean().optional(),
-	requireCoAuthorshipProof: z.boolean().optional(),
-	logToolUse: z.boolean().optional(),
-});
+const hooksDetailConfigSchema = z.object(Object.fromEntries(allConfigKeys.map(key => [ key, z.boolean().optional() ]))) as z.ZodObject<Record<string, z.ZodOptional<z.ZodBoolean>>>;
 
 const hooksConfigSchema = z.union([ z.literal(true), hooksDetailConfigSchema ]);
 
@@ -84,40 +72,20 @@ export type RootConfig = z.infer<typeof rootConfigSchema>;
 // Merged config is the same as base config (after merging root + project)
 export type ClaudexConfig = BaseConfig;
 
-// eslint-disable-next-line @typescript-eslint/naming-convention
-const ALL_HOOK_FLAGS: Array<keyof HooksDetail> = [
-	'banGitC',
-	'banGitAddAll',
-	'banGitCommitAmend',
-	'banGitCommitNoVerify',
-	'banGitCheckoutRedundantStartPoint',
-	'banBackgroundBash',
-	'banCommandChaining',
-	'banPipeToFilter',
-	'banFileOperationCommands',
-	'banOutdatedYearInSearch',
-	'requireCoAuthorshipProof',
-	'logToolUse',
-];
-
 const allMcpServerFlags: Array<keyof McpServersDetail> = [
 	'claudex',
 ];
 
-const HOOKS_DISABLED_BY_DEFAULT: ReadonlySet<keyof HooksDetail> = new Set([
-	'requireCoAuthorshipProof',
-]);
-
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {
-		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, !HOOKS_DISABLED_BY_DEFAULT.has(k) ])) as Required<HooksDetail>;
+		return Object.fromEntries(allRules.map(r => [ r.meta.configKey, r.meta.recommended ])) as Required<HooksDetail>;
 	}
 
 	if (!hooks) {
-		return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, false ])) as Required<HooksDetail>;
+		return Object.fromEntries(allConfigKeys.map(k => [ k, false ])) as Required<HooksDetail>;
 	}
 
-	return Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, hooks[k] ?? false ])) as Required<HooksDetail>;
+	return Object.fromEntries(allConfigKeys.map(k => [ k, hooks[k] ?? false ])) as Required<HooksDetail>;
 }
 
 export function resolveMcpServers(mcpServers: McpServersConfig | undefined): Required<McpServersDetail> {
@@ -281,12 +249,12 @@ function mergeHooksConfigs(base: HooksConfig | undefined, overlay: HooksConfig |
 
 	const baseResolved = resolveHooks(base);
 	const overlayResolved = overlay === undefined
-		? Object.fromEntries(ALL_HOOK_FLAGS.map(k => [ k, undefined ]))
+		? Object.fromEntries(allConfigKeys.map(k => [ k, undefined ]))
 		: resolveHooks(overlay);
 
 	const merged: Record<string, boolean> = {};
-	for (const key of ALL_HOOK_FLAGS) {
-		merged[key] = (overlayResolved as Record<string, boolean | undefined>)[key] ?? baseResolved[key];
+	for (const key of allConfigKeys) {
+		merged[key] = (overlayResolved as Record<string, boolean | undefined>)[key] ?? (baseResolved as Record<string, boolean | undefined>)[key] ?? false;
 	}
 
 	return merged as HooksDetail;

@@ -1,7 +1,12 @@
 import type { Rule } from './index.js';
 
 export const banGitC: Rule = {
-	name: 'ban-git-c',
+	meta: {
+		name: 'ban-git-c',
+		configKey: 'banGitC',
+		recommended: true,
+		phase: 'main',
+	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
 			return { type: 'pass' };

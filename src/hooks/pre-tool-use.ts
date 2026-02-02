@@ -9,7 +9,7 @@ import {
 	knownToolInputSchema, preToolUseHookInputSchema,
 } from './schemas.js';
 import * as helpers from './bash-parser-helpers.js';
-import { createRuleRegistry } from './rules/index.js';
+import { allRules } from './rules/index.js';
 
 // Skip all checks for read-only tools and internal tools
 const readOnlyTools = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
@@ -31,8 +31,6 @@ async function main() {
 	const { config } = await getMergedConfig(process.cwd());
 	const hooks = resolveHooks(config.hooks);
 
-	const registry = createRuleRegistry();
-
 	const context = {
 		input: preToolUseHookInput,
 		knownInput,
@@ -45,24 +43,23 @@ async function main() {
 	};
 
 	// Rules that run before the read-only/internal/MCP early exit
-	const preExitRules: Array<keyof typeof hooks> = [ 'banOutdatedYearInSearch', 'logToolUse' ];
-
-	for (const flag of preExitRules) {
-		if (!hooks[flag]) {
+	for (const rule of allRules) {
+		if (rule.meta.phase !== 'pre-exit') {
 			continue;
 		}
 
-		const rule = registry.get(flag);
-		if (rule) {
-			// eslint-disable-next-line no-await-in-loop
-			const result = await rule.fn(context);
-			if (result.type === 'violation') {
-				for (const message of result.messages) {
-					console.error(message);
-				}
+		if (!hooks[rule.meta.configKey]) {
+			continue;
+		}
 
-				process.exit(2);
+		// eslint-disable-next-line no-await-in-loop
+		const result = await rule.fn(context);
+		if (result.type === 'violation') {
+			for (const message of result.messages) {
+				console.error(message);
 			}
+
+			process.exit(2);
 		}
 	}
 
@@ -72,13 +69,12 @@ async function main() {
 	}
 
 	// Run all other enabled rules
-
-	for (const [ flag, rule ] of registry) {
-		if (preExitRules.includes(flag)) {
+	for (const rule of allRules) {
+		if (rule.meta.phase !== 'main') {
 			continue;
 		}
 
-		if (!hooks[flag]) {
+		if (!hooks[rule.meta.configKey]) {
 			continue;
 		}
 

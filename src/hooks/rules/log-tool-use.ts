@@ -26,7 +26,12 @@ function omitLongFields(input: KnownToolInput): unknown {
 }
 
 export const logToolUse: Rule = {
-	name: 'log-tool-use',
+	meta: {
+		name: 'log-tool-use',
+		configKey: 'logToolUse',
+		recommended: true,
+		phase: 'pre-exit',
+	},
 	async fn(context) {
 		const isMcpTool = context.toolName.startsWith('mcp__');
 
