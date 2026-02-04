@@ -526,6 +526,9 @@ export async function main() {
 		const basePath = resolvedEnv.PATH ?? '/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin';
 		resolvedEnv.PATH = `${claudeCodeBinPath}:${basePath}`;
 
+		// Enable truecolor support for Claude Code's terminal UI
+		resolvedEnv.COLORTERM = 'truecolor';
+
 		// Add environment variables to docker args
 		for (const [ key, value ] of Object.entries(resolvedEnv)) {
 			dockerArgs.push('-e', `${key}=${value}`);
