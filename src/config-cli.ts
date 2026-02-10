@@ -17,7 +17,7 @@ import {
 	type ProjectConfig,
 } from './config.js';
 
-type Action = 'list' | 'get' | 'set' | 'add' | 'unset';
+type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset';
 
 type Scope =
 	| { type: 'project'; path: string; fromCwd?: boolean }
@@ -92,12 +92,12 @@ function parseArgs(argv: string[]): ParsedArgs {
 	}
 
 	if (positionals.length === 0) {
-		throw new Error('Missing action. Usage: claudex config <list|get|set|add|unset> [key] [value]');
+		throw new Error('Missing action. Usage: claudex config <list|get|set|add|remove|unset> [key] [value]');
 	}
 
 	const actionString = positionals[0];
-	if (![ 'list', 'get', 'set', 'add', 'unset' ].includes(actionString)) {
-		throw new Error(`Unknown action: ${actionString}. Expected one of: list, get, set, add, unset`);
+	if (![ 'list', 'get', 'set', 'add', 'remove', 'unset' ].includes(actionString)) {
+		throw new Error(`Unknown action: ${actionString}. Expected one of: list, get, set, add, remove, unset`);
 	}
 
 	const action = actionString as Action;
@@ -537,6 +537,106 @@ async function handleUnset(scope: Scope, key: string, value: string | undefined,
 	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
+async function handleRemove(scope: Scope, key: string, value: string | undefined, file: string | undefined): Promise<void> {
+	const keyInfo = parseKey(key);
+
+	if (!keyInfo.subKey && value === undefined) {
+		throw new Error('remove requires a value argument (e.g., remove packages vim or remove packages.vim)');
+	}
+
+	const filePath = await resolveWriteFile(scope, file);
+
+	let config: RootConfig;
+	try {
+		config = await readSingleConfigFile(filePath);
+	} catch {
+		config = {};
+	}
+
+	const oldContent = serializeConfig(config);
+
+	const section = getSection(config, scope);
+	if (!section) {
+		return;
+	}
+
+	const record = section as Record<string, unknown>;
+
+	if (keyInfo.subKey && value !== undefined) {
+		// Nested array: `remove ssh.keys ~/.ssh/id_ed25519`
+		const parent = record[keyInfo.field] as Record<string, unknown> | undefined;
+		if (!parent) {
+			return;
+		}
+
+		const array = parent[keyInfo.subKey];
+		if (Array.isArray(array)) {
+			parent[keyInfo.subKey] = array.filter((v: unknown) => String(v) !== value);
+			if ((parent[keyInfo.subKey] as unknown[]).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete parent[keyInfo.subKey];
+			}
+		}
+
+		if (Object.keys(parent).length === 0) {
+			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+			delete record[keyInfo.field];
+		}
+	} else if (keyInfo.subKey) {
+		// Dot notation without value: `remove packages.vim` or `remove env.FOO`
+		const fieldValue = record[keyInfo.field];
+		if (fieldValue === undefined) {
+			return;
+		}
+
+		if (Array.isArray(fieldValue)) {
+			// `remove packages.vim` → remove 'vim' from packages array
+			const coerced = coerceValue(keyInfo.field, keyInfo.subKey);
+			record[keyInfo.field] = fieldValue.filter((v: unknown) => v !== coerced);
+			if ((record[keyInfo.field] as unknown[]).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete record[keyInfo.field];
+			}
+		} else if (typeof fieldValue === 'object' && fieldValue !== null) {
+			// `remove env.FOO` → delete FOO from env record
+			const parent = fieldValue as Record<string, unknown>;
+			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+			delete parent[keyInfo.subKey];
+			if (Object.keys(parent).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete record[keyInfo.field];
+			}
+		}
+	} else {
+		// Flat: `remove packages vim`
+		const fieldValue = record[keyInfo.field];
+		if (fieldValue === undefined) {
+			return;
+		}
+
+		if (Array.isArray(fieldValue)) {
+			const coerced = coerceValue(keyInfo.field, value!);
+			record[keyInfo.field] = fieldValue.filter((v: unknown) => v !== coerced);
+			if ((record[keyInfo.field] as unknown[]).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete record[keyInfo.field];
+			}
+		} else if (typeof fieldValue === 'object' && fieldValue !== null) {
+			// `remove env FOO` → delete FOO from env record
+			const parent = fieldValue as Record<string, unknown>;
+			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+			delete parent[value!];
+			if (Object.keys(parent).length === 0) {
+				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+				delete record[keyInfo.field];
+			}
+		}
+	}
+
+	await writeSingleConfigFile(filePath, config);
+	printDiff(filePath, oldContent, serializeConfig(config));
+}
+
 export async function configMain(argv: string[]): Promise<void> {
 	const parsed = parseArgs(argv);
 
@@ -588,6 +688,15 @@ export async function configMain(argv: string[]): Promise<void> {
 			}
 
 			await handleAdd(parsed.scope, parsed.key, parsed.value, parsed.file);
+			break;
+		}
+
+		case 'remove': {
+			if (!parsed.key) {
+				throw new Error('remove requires a key argument');
+			}
+
+			await handleRemove(parsed.scope, parsed.key, parsed.value, parsed.file);
 			break;
 		}
 

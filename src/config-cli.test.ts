@@ -630,6 +630,96 @@ test('add outputs diff to stderr, duplicate add produces no diff', async t => {
 	}
 });
 
+test('remove removes value from array', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'vim' ]);
+		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'curl' ]);
+		await runConfigWithDir(configDir, [ 'remove', '--global', 'packages', 'vim' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config as { packages: string[] }).packages, [ 'curl' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('remove with dot notation removes value from array', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'vim' ]);
+		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'curl' ]);
+		await runConfigWithDir(configDir, [ 'remove', '--global', 'packages.vim' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config as { packages: string[] }).packages, [ 'curl' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('remove from nested array (ssh.keys)', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--global', 'ssh.keys', '~/.ssh/id_ed25519' ]);
+		await runConfigWithDir(configDir, [ 'add', '--global', 'ssh.keys', '~/.ssh/id_rsa' ]);
+		await runConfigWithDir(configDir, [ 'remove', '--global', 'ssh.keys', '~/.ssh/id_ed25519' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config as { ssh: { keys: string[] } }).ssh.keys, [ '~/.ssh/id_rsa' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('remove sub-key from record with field+value syntax (env FOO)', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'env.FOO', 'bar' ]);
+		await runConfigWithDir(configDir, [ 'set', '--global', 'env.BAZ', 'qux' ]);
+		await runConfigWithDir(configDir, [ 'remove', '--global', 'env', 'FOO' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		t.deepEqual((config as { env: Record<string, string> }).env, { BAZ: 'qux' });
+	} finally {
+		await cleanup();
+	}
+});
+
+test('remove sub-key from record with dot notation (env.FOO)', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'env.FOO', 'bar' ]);
+		await runConfigWithDir(configDir, [ 'set', '--global', 'env.BAZ', 'qux' ]);
+		await runConfigWithDir(configDir, [ 'remove', '--global', 'env.FOO' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		t.deepEqual((config as { env: Record<string, string> }).env, { BAZ: 'qux' });
+	} finally {
+		await cleanup();
+	}
+});
+
+test('remove cleans up empty parent fields', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'vim' ]);
+		await runConfigWithDir(configDir, [ 'remove', '--global', 'packages', 'vim' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.is((config as { packages?: string[] }).packages, undefined);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('error on remove without key', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'remove', '--global' ]);
+		t.not(result.exitCode, 0);
+		t.true(result.stderr.includes('requires a key'));
+	} finally {
+		await cleanup();
+	}
+});
+
 test('add to project defined with tilde path writes to correct config file', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	const claudexDir = path.join(configDir, 'claudex');
