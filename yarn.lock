@@ -1499,13 +1499,13 @@ __metadata:
     "@types/node": "npm:^24.1.0"
     ava: "npm:^6.4.1"
     c8: "npm:^10.1.3"
+    commander: "npm:^14.0.3"
     coveralls: "npm:^3.1.1"
     diff: "npm:^8.0.3"
     env-paths: "npm:^3.0.0"
     eslint-config-xo-typescript-overrides: "npm:^2.0.3"
     execa: "npm:^9.6.0"
     invariant: "npm:^2.2.4"
-    meow: "npm:^14.0.0"
     typescript: "npm:^5.8.3"
     xo: "npm:^1.2.1"
     zod: "npm:^4.0.8"
@@ -1580,6 +1580,13 @@ __metadata:
   dependencies:
     delayed-stream: "npm:~1.0.0"
   checksum: 10/2e969e637d05d09fa50b02d74c83a1186f6914aae89e6653b62595cc75a221464f884f55f231b8f4df7a49537fba60bdc0427acd2bf324c09a1dbb84837e36e4
+  languageName: node
+  linkType: hard
+
+"commander@npm:^14.0.3":
+  version: 14.0.3
+  resolution: "commander@npm:14.0.3"
+  checksum: 10/dfa9ebe2a433d277de5cb0252d23b10a543d245d892db858d23b516336a835c50fd4f52bee4cd13c705cc8acb6f03dc632c73dd806f7d06d3353eb09953dd17a
   languageName: node
   linkType: hard
 
@@ -4265,13 +4272,6 @@ __metadata:
   version: 13.2.0
   resolution: "meow@npm:13.2.0"
   checksum: 10/4eff5bc921fed0b8a471ad79069d741a0210036d717547d0c7f36fdaf84ef7a3036225f38b6a53830d84dc9cbf8b944b097fde62381b8b5b215119e735ce1063
-  languageName: node
-  linkType: hard
-
-"meow@npm:^14.0.0":
-  version: 14.0.0
-  resolution: "meow@npm:14.0.0"
-  checksum: 10/133e45ba802ac4d50a35f730a84631b8a98e15babf98abadb34768eb8a04e9336e39c92318137f16a99ada3984b5bcc29a4d5f811d9a22f1327fc056875d8e52
   languageName: node
   linkType: hard
 

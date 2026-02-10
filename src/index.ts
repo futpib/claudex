@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa, type ResultPromise } from 'execa';
-import meow from 'meow';
+import { Command } from 'commander';
 import { z } from 'zod';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
@@ -199,111 +199,105 @@ function parseEnvSpec(spec: string): [string, string] {
 	return [ spec.slice(0, idx), spec.slice(idx + 1) ];
 }
 
+function collect(value: string, previous: string[]) {
+	return [ ...previous, value ];
+}
+
+type MainOptions = {
+	docker: boolean;
+	dockerShell: boolean;
+	dockerExec: boolean;
+	dockerPull: boolean;
+	dockerNoCache: boolean;
+	dockerSudo: boolean;
+	allowUnsafeDirectory: boolean;
+	package: string[];
+	volume: string[];
+	env: string[];
+	sshKey: string[];
+};
+
 export async function main() {
-	// Handle 'config' subcommand before meow parsing
-	if (process.argv[2] === 'config') {
+	const program = new Command('claudex')
+		.option('--no-docker', 'Run Claude Code directly on the host instead of in Docker')
+		.option('--docker-shell', 'Launch a bash shell inside the Docker container')
+		.option('--docker-exec', 'Exec into a running claudex container for current directory')
+		.option('--docker-pull', 'Pull the latest base image when building')
+		.option('--docker-no-cache', 'Build the Docker image without cache')
+		.option('--docker-sudo', 'Allow sudo inside the container (less secure)')
+		.option('--allow-unsafe-directory', 'Skip directory safety checks (home, hidden, unowned, no .git)')
+		.option('--package <name>', 'Add apt package to install in Docker (repeatable)', collect, [])
+		.option('--volume <spec>', 'Add volume mount: path or host:container (repeatable)', collect, [])
+		// eslint-disable-next-line no-template-curly-in-string
+		.option('--env <spec>', 'Add env var: KEY=value or KEY for KEY=${KEY} (repeatable)', collect, [])
+		.option('--ssh-key <path>', 'Add SSH key to agent (repeatable)', collect, [])
+		.allowUnknownOption()
+		.passThroughOptions()
+		.argument('[claude-args...]')
+		.action(async (claudeArgs: string[], options: MainOptions) => {
+			await runMain(claudeArgs, options);
+		});
+
+	const configCommand = program
+		.command('config')
+		.description('Manage claudex configuration')
+		.enablePositionalOptions();
+
+	const scopeOptions = (cmd: Command) => cmd
+		.option('--global', 'Use global config (default)')
+		.option('--project <path>', 'Use project-scoped config')
+		.option('--group <name>', 'Use group-scoped config')
+		.option('--file <path>', 'Write to a specific file in config.json.d')
+		.passThroughOptions();
+
+	const configAction = async (...actionArgs: unknown[]) => {
+		// Commander passes parsed args then options then the Command object.
+		// Reconstruct the raw argv that configMain expects from the Command.
+		const cmd = actionArgs.at(-1) as Command;
+		const rawArgs = cmd.parent!.args;
 		try {
-			await configMain(process.argv.slice(3));
+			await configMain(rawArgs);
 		} catch (error) {
 			console.error(error instanceof Error ? error.message : String(error));
 			process.exitCode = 1;
 		}
+	};
 
-		return;
-	}
+	scopeOptions(configCommand.command('list').description('List merged configuration as JSON'))
+		.action(configAction);
 
-	const flagsConfig = {
-		docker: {
-			type: 'boolean',
-			default: true,
-		},
-		dockerShell: {
-			type: 'boolean',
-			default: false,
-		},
-		dockerExec: {
-			type: 'boolean',
-			default: false,
-		},
-		dockerPull: {
-			type: 'boolean',
-			default: false,
-		},
-		dockerNoCache: {
-			type: 'boolean',
-			default: false,
-		},
-		dockerSudo: {
-			type: 'boolean',
-			default: false,
-		},
-		allowUnsafeDirectory: {
-			type: 'boolean',
-			default: false,
-		},
-		package: {
-			type: 'string',
-			isMultiple: true,
-		},
-		volume: {
-			type: 'string',
-			isMultiple: true,
-		},
-		env: {
-			type: 'string',
-			isMultiple: true,
-		},
-		sshKey: {
-			type: 'string',
-			isMultiple: true,
-		},
-	} as const;
+	scopeOptions(configCommand.command('get').description('Get a configuration value').argument('<key>'))
+		.action(configAction);
 
-	const cli = meow(`
-	Usage
-	  $ claudex [options] [claude args...]
+	scopeOptions(configCommand.command('set').description('Set a configuration value').argument('<key>').argument('<value>'))
+		.action(configAction);
 
-	Options
-	  --no-docker              Run Claude Code directly on the host instead of in Docker
-	  --docker-shell           Launch a bash shell inside the Docker container
-	  --docker-exec            Exec into a running claudex container for current directory
-	  --docker-pull            Pull the latest base image when building
-	  --docker-no-cache        Build the Docker image without cache
-	  --docker-sudo            Allow sudo inside the container (less secure)
-	  --allow-unsafe-directory Skip directory safety checks (home, hidden, unowned, no .git)
-	  --package <name>         Add apt package to install in Docker (can be repeated)
-	  --volume <spec>          Add volume mount: path or host:container (can be repeated)
-	  --env <spec>             Add env var: KEY=value or KEY for KEY=\${KEY} (can be repeated)
-	  --ssh-key <path>         Add SSH key to agent (can be repeated)
+	scopeOptions(configCommand.command('add').description('Append a value to an array field').argument('<key>').argument('<value>'))
+		.action(configAction);
 
-	Examples
-	  $ claudex
-	  $ claudex --no-docker
-	  $ claudex --docker-shell
-	  $ claudex --docker-exec
-	  $ claudex config list
-	  $ claudex -p "Hello, Claude"
-`, {
-		importMeta: import.meta,
-		flags: flagsConfig,
-		allowUnknownFlags: true,
-	});
+	scopeOptions(configCommand.command('remove').description('Remove a value from an array or record field').argument('<key>').argument('[value]'))
+		.action(configAction);
 
-	// Derive known flags from config to avoid duplication
-	const knownBooleanFlags = new Set<string>();
-	const knownStringFlags = new Set<string>();
+	scopeOptions(configCommand.command('unset').description('Remove a key or a specific value from an array').argument('<key>').argument('[value]'))
+		.action(configAction);
 
-	for (const [ key, config ] of Object.entries(flagsConfig)) {
-		const kebab = key.replaceAll(/([A-Z])/g, '-$1').toLowerCase();
-		if (config.type === 'boolean') {
-			knownBooleanFlags.add(`--${kebab}`);
-			if ('default' in config && config.default) {
-				knownBooleanFlags.add(`--no-${kebab}`);
-			}
-		} else if (config.type === 'string') {
-			knownStringFlags.add(`--${kebab}`);
-		}
-	}
+	await program.parseAsync(process.argv);
+}
+
+async function runMain(claudeArgs: string[], options: MainOptions) {
+	const {
+		docker: useDocker,
+		dockerShell: useDockerShell,
+		dockerExec: useDockerExec,
+		dockerPull,
+		dockerNoCache,
+		dockerSudo,
+		allowUnsafeDirectory,
+		package: cliPackages,
+		volume: cliVolumes,
+		env: cliEnv,
+		sshKey: cliSshKeys,
+	} = options;
 
 	// Read config early for hook/mcp gating
 	const earlyConfig = await getMergedConfig(process.cwd());
@@ -321,49 +315,6 @@ export async function main() {
 	const projectRoot = path.resolve(path.dirname(currentFilePath), '..');
 	if (mcpServersResolved.claudex) {
 		await ensureMcpServerConfig(projectRoot);
-	}
-
-	const {
-		docker: useDocker,
-		dockerShell: useDockerShell,
-		dockerExec: useDockerExec,
-		dockerPull,
-		dockerNoCache,
-		dockerSudo,
-		allowUnsafeDirectory,
-		package: cliPackages,
-		volume: cliVolumes,
-		env: cliEnv,
-		sshKey: cliSshKeys,
-	} = cli.flags;
-
-	// Pass through unknown flags and input to claude
-	// Filter out claudex-specific flags and their values
-	const claudeArgs: string[] = [];
-	const argv = process.argv.slice(2);
-	for (let i = 0; i < argv.length; i++) {
-		const arg = argv[i];
-		if (knownBooleanFlags.has(arg)) {
-			// Skip boolean flag
-			continue;
-		}
-
-		if (knownStringFlags.has(arg)) {
-			// Skip string flag and its value
-			i++;
-			continue;
-		}
-
-		// Check for --flag=value format
-		const eqIdx = arg.indexOf('=');
-		if (eqIdx !== -1) {
-			const flagPart = arg.slice(0, eqIdx);
-			if (knownStringFlags.has(flagPart) || knownBooleanFlags.has(flagPart)) {
-				continue;
-			}
-		}
-
-		claudeArgs.push(arg);
 	}
 
 	// Check directory safety and potentially create temp directory
