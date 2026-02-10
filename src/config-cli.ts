@@ -129,6 +129,15 @@ function collapseTilde(filePath: string): string {
 	return filePath;
 }
 
+function collapseHomedir(value: string): string {
+	const home = os.homedir();
+	if (value === home || value.startsWith(home + '/')) {
+		return '~' + value.slice(home.length);
+	}
+
+	return value;
+}
+
 function serializeConfig(config: RootConfig): string {
 	return JSON.stringify(config, null, 2) + '\n';
 }
@@ -422,8 +431,9 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 		const parent = (record[keyInfo.field] ?? {}) as Record<string, unknown>;
 		const existing = (parent[keyInfo.subKey] ?? []) as unknown[];
 		const coerced = coerceValue(keyInfo.field, value);
-		if (!existing.includes(coerced)) {
-			existing.push(coerced);
+		const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
+		if (!existing.includes(collapsed)) {
+			existing.push(collapsed);
 		}
 
 		parent[keyInfo.subKey] = existing;
@@ -447,8 +457,9 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 	const record = section as Record<string, unknown>;
 	const existing = (record[keyInfo.field] ?? []) as unknown[];
 	const coerced = coerceValue(keyInfo.field, value);
-	if (!existing.includes(coerced)) {
-		existing.push(coerced);
+	const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
+	if (!existing.includes(collapsed)) {
+		existing.push(collapsed);
 	}
 
 	record[keyInfo.field] = existing;
@@ -570,8 +581,9 @@ async function handleRemove(scope: Scope, key: string, value: string | undefined
 		}
 
 		const array = parent[keyInfo.subKey];
+		const collapsedValue = collapseHomedir(value);
 		if (Array.isArray(array)) {
-			parent[keyInfo.subKey] = array.filter((v: unknown) => String(v) !== value);
+			parent[keyInfo.subKey] = array.filter((v: unknown) => String(v) !== collapsedValue && String(v) !== value);
 			if ((parent[keyInfo.subKey] as unknown[]).length === 0) {
 				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
 				delete parent[keyInfo.subKey];
@@ -616,7 +628,8 @@ async function handleRemove(scope: Scope, key: string, value: string | undefined
 
 		if (Array.isArray(fieldValue)) {
 			const coerced = coerceValue(keyInfo.field, value!);
-			record[keyInfo.field] = fieldValue.filter((v: unknown) => v !== coerced);
+			const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
+			record[keyInfo.field] = fieldValue.filter((v: unknown) => v !== collapsed && v !== coerced);
 			if ((record[keyInfo.field] as unknown[]).length === 0) {
 				// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
 				delete record[keyInfo.field];

@@ -458,6 +458,58 @@ test('error on invalid shareVolumes value', async t => {
 	}
 });
 
+test('add volumes collapses shell-expanded home path to tilde', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const expandedPath = homedir() + '/Downloads/foo';
+		await runConfigWithDir(configDir, [ 'add', '--global', 'volumes', expandedPath ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config as { volumes: string[] }).volumes, [ '~/Downloads/foo' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('remove volumes matches shell-expanded path against tilde-stored value', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		// Add with tilde notation
+		await runConfigWithDir(configDir, [ 'add', '--global', 'volumes', '~/Downloads/foo' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config as { volumes: string[] }).volumes, [ '~/Downloads/foo' ]);
+
+		// Remove with shell-expanded path (simulating what the shell does to ~/Downloads/foo)
+		const expandedPath = homedir() + '/Downloads/foo';
+		await runConfigWithDir(configDir, [ 'remove', '--global', 'volumes', expandedPath ]);
+		const config2 = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.is((config2 as { volumes?: string[] }).volumes, undefined);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('remove volumes matches expanded path against expanded-stored value', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		// Manually write a config with an expanded path (simulating legacy or hand-edited config)
+		const claudexDir = path.join(configDir, 'claudex');
+		await mkdir(claudexDir, { recursive: true });
+		const expandedPath = homedir() + '/Downloads/foo';
+		await writeFile(
+			path.join(claudexDir, 'config.json'),
+			JSON.stringify({ volumes: [ expandedPath ] }),
+		);
+
+		// Remove with the same expanded path
+		const result = await runConfigWithDir(configDir, [ 'remove', '--global', 'volumes', expandedPath ]);
+		t.is(result.exitCode, 0);
+		const config = await readJsonFile(path.join(claudexDir, 'config.json'));
+		t.is((config as { volumes?: string[] }).volumes, undefined);
+	} finally {
+		await cleanup();
+	}
+});
+
 test('add volumes stores tilde path without expanding', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {
