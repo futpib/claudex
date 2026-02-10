@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
+import { createPatch } from 'diff';
 import {
 	getMergedConfig,
 	getConfigDir,
@@ -126,6 +127,19 @@ function collapseTilde(filePath: string): string {
 	}
 
 	return filePath;
+}
+
+function serializeConfig(config: RootConfig): string {
+	return JSON.stringify(config, null, 2) + '\n';
+}
+
+function printDiff(filePath: string, oldContent: string, newContent: string): void {
+	if (oldContent === newContent) {
+		return;
+	}
+
+	const patch = createPatch(collapseTilde(filePath), oldContent, newContent);
+	process.stderr.write(patch);
 }
 
 function findProjectKey(projects: Record<string, unknown>, scopePath: string): string | undefined {
@@ -370,6 +384,7 @@ async function handleSet(scope: Scope, key: string, value: string, file: string 
 		config = {};
 	}
 
+	const oldContent = serializeConfig(config);
 	const section = ensureSection(config, scope);
 	const coerced = coerceValue(keyInfo.field, value);
 
@@ -385,6 +400,7 @@ async function handleSet(scope: Scope, key: string, value: string, file: string 
 	}
 
 	await writeSingleConfigFile(filePath, config);
+	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
 async function handleAdd(scope: Scope, key: string, value: string, file: string | undefined): Promise<void> {
@@ -400,6 +416,7 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 			config = {};
 		}
 
+		const oldContent = serializeConfig(config);
 		const section = ensureSection(config, scope);
 		const record = section as Record<string, unknown>;
 		const parent = (record[keyInfo.field] ?? {}) as Record<string, unknown>;
@@ -413,6 +430,7 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 		record[keyInfo.field] = parent;
 
 		await writeSingleConfigFile(filePath, config);
+		printDiff(filePath, oldContent, serializeConfig(config));
 		return;
 	}
 
@@ -424,6 +442,7 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 		config = {};
 	}
 
+	const oldContent = serializeConfig(config);
 	const section = ensureSection(config, scope);
 	const record = section as Record<string, unknown>;
 	const existing = (record[keyInfo.field] ?? []) as unknown[];
@@ -435,6 +454,7 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 	record[keyInfo.field] = existing;
 
 	await writeSingleConfigFile(filePath, config);
+	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
 async function handleUnset(scope: Scope, key: string, value: string | undefined, file: string | undefined): Promise<void> {
@@ -447,6 +467,8 @@ async function handleUnset(scope: Scope, key: string, value: string | undefined,
 	} catch {
 		config = {};
 	}
+
+	const oldContent = serializeConfig(config);
 
 	const section = getSection(config, scope);
 	if (!section) {
@@ -512,6 +534,7 @@ async function handleUnset(scope: Scope, key: string, value: string | undefined,
 	}
 
 	await writeSingleConfigFile(filePath, config);
+	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
 export async function configMain(argv: string[]): Promise<void> {

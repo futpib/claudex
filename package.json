@@ -30,6 +30,7 @@
   },
   "devDependencies": {
     "@ava/typescript": "^6.0.0",
+    "@types/diff": "^8.0.0",
     "@types/invariant": "^2.2.37",
     "@types/node": "^24.1.0",
     "ava": "^6.4.1",
@@ -43,6 +44,7 @@
   "dependencies": {
     "@futpib/parser": "^1.0.4",
     "@modelcontextprotocol/sdk": "^1.25.1",
+    "diff": "^8.0.3",
     "env-paths": "^3.0.0",
     "execa": "^9.6.0",
     "invariant": "^2.2.4",

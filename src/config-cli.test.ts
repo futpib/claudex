@@ -612,6 +612,24 @@ test('implicit scope from git worktree creates project under parent repo path', 
 	}
 });
 
+test('add outputs diff to stderr, duplicate add produces no diff', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'git' ]);
+		t.is(result.exitCode, 0);
+		t.true(result.stderr.includes('+'), 'first add should have added lines in stderr');
+		t.true(result.stderr.includes('git'), 'first add should mention the added value');
+		t.true(result.stderr.includes('@@'), 'first add should have unified diff hunk header');
+
+		// Adding the same value again should produce no diff
+		const result2 = await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'git' ]);
+		t.is(result2.exitCode, 0);
+		t.is(result2.stderr, '', 'duplicate add should produce no stderr output');
+	} finally {
+		await cleanup();
+	}
+});
+
 test('add to project defined with tilde path writes to correct config file', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	const claudexDir = path.join(configDir, 'claudex');

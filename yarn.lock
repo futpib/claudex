@@ -504,6 +504,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@types/diff@npm:^8.0.0":
+  version: 8.0.0
+  resolution: "@types/diff@npm:8.0.0"
+  dependencies:
+    diff: "npm:*"
+  checksum: 10/9a7210d664898457db83d463f2586b2b4883013772a84879dfd6a9e2d3c8dc3b087d90e552d28adf982ca6e8635e5a9b47c8dc21507643a01af6b0797a8cec68
+  languageName: node
+  linkType: hard
+
 "@types/eslint@npm:^8.44.6":
   version: 8.56.12
   resolution: "@types/eslint@npm:8.56.12"
@@ -1485,11 +1494,13 @@ __metadata:
     "@ava/typescript": "npm:^6.0.0"
     "@futpib/parser": "npm:^1.0.4"
     "@modelcontextprotocol/sdk": "npm:^1.25.1"
+    "@types/diff": "npm:^8.0.0"
     "@types/invariant": "npm:^2.2.37"
     "@types/node": "npm:^24.1.0"
     ava: "npm:^6.4.1"
     c8: "npm:^10.1.3"
     coveralls: "npm:^3.1.1"
+    diff: "npm:^8.0.3"
     env-paths: "npm:^3.0.0"
     eslint-config-xo-typescript-overrides: "npm:^2.0.3"
     execa: "npm:^9.6.0"
@@ -1889,6 +1900,13 @@ __metadata:
   version: 2.0.4
   resolution: "detect-libc@npm:2.0.4"
   checksum: 10/136e995f8c5ffbc515955b0175d441b967defd3d5f2268e89fa695e9c7170d8bed17993e31a34b04f0fad33d844a3a598e0fd519a8e9be3cad5f67662d96fee0
+  languageName: node
+  linkType: hard
+
+"diff@npm:*, diff@npm:^8.0.3":
+  version: 8.0.3
+  resolution: "diff@npm:8.0.3"
+  checksum: 10/52f957e1fa53db4616ff5f4811b92b22b97a160c12a2f86f22debd4181227b0f6751aa8fd711d6a8fcf4618acb13b86bc702e6d9d6d6ed82acfd00c9cb26ace2
   languageName: node
   linkType: hard
 
