@@ -361,3 +361,40 @@ export async function hasGitChangeDirectoryFlag(command: string): Promise<boolea
 		return false;
 	});
 }
+
+/**
+ * Checks if a cargo command uses the --manifest-path flag.
+ */
+export async function hasCargoManifestPathFlag(command: string): Promise<boolean> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return false;
+	}
+
+	return someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (name !== 'cargo') {
+			return false;
+		}
+
+		// Check args for --manifest-path flag
+		for (const arg of cmd.args) {
+			const value = getWordLiteralValue(arg);
+			if (value === undefined) {
+				continue;
+			}
+
+			// Check for standalone --manifest-path flag
+			if (value === '--manifest-path') {
+				return true;
+			}
+
+			// Check for --manifest-path=<path> format
+			if (value.startsWith('--manifest-path=')) {
+				return true;
+			}
+		}
+
+		return false;
+	});
+}

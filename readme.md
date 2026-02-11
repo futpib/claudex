@@ -213,6 +213,7 @@ Or in `config.json`:
 | Flag | Description |
 |---|---|
 | `banGitC` | Ban `git -C` (running git in a different directory) |
+| `banCargoManifestPath` | Ban `cargo --manifest-path` (running cargo with a different manifest) |
 | `banGitAddAll` | Ban `git add -A` / `--all` / `--no-ignore-removal` |
 | `banGitCommitAmend` | Ban `git commit --amend` |
 | `banGitCommitNoVerify` | Ban `git commit --no-verify` |
