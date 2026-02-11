@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getPipedFilterCommand,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, hasCargoManifestPathFlag, getPipedFilterCommand,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -171,6 +171,28 @@ test('hasGitChangeDirectoryFlag - does not trigger on regular git commands', asy
 	t.false(await hasGitChangeDirectoryFlag('git status'));
 	t.false(await hasGitChangeDirectoryFlag('git commit -m "message"'));
 	t.false(await hasGitChangeDirectoryFlag('git add .'));
+});
+
+test('hasCargoManifestPathFlag - detects cargo --manifest-path', async t => {
+	t.true(await hasCargoManifestPathFlag('cargo build --manifest-path /some/path/Cargo.toml'));
+});
+
+test('hasCargoManifestPathFlag - detects cargo --manifest-path=<path>', async t => {
+	t.true(await hasCargoManifestPathFlag('cargo test --manifest-path=/some/path/Cargo.toml'));
+});
+
+test('hasCargoManifestPathFlag - detects --manifest-path before subcommand', async t => {
+	t.true(await hasCargoManifestPathFlag('cargo --manifest-path /path/Cargo.toml build'));
+});
+
+test('hasCargoManifestPathFlag - does not detect --manifest-path in strings', async t => {
+	t.false(await hasCargoManifestPathFlag('echo "cargo --manifest-path /path"'));
+});
+
+test('hasCargoManifestPathFlag - does not trigger on regular cargo commands', async t => {
+	t.false(await hasCargoManifestPathFlag('cargo build'));
+	t.false(await hasCargoManifestPathFlag('cargo test'));
+	t.false(await hasCargoManifestPathFlag('cargo run'));
 });
 
 test('getPipedFilterCommand - detects pipe to grep', async t => {
