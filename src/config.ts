@@ -43,6 +43,7 @@ const baseConfigSchema = z.object({
 	settingSources: z.string().optional(), // Default "user,local" - controls --setting-sources flag for Claude Code
 	hooks: hooksConfigSchema.optional(),
 	mcpServers: mcpServersConfigSchema.optional(),
+	notifications: z.boolean().optional(),
 });
 
 // Project config can reference a group
@@ -325,6 +326,9 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	// McpServers: merge detail objects per-key, overlay wins
 	const mcpServers = mergeMcpServersConfigs(base.mcpServers, overlay.mcpServers);
 
+	// Notifications: overlay takes precedence if defined, otherwise use base
+	const notifications = overlay.notifications ?? base.notifications;
+
 	return {
 		packages: packages.length > 0 ? packages : undefined,
 		volumes: volumes.length > 0 ? volumes : undefined,
@@ -341,6 +345,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 		settingSources,
 		hooks,
 		mcpServers,
+		notifications,
 	};
 }
 
@@ -538,6 +543,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		settingSources: config.settingSources,
 		hooks: config.hooks,
 		mcpServers: config.mcpServers,
+		notifications: config.notifications,
 	};
 }
 

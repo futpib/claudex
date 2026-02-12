@@ -16,6 +16,7 @@ import {
 	type BaseConfig,
 	type ProjectConfig,
 } from './config.js';
+import { collapseHomedir } from './utils.js';
 
 type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset';
 
@@ -129,15 +130,6 @@ function collapseTilde(filePath: string): string {
 	return filePath;
 }
 
-function collapseHomedir(value: string): string {
-	const home = os.homedir();
-	if (value === home || value.startsWith(home + '/')) {
-		return '~' + value.slice(home.length);
-	}
-
-	return value;
-}
-
 function serializeConfig(config: RootConfig): string {
 	return JSON.stringify(config, null, 2) + '\n';
 }
@@ -226,7 +218,7 @@ function coerceValue(field: string, value: string): string | number | boolean {
 		return number_;
 	}
 
-	if (field === 'shareVolumes' || field === 'hooks' || field === 'mcpServers') {
+	if (field === 'shareVolumes' || field === 'hooks' || field === 'mcpServers' || field === 'notifications') {
 		if (value === 'true') {
 			return true;
 		}

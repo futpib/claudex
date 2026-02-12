@@ -14,6 +14,7 @@ import {
 } from './config.js';
 import { shieldEnvVars } from './secrets.js';
 import { configMain } from './config-cli.js';
+import { startHostSocketServer } from './host-socket/server.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
@@ -305,7 +306,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const mcpServersResolved = resolveMcpServers(earlyConfig.config.mcpServers);
 
 	const anyHooksEnabled = Object.values(hooksResolved).some(Boolean);
-	if (anyHooksEnabled) {
+	if (anyHooksEnabled || earlyConfig.config.notifications !== false) {
 		await ensureHookSetup();
 	}
 
@@ -368,6 +369,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	let claudeChildProcess;
 	let sshAgent: SshAgentInfo | undefined;
+	let hostSocket: { socketPath: string; cleanup: () => Promise<void> } | undefined;
 
 	if (useDocker) {
 		const cwdBasename = path.basename(cwd);
@@ -492,6 +494,10 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			dockerArgs.push('-v', `${sshAgent.socketPath}:/ssh-agent`, '-e', 'SSH_AUTH_SOCK=/ssh-agent');
 		}
 
+		// Start host socket server (extensible channel for notifications, etc.)
+		hostSocket = await startHostSocketServer();
+		dockerArgs.push('-v', `${hostSocket.socketPath}:/claudex-host.sock`, '-e', 'CLAUDEX_HOST_SOCKET=/claudex-host.sock');
+
 		// Get filtered known_hosts content for configured SSH hosts
 		// Include [localhost]:PORT entries for each host port
 		const sshHosts = [
@@ -577,6 +583,11 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			console.log('Cleaning up SSH agent...');
 			await sshAgent.cleanup();
 		}
+
+		// Cleanup host socket server if we started one
+		if (hostSocket) {
+			await hostSocket.cleanup();
+		}
 	}
 }
 
@@ -631,6 +642,8 @@ async function setupHookSymlinks() {
 		const hookNameMap: Record<string, string> = {
 			'claudex-hook-pre-tool-use': 'pre-tool-use.js',
 			'claudex-hook-user-prompt-submit': 'user-prompt-submit.js',
+			'claudex-hook-notification': 'notification.js',
+			'claudex-hook-stop': 'stop.js',
 			'claudex-submit-co-authorship-proof': 'submit-co-authorship-proof.js',
 		};
 

@@ -22,6 +22,8 @@ const claudeSettingsSchema = z.object({
 	hooks: z.object({
 		PreToolUse: z.array(hookGroupSchema).optional(),
 		UserPromptSubmit: z.array(hookGroupSchema).optional(),
+		Notification: z.array(hookGroupSchema).optional(),
+		Stop: z.array(hookGroupSchema).optional(),
 	}).optional(),
 });
 
@@ -38,7 +40,7 @@ async function findHookPath(command: string): Promise<string | undefined> {
 
 async function setupHook(
 	settings: ClaudeSettings,
-	hookType: 'PreToolUse' | 'UserPromptSubmit',
+	hookType: 'PreToolUse' | 'UserPromptSubmit' | 'Notification' | 'Stop',
 	hookPath: string,
 ): Promise<boolean> {
 	if (!settings.hooks![hookType]) {
@@ -99,6 +101,22 @@ export async function ensureHookSetup() {
 
 	if (userPromptSubmitPath) {
 		needsUpdate = await setupHook(settings, 'UserPromptSubmit', userPromptSubmitPath) || needsUpdate;
+	}
+
+	const [ notificationPath, stopPath ] = await Promise.all([
+		findHookPath('claudex-hook-notification'),
+		findHookPath('claudex-hook-stop'),
+	]);
+
+	invariant(notificationPath, 'claudex-hook-notification executable must be found');
+	invariant(stopPath, 'claudex-hook-stop executable must be found');
+
+	if (notificationPath) {
+		needsUpdate = await setupHook(settings, 'Notification', notificationPath) || needsUpdate;
+	}
+
+	if (stopPath) {
+		needsUpdate = await setupHook(settings, 'Stop', stopPath) || needsUpdate;
 	}
 
 	if (needsUpdate) {
