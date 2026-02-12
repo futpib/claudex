@@ -139,6 +139,10 @@ async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = fals
 		input: dockerfileContent,
 		stdout: process.stdout,
 		stderr: process.stderr,
+		env: {
+			...process.env,
+			DOCKER_BUILDKIT: '1',
+		},
 	});
 
 	return {
