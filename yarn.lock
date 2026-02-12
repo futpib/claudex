@@ -1511,7 +1511,9 @@ __metadata:
     zod: "npm:^4.0.8"
   bin:
     claudex: ./build/cli.js
+    claudex-hook-notification: ./build/hooks/notification.js
     claudex-hook-pre-tool-use: ./build/hooks/pre-tool-use.js
+    claudex-hook-stop: ./build/hooks/stop.js
     claudex-hook-user-prompt-submit: ./build/hooks/user-prompt-submit.js
     claudex-in-docker: ./build/cli-in-docker.js
     claudex-mcp: ./build/mcp/cli.js
