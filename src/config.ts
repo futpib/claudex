@@ -5,7 +5,7 @@ import process from 'node:process';
 import { z } from 'zod';
 import { execa } from 'execa';
 import { paths } from './paths.js';
-import { allRules, allConfigKeys } from './hooks/rules/index.js';
+import { allRules, allConfigKeys, extraConfigEntries } from './hooks/rules/index.js';
 
 // Volume can be a simple string (same path for host and container)
 // or an object with different paths
@@ -79,7 +79,10 @@ const allMcpServerFlags: Array<keyof McpServersDetail> = [
 
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {
-		return Object.fromEntries(allRules.map(r => [ r.meta.configKey, r.meta.recommended ])) as Required<HooksDetail>;
+		return Object.fromEntries([
+			...allRules.map(r => [ r.meta.configKey, r.meta.recommended ]),
+			...extraConfigEntries.map(entry => [ entry.configKey, entry.recommended ]),
+		]) as Required<HooksDetail>;
 	}
 
 	if (!hooks) {

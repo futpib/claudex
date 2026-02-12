@@ -62,4 +62,11 @@ export const allRules: Rule[] = [
 
 export const rulesByConfigKey = new Map<string, Rule>(allRules.map(r => [ r.meta.configKey, r ]));
 
-export const allConfigKeys: string[] = allRules.map(r => r.meta.configKey);
+export const extraConfigEntries: Array<{ configKey: string; recommended: boolean }> = [
+	{ configKey: 'logPrompts', recommended: true },
+];
+
+export const allConfigKeys: string[] = [
+	...allRules.map(r => r.meta.configKey),
+	...extraConfigEntries.map(entry => entry.configKey),
+];

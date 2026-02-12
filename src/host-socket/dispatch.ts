@@ -1,5 +1,5 @@
 import { execa } from 'execa';
-import { type HostMessage, type NotifyMessage } from './protocol.js';
+import { type HostMessage, type NotifyMessage, type JournalMessage } from './protocol.js';
 
 async function handleNotify(message: NotifyMessage): Promise<void> {
 	const args: string[] = [ '--app-name', 'claudex' ];
@@ -19,9 +19,21 @@ async function handleNotify(message: NotifyMessage): Promise<void> {
 	}
 }
 
+async function handleJournal(message: JournalMessage): Promise<void> {
+	try {
+		await execa('systemd-cat', [ '-t', message.tag, '-p', message.priority ?? 'info' ], {
+			input: message.message,
+		});
+	} catch {
+		// Systemd-cat unavailable, silently ignore
+	}
+}
+
 export async function dispatchHostMessage(message: HostMessage): Promise<void> {
 	if (message.type === 'notify') {
 		await handleNotify(message as NotifyMessage);
+	} else if (message.type === 'journal') {
+		await handleJournal(message as JournalMessage);
 	} else {
 		console.error(`[claudex-host-socket] Unknown message type: ${message.type}`);
 	}

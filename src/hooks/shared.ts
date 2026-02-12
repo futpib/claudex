@@ -1,7 +1,7 @@
 import process from 'node:process';
-import { execa } from 'execa';
 import { type z } from 'zod';
 import { parseJson } from '../utils.js';
+import { sendHostMessage } from '../host-socket/client.js';
 
 export class ParseJsonWithSchemaError extends Error {
 	constructor(
@@ -53,11 +53,10 @@ export function formatTranscriptInfo(sessionId: string, transcriptPath: string):
 }
 
 export async function logMessage(message: string): Promise<void> {
-	try {
-		await execa('systemd-cat', [ '-t', 'claude-code', '-p', 'info' ], {
-			input: message,
-		});
-	} catch {
-		console.error(`[claude-code] ${message}`);
-	}
+	await sendHostMessage({
+		type: 'journal',
+		tag: 'claude-code',
+		priority: 'info',
+		message,
+	});
 }

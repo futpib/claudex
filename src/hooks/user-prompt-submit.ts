@@ -3,6 +3,7 @@
 
 import process from 'node:process';
 import { z } from 'zod';
+import { getMergedConfig, resolveHooks } from '../config.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema,
 } from './shared.js';
@@ -29,9 +30,13 @@ async function main() {
 		cwd: hookInput.cwd,
 	};
 
-	const inputString = JSON.stringify(filteredInput);
-	const message = `Session: ${sessionId}${transcriptInfo}, Event: UserPromptSubmit, Input: ${inputString}`;
-	await logMessage(message);
+	const { config } = await getMergedConfig(hookInput.cwd);
+	const hooks = resolveHooks(config.hooks);
+	if (hooks.logPrompts) {
+		const inputString = JSON.stringify(filteredInput);
+		const message = `Session: ${sessionId}${transcriptInfo}, Event: UserPromptSubmit, Input: ${inputString}`;
+		await logMessage(message);
+	}
 
 	process.exit(0);
 }
