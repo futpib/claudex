@@ -305,10 +305,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const hooksResolved = resolveHooks(earlyConfig.config.hooks);
 	const mcpServersResolved = resolveMcpServers(earlyConfig.config.mcpServers);
 
-	const anyHooksEnabled = Object.values(hooksResolved).some(Boolean);
-	if (anyHooksEnabled || earlyConfig.config.notifications !== false) {
-		await ensureHookSetup();
-	}
+	await ensureHookSetup();
 
 	// Ensure MCP server is configured in ~/.claude.json
 	const currentFileUrl = import.meta.url;

@@ -2,16 +2,20 @@
 
 [![Coverage Status](https://coveralls.io/repos/github/futpib/claudex/badge.svg?branch=master)](https://coveralls.io/github/futpib/claudex?branch=master)
 
-A CLI wrapper and hook management system for Anthropic's Claude Code that adds safety guardrails, co-authorship tracking, and memory management capabilities.
+A CLI wrapper and hook management system for Anthropic's Claude Code that adds Docker containerization, safety guardrails, desktop notifications, co-authorship tracking, and memory management capabilities.
 
 ## Features
 
-- **Safety Layer**: Prevents dangerous git operations (bypassing hooks, amending other developers' commits)
+- **Docker Containerization**: Run Claude Code in an isolated Docker container with automatic image building, volume mounting, and security hardening
+- **Safety Layer**: Prevents dangerous git operations (bypassing hooks, amending other developers' commits) and rejects unsafe working directories
+- **Desktop Notifications**: Get notified via `notify-send` when tasks complete or need attention, with host socket forwarding for Docker
 - **Co-Authorship Verification**: Cryptographic proof system to validate Claude's actual contributions to commits
 - **Session Tracking**: Comprehensive logging of tool usage and user interactions
 - **Memory Management**: Modular CLAUDE.md file generation from organized configuration directory
-- **Automatic Updates**: Checks for and installs Claude Code updates
-- **Hook System**: Extensible pre-tool-use and user-prompt-submit hooks
+- **SSH Forwarding**: Automatic SSH agent setup and forwarding into Docker containers
+- **Hook System**: Extensible pre-tool-use, user-prompt-submit, notification, and stop hooks
+- **MCP Server**: Built-in requirements tracking tool for Claude Code sessions
+- **Multi-Scope Configuration**: Layered config system with global, project, and group scopes
 
 ## Installation
 
@@ -27,20 +31,44 @@ yarn build
 
 ### Basic Usage
 
-Replace `claude-code` with `claudex` in your workflow:
-
 ```bash
-# Instead of: claude-code
+# Run Claude Code in Docker (default)
 claudex
 
 # All arguments are passed through to Claude Code
-claudex --help
+claudex -p 'fix the tests'
+
+# Run directly on the host (no Docker)
+claudex --no-docker
+
+# Launch a shell inside the container
+claudex --docker-shell
+
+# Exec into a running container for the current directory
+claudex --docker-exec
 ```
 
-On first run, `claudex` will:
-1. Set up required hooks in Claude Code's configuration
-2. Generate unified memory file from `~/.config/claudex/CLAUDE.md.d/`
-3. Check for Claude Code updates
+### CLI Flags
+
+| Flag | Description |
+|---|---|
+| `--no-docker` | Run Claude Code directly on the host |
+| `--docker-shell` | Launch bash inside the container |
+| `--docker-exec` | Exec into a running container |
+| `--docker-pull` | Pull the latest base image when building |
+| `--docker-no-cache` | Build image without Docker cache |
+| `--docker-sudo` | Allow sudo inside the container |
+| `--allow-unsafe-directory` | Skip directory safety checks |
+| `--package <name>` | Install apt package in Docker (repeatable) |
+| `--volume <spec>` | Mount volume: `path` or `host:container` (repeatable) |
+| `--env <spec>` | Set env var: `KEY=value` or `KEY` for passthrough (repeatable) |
+| `--ssh-key <path>` | Add SSH key to agent (repeatable) |
+
+### Docker Safety
+
+By default, claudex refuses to run in unsafe directories (home directory, hidden directories, unowned directories, directories without `.git`). A temporary directory is created automatically in these cases. Use `--allow-unsafe-directory` to override.
+
+Containers run with `--cap-drop ALL --security-opt no-new-privileges` unless `--docker-sudo` is passed.
 
 ### Co-Authorship Proof System
 
@@ -100,12 +128,35 @@ Logs user prompts with session context for tracking and debugging.
        │
        ├─► Sets up hooks in ~/.claude/settings.json
        ├─► Generates ~/.claude/CLAUDE.md from ~/.config/claudex/CLAUDE.md.d/
-       ├─► Checks for @anthropic/claude-code updates
+       ├─► Starts SSH agent and host socket server
+       ├─► Builds and runs Docker container (or spawns claude directly)
        │
-       └─► Spawns claude
+       └─► claude (inside container or on host)
            │
-           ├─► pre-tool-use hook validates operations
-           └─► user-prompt-submit hook logs interactions
+           ├─► PreToolUse hook validates operations
+           ├─► UserPromptSubmit hook logs interactions
+           ├─► Stop hook sends "task completed" notification
+           └─► Notification hook forwards attention-needed alerts
+```
+
+### Notifications
+
+Desktop notifications are enabled by default. Claude Code fires notifications when tasks complete (`Stop` event) or need attention (`Notification` event).
+
+In Docker mode, notifications are delivered through a Unix domain socket mounted from the host. The socket uses newline-delimited JSON and is designed to be extensible for future message types. Outside Docker, `notify-send` is called directly.
+
+```bash
+# Disable notifications
+claudex config set --global notifications false
+```
+
+### SSH Forwarding
+
+Claudex starts an SSH agent, loads configured keys, and forwards it into the container. Known hosts from `~/.ssh/known_hosts` are filtered to configured hosts and injected into the container.
+
+```bash
+claudex config set ssh.keys '["~/.ssh/id_ed25519"]'
+claudex config set ssh.hosts '["github.com", "gitlab.com"]'
 ```
 
 ## Config Management
@@ -149,6 +200,7 @@ claudex config <action> [scope flags] [key] [value]
 | `hooks.<FLAG>` | boolean | set, unset |
 | `mcpServers` | boolean / object | set, unset |
 | `mcpServers.<NAME>` | boolean | set, unset |
+| `notifications` | boolean | set, unset |
 | `group` | string (project only) | set, unset |
 
 ### Examples
@@ -234,38 +286,9 @@ Or in `config.json`:
 
 Setting `hooks: true` enables all 12 checks and registers hooks in `~/.claude/settings.json`. Setting `hooks: { ... }` enables only listed checks; any truthy value triggers hook registration. When `hooks` is not set (default), no checks fire and no hooks are registered.
 
-### Hook Configuration
+### Hook Registration
 
-Hooks are configured in `~/.claude/settings.json` when any hook flag is enabled:
-
-```json
-{
-  "hooks": {
-    "PreToolUse": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/path/to/claudex-hook-pre-tool-use"
-          }
-        ]
-      }
-    ],
-    "UserPromptSubmit": [
-      {
-        "matcher": ".*",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "/path/to/claudex-hook-user-prompt-submit"
-          }
-        ]
-      }
-    ]
-  }
-}
-```
+Claudex automatically registers all hooks in `~/.claude/settings.json` on startup.
 
 ### Memory Files
 
@@ -327,11 +350,13 @@ npx xo
 
 ## Binaries
 
-The package provides four executable commands:
-
 - `claudex` - Main CLI wrapper
+- `claudex-in-docker` - Docker container entry point
+- `claudex-mcp` - MCP server for requirements tracking
 - `claudex-hook-pre-tool-use` - Pre-tool-use hook handler
 - `claudex-hook-user-prompt-submit` - User prompt event handler
+- `claudex-hook-notification` - Notification event handler (desktop notifications)
+- `claudex-hook-stop` - Stop event handler (task completion notifications)
 - `claudex-submit-co-authorship-proof` - Co-authorship proof submission tool
 
 ## Contributing
