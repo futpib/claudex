@@ -286,6 +286,9 @@ export async function main() {
 	scopeOptions(configCommand.command('unset').description('Remove a key or a specific value from an array').argument('<key>').argument('[value]'))
 		.action(configAction);
 
+	configCommand.command('keys').description('List available configuration keys and their types')
+		.action(configAction);
+
 	await program.parseAsync(process.argv);
 }
 

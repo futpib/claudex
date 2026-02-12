@@ -57,7 +57,7 @@ const rootConfigSchema = baseConfigSchema.extend({
 	projects: z.record(z.string(), projectConfigSchema).optional(),
 });
 
-export { rootConfigSchema };
+export { baseConfigSchema, rootConfigSchema };
 
 export type VolumeMount = z.infer<typeof volumeMountSchema>;
 export type Volume = z.infer<typeof volumeSchema>;
@@ -73,9 +73,19 @@ export type RootConfig = z.infer<typeof rootConfigSchema>;
 // Merged config is the same as base config (after merging root + project)
 export type ClaudexConfig = BaseConfig;
 
-const allMcpServerFlags: Array<keyof McpServersDetail> = [
+export const allMcpServerFlags: Array<keyof McpServersDetail> = [
 	'claudex',
 ];
+
+export const validTopLevelKeys = new Set(Object.keys(baseConfigSchema.shape));
+
+export const fixedSubKeyFields: Record<string, Set<string>> = {
+	hooks: new Set(allConfigKeys),
+	mcpServers: new Set(allMcpServerFlags),
+	ssh: new Set([ 'keys', 'hosts' ]),
+};
+
+export const recordFields = new Set([ 'env', 'extraHosts' ]);
 
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {

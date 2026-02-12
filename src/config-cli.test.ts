@@ -805,3 +805,244 @@ test('add to project defined with tilde path writes to correct config file', asy
 		await cleanup();
 	}
 });
+
+// --- Key validation tests ---
+
+test('set rejects unknown top-level key', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'set', '--global', 'typoField', 'value' ]);
+		t.not(result.exitCode, 0);
+		t.true(result.stderr.includes('Unknown configuration key'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set rejects unknown hooks subkey', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.typoKey', 'true' ]);
+		t.not(result.exitCode, 0);
+		t.true(result.stderr.includes('Unknown subkey'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set rejects unknown mcpServers subkey', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'set', '--global', 'mcpServers.nonexistent', 'true' ]);
+		t.not(result.exitCode, 0);
+		t.true(result.stderr.includes('Unknown subkey'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set allows valid hooks subkey', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.logPrompts', 'true' ]);
+		t.is(result.exitCode, 0);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.is((config as { hooks: { logPrompts: boolean } }).hooks.logPrompts, true);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set allows arbitrary env subkey', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'set', '--global', 'env.MY_CUSTOM_VAR', 'hello' ]);
+		t.is(result.exitCode, 0);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.is((config as { env: Record<string, string> }).env.MY_CUSTOM_VAR, 'hello');
+	} finally {
+		await cleanup();
+	}
+});
+
+test('add rejects unknown top-level key', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'add', '--global', 'unknownField', 'value' ]);
+		t.not(result.exitCode, 0);
+		t.true(result.stderr.includes('Unknown configuration key'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set rejects group in global scope, allows in project scope', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const globalResult = await runConfigWithDir(configDir, [ 'set', '--global', 'group', 'dev' ]);
+		t.not(globalResult.exitCode, 0);
+		t.true(globalResult.stderr.includes('project scope'));
+
+		const projectPath = '/home/user/code/myproject';
+		const projectResult = await runConfigWithDir(configDir, [ 'set', '--project', projectPath, 'group', 'dev' ]);
+		t.is(projectResult.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
+// --- Smart boolean-to-detail resolution tests ---
+
+test('set hooks true then set hooks.logPrompts false preserves recommended keys', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks', 'true' ]);
+		const result = await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.logPrompts', 'false' ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const { hooks } = config as { hooks: Record<string, boolean> };
+		t.is(typeof hooks, 'object');
+		t.is(hooks.logPrompts, false);
+		// Other recommended keys should be preserved from resolveHooks(true)
+		t.is(typeof hooks.banGitC, 'boolean');
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set mcpServers true then set mcpServers.claudex false preserves detail object', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'mcpServers', 'true' ]);
+		const result = await runConfigWithDir(configDir, [ 'set', '--global', 'mcpServers.claudex', 'false' ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const { mcpServers } = config as { mcpServers: Record<string, boolean> };
+		t.is(typeof mcpServers, 'object');
+		t.is(mcpServers.claudex, false);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set hooks.banGitC true then set hooks.logPrompts false keeps both keys', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.banGitC', 'true' ]);
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.logPrompts', 'false' ]);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const { hooks } = config as { hooks: Record<string, boolean> };
+		t.is(hooks.banGitC, true);
+		t.is(hooks.logPrompts, false);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set hooks.logPrompts true when hooks undefined creates detail object', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.logPrompts', 'true' ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const { hooks } = config as { hooks: Record<string, boolean> };
+		t.is(typeof hooks, 'object');
+		t.is(hooks.logPrompts, true);
+	} finally {
+		await cleanup();
+	}
+});
+
+// --- Config keys command tests ---
+
+test('config keys exits 0 and lists expected keys', async t => {
+	const result = await runConfig([ 'keys' ]);
+	t.is(result.exitCode, 0);
+	t.true(result.stdout.includes('packages'));
+	t.true(result.stdout.includes('hooks'));
+	t.true(result.stdout.includes('hooks.logPrompts'));
+	t.true(result.stdout.includes('mcpServers.claudex'));
+	t.true(result.stdout.includes('group'));
+});
+
+test('config keys output includes type annotations', async t => {
+	const result = await runConfig([ 'keys' ]);
+	t.is(result.exitCode, 0);
+	t.true(result.stdout.includes('string[]'));
+	t.true(result.stdout.includes('boolean'));
+	t.true(result.stdout.includes('number[]'));
+});
+
+// --- Existing hooks get/set gap tests ---
+
+test('get hooks returns true when set to boolean', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks', 'true' ]);
+		const result = await runConfigWithDir(configDir, [ 'get', '--global', 'hooks' ]);
+		t.is(result.exitCode, 0);
+		t.is(result.stdout.trim(), 'true');
+	} finally {
+		await cleanup();
+	}
+});
+
+test('get hooks returns object JSON when set to detail form', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.logPrompts', 'true' ]);
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.banGitC', 'false' ]);
+		const result = await runConfigWithDir(configDir, [ 'get', '--global', 'hooks' ]);
+		t.is(result.exitCode, 0);
+		const parsed = JSON.parse(result.stdout) as Record<string, boolean>;
+		t.is(parsed.logPrompts, true);
+		t.is(parsed.banGitC, false);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('get hooks.logPrompts returns value from detail form', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.logPrompts', 'true' ]);
+		const result = await runConfigWithDir(configDir, [ 'get', '--global', 'hooks.logPrompts' ]);
+		t.is(result.exitCode, 0);
+		t.is(result.stdout.trim(), 'true');
+	} finally {
+		await cleanup();
+	}
+});
+
+test('unset hooks.banGitC removes one key, preserves others', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.banGitC', 'true' ]);
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.logPrompts', 'false' ]);
+		await runConfigWithDir(configDir, [ 'unset', '--global', 'hooks.banGitC' ]);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const { hooks } = config as { hooks: Record<string, boolean | undefined> };
+		t.is(hooks.banGitC, undefined);
+		t.is(hooks.logPrompts, false);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set hooks true after detail form replaces detail with boolean', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks.logPrompts', 'true' ]);
+		await runConfigWithDir(configDir, [ 'set', '--global', 'hooks', 'true' ]);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.is((config as { hooks: boolean | Record<string, unknown> }).hooks, true);
+	} finally {
+		await cleanup();
+	}
+});

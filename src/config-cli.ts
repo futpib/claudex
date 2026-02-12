@@ -12,13 +12,21 @@ import {
 	findConfigFileForGroup,
 	getGitWorktreeParentPath,
 	expandTilde,
+	resolveHooks,
+	resolveMcpServers,
+	baseConfigSchema,
+	validTopLevelKeys,
+	fixedSubKeyFields,
+	recordFields,
+	allMcpServerFlags,
 	type RootConfig,
 	type BaseConfig,
 	type ProjectConfig,
 } from './config.js';
+import { allConfigKeys } from './hooks/rules/index.js';
 import { collapseHomedir } from './utils.js';
 
-type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset';
+type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys';
 
 type Scope =
 	| { type: 'project'; path: string; fromCwd?: boolean }
@@ -92,16 +100,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 		}
 	}
 
-	if (positionals.length === 0) {
-		throw new Error('Missing action. Usage: claudex config <list|get|set|add|remove|unset> [key] [value]');
-	}
-
-	const actionString = positionals[0];
-	if (![ 'list', 'get', 'set', 'add', 'remove', 'unset' ].includes(actionString)) {
-		throw new Error(`Unknown action: ${actionString}. Expected one of: list, get, set, add, remove, unset`);
-	}
-
-	const action = actionString as Action;
+	const action = positionals[0] as Action;
 	const key = positionals[1];
 	const value = positionals[2];
 
@@ -208,8 +207,16 @@ function parseKey(key: string): KeyInfo {
 	};
 }
 
+const booleanCoercionFields = new Set(Object.entries(baseConfigSchema.shape)
+	.filter(([ , schema ]) => schema.safeParse(true).success)
+	.map(([ key ]) => key));
+
+const numberCoercionFields = new Set(Object.entries(baseConfigSchema.shape)
+	.filter(([ , schema ]) => schema.safeParse([ 1 ]).success)
+	.map(([ key ]) => key));
+
 function coerceValue(field: string, value: string): string | number | boolean {
-	if (field === 'hostPorts') {
+	if (numberCoercionFields.has(field)) {
 		const number_ = Number(value);
 		if (!Number.isInteger(number_) || number_ <= 0) {
 			throw new Error(`Invalid port number: ${value}`);
@@ -218,7 +225,7 @@ function coerceValue(field: string, value: string): string | number | boolean {
 		return number_;
 	}
 
-	if (field === 'shareVolumes' || field === 'hooks' || field === 'mcpServers' || field === 'notifications') {
+	if (booleanCoercionFields.has(field)) {
 		if (value === 'true') {
 			return true;
 		}
@@ -231,6 +238,47 @@ function coerceValue(field: string, value: string): string | number | boolean {
 	}
 
 	return value;
+}
+
+function validateKey(keyInfo: KeyInfo, scope: Scope): void {
+	// Check top-level field
+	if (!validTopLevelKeys.has(keyInfo.field) && keyInfo.field !== 'group') {
+		throw new Error(`Unknown configuration key: ${keyInfo.field}. Run 'claudex config keys' to see available keys.`);
+	}
+
+	// 'group' is only valid in project scope
+	if (keyInfo.field === 'group' && scope.type !== 'project') {
+		throw new Error('\'group\' can only be set in project scope (use --project)');
+	}
+
+	// Check subkey validity
+	if (keyInfo.subKey) {
+		if (recordFields.has(keyInfo.field)) {
+			// Allow arbitrary subkeys for record fields
+			return;
+		}
+
+		const validSubKeys = fixedSubKeyFields[keyInfo.field];
+		if (validSubKeys && !validSubKeys.has(keyInfo.subKey)) {
+			throw new Error(`Unknown subkey '${keyInfo.subKey}' for '${keyInfo.field}'. Valid subkeys: ${[ ...validSubKeys ].join(', ')}`);
+		}
+	}
+}
+
+function resolveBooleanToDetail(field: string, currentValue: unknown): unknown {
+	if (currentValue !== true) {
+		return currentValue;
+	}
+
+	if (field === 'hooks') {
+		return resolveHooks(true);
+	}
+
+	if (field === 'mcpServers') {
+		return resolveMcpServers(true);
+	}
+
+	return currentValue;
 }
 
 async function resolveWriteFile(scope: Scope, file: string | undefined): Promise<string> {
@@ -376,6 +424,7 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 
 async function handleSet(scope: Scope, key: string, value: string, file: string | undefined): Promise<void> {
 	const keyInfo = parseKey(key);
+	validateKey(keyInfo, scope);
 	const filePath = await resolveWriteFile(scope, file);
 
 	let config: RootConfig;
@@ -390,9 +439,9 @@ async function handleSet(scope: Scope, key: string, value: string, file: string 
 	const coerced = coerceValue(keyInfo.field, value);
 
 	if (keyInfo.subKey) {
-		// Record field (env.KEY, extraHosts.HOST)
 		const record = section as Record<string, unknown>;
-		const existing = (record[keyInfo.field] ?? {}) as Record<string, unknown>;
+		const resolved = resolveBooleanToDetail(keyInfo.field, record[keyInfo.field]);
+		const existing = (resolved ?? {}) as Record<string, unknown>;
 		existing[keyInfo.subKey] = coerced;
 		record[keyInfo.field] = existing;
 	} else {
@@ -406,6 +455,7 @@ async function handleSet(scope: Scope, key: string, value: string, file: string 
 
 async function handleAdd(scope: Scope, key: string, value: string, file: string | undefined): Promise<void> {
 	const keyInfo = parseKey(key);
+	validateKey(keyInfo, scope);
 
 	if (keyInfo.subKey) {
 		// For nested array fields (ssh.keys, ssh.hosts)
@@ -420,7 +470,8 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 		const oldContent = serializeConfig(config);
 		const section = ensureSection(config, scope);
 		const record = section as Record<string, unknown>;
-		const parent = (record[keyInfo.field] ?? {}) as Record<string, unknown>;
+		const resolved = resolveBooleanToDetail(keyInfo.field, record[keyInfo.field]);
+		const parent = (resolved ?? {}) as Record<string, unknown>;
 		const existing = (parent[keyInfo.subKey] ?? []) as unknown[];
 		const coerced = coerceValue(keyInfo.field, value);
 		const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
@@ -481,6 +532,11 @@ async function handleUnset(scope: Scope, key: string, value: string | undefined,
 	const record = section as Record<string, unknown>;
 
 	if (keyInfo.subKey) {
+		const resolved = resolveBooleanToDetail(keyInfo.field, record[keyInfo.field]);
+		if (resolved !== record[keyInfo.field]) {
+			record[keyInfo.field] = resolved;
+		}
+
 		if (value === undefined) {
 			// Remove entire sub-key from record
 			const parent = record[keyInfo.field] as Record<string, unknown> | undefined;
@@ -565,6 +621,13 @@ async function handleRemove(scope: Scope, key: string, value: string | undefined
 
 	const record = section as Record<string, unknown>;
 
+	if (keyInfo.subKey) {
+		const resolved = resolveBooleanToDetail(keyInfo.field, record[keyInfo.field]);
+		if (resolved !== record[keyInfo.field]) {
+			record[keyInfo.field] = resolved;
+		}
+	}
+
 	if (keyInfo.subKey && value !== undefined) {
 		// Nested array: `remove ssh.keys ~/.ssh/id_ed25519`
 		const parent = record[keyInfo.field] as Record<string, unknown> | undefined;
@@ -642,6 +705,77 @@ async function handleRemove(scope: Scope, key: string, value: string | undefined
 	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
+type KeyEntry = { key: string; type: string };
+
+function getKeyEntries(): KeyEntry[] {
+	const entries: KeyEntry[] = [];
+
+	const fieldTypes: Record<string, string> = {
+		packages: 'string[]',
+		volumes: 'string[]',
+		hostPorts: 'number[]',
+		shareVolumes: 'boolean',
+		settingSources: 'string',
+		hooks: 'boolean',
+		mcpServers: 'boolean',
+		notifications: 'boolean',
+	};
+
+	for (const field of validTopLevelKeys) {
+		entries.push({ key: field, type: fieldTypes[field] ?? 'string' });
+
+		switch (field) {
+			case 'env':
+			case 'extraHosts': {
+				const placeholder = field === 'env' ? '<KEY>' : '<HOST>';
+				entries.push({ key: `${field}.${placeholder}`, type: 'string' });
+				break;
+			}
+
+			case 'ssh': {
+				entries.push(
+					{ key: 'ssh.keys', type: 'string[]' },
+					{ key: 'ssh.hosts', type: 'string[]' },
+				);
+				break;
+			}
+
+			case 'hooks': {
+				for (const subKey of allConfigKeys) {
+					entries.push({ key: `hooks.${subKey}`, type: 'boolean' });
+				}
+
+				break;
+			}
+
+			case 'mcpServers': {
+				for (const subKey of allMcpServerFlags) {
+					entries.push({ key: `mcpServers.${subKey}`, type: 'boolean' });
+				}
+
+				break;
+			}
+
+			default: {
+				break;
+			}
+		}
+	}
+
+	entries.push({ key: 'group', type: 'string (project only)' });
+
+	return entries;
+}
+
+function handleKeys(): void {
+	const entries = getKeyEntries();
+	const maxKeyLength = Math.max(...entries.map(entry => entry.key.length));
+
+	for (const entry of entries) {
+		console.log(`${entry.key.padEnd(maxKeyLength + 4)}${entry.type}`);
+	}
+}
+
 export async function configMain(argv: string[]): Promise<void> {
 	const parsed = parseArgs(argv);
 
@@ -711,6 +845,11 @@ export async function configMain(argv: string[]): Promise<void> {
 			}
 
 			await handleUnset(parsed.scope, parsed.key, parsed.value, parsed.file);
+			break;
+		}
+
+		case 'keys': {
+			handleKeys();
 			break;
 		}
 	}
