@@ -1,10 +1,20 @@
-import { execa } from 'execa';
+import process from 'node:process';
+import { execa as defaultExeca } from 'execa';
 import { type HostMessage, type NotifyMessage, type JournalMessage } from './protocol.js';
 
-async function handleNotify(message: NotifyMessage): Promise<void> {
+const notifyWaitTimeoutMs = 60_000;
+
+export type ExecaFn = (command: string, args: string[], options?: Record<string, unknown>) => Promise<{ stdout?: string }>;
+
+export async function handleNotify(message: NotifyMessage, execa: ExecaFn = defaultExeca): Promise<void> {
 	const args: string[] = [ '--app-name', 'claudex' ];
 	if (message.urgency) {
 		args.push('-u', message.urgency);
+	}
+
+	const windowId = process.env.WINDOWID;
+	if (windowId) {
+		args.push('--action', 'default=Focus');
 	}
 
 	args.push(message.summary);
@@ -12,16 +22,37 @@ async function handleNotify(message: NotifyMessage): Promise<void> {
 		args.push(message.body);
 	}
 
+	if (windowId) {
+		void notifyAndFocus(args, windowId, execa);
+	} else {
+		try {
+			await execa('notify-send', args);
+		} catch (error) {
+			console.warn('[claudex] Failed to send notification:', error instanceof Error ? error.message : error);
+		}
+	}
+}
+
+export async function notifyAndFocus(args: string[], windowId: string, execa: ExecaFn = defaultExeca): Promise<void> {
 	try {
-		await execa('notify-send', args);
-	} catch {
-		// Notify-send unavailable, silently ignore
+		const result = await execa('notify-send', args, {
+			cancelSignal: AbortSignal.timeout(notifyWaitTimeoutMs),
+		});
+		if (result.stdout?.trim() === 'default') {
+			await execa('xdotool', [ 'windowactivate', windowId ]);
+		}
+	} catch (error) {
+		if (error instanceof Error && 'isCanceled' in error && error.isCanceled) {
+			return;
+		}
+
+		console.warn('[claudex] Failed to send notification or focus window:', error instanceof Error ? error.message : error);
 	}
 }
 
 async function handleJournal(message: JournalMessage): Promise<void> {
 	try {
-		await execa('systemd-cat', [ '-t', message.tag, '-p', message.priority ?? 'info' ], {
+		await defaultExeca('systemd-cat', [ '-t', message.tag, '-p', message.priority ?? 'info' ], {
 			input: message.message,
 		});
 	} catch {
