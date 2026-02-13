@@ -481,6 +481,44 @@ EOF
 	}
 });
 
+test('allows tail with negative line offset and filename', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFileOperationCommands: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('tail -100 /var/log/syslog'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.not(result.exitCode, 2);
+		t.false(result.stderr.includes('tail'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('rejects tail with extra flags', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFileOperationCommands: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('tail -f -100 log.txt'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('tail'));
+	} finally {
+		await cleanup();
+	}
+});
+
 test('allows Grep tool', async t => {
 	const { configDir, cleanup } = await createHooksConfig({});
 	try {
