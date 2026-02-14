@@ -295,13 +295,13 @@ export async function getGitCheckoutBranchStartPoint(command: string): Promise<s
  * Checks if a command pipes output to a filter command (grep, head, tail, awk, sed, etc.).
  * Returns the name of the filter command if found, undefined otherwise.
  */
+export const filterCommands = new Set([ 'grep', 'head', 'tail', 'awk', 'sed', 'cut', 'sort', 'uniq', 'wc', 'tr' ]);
+
 export async function getPipedFilterCommand(command: string): Promise<string | undefined> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
 		return undefined;
 	}
-
-	const filterCommands = new Set([ 'grep', 'head', 'tail', 'awk', 'sed', 'cut', 'sort', 'uniq', 'wc', 'tr' ]);
 
 	for (const entry of ast.entries) {
 		const pipelineCommands = entry.pipeline.commands;
