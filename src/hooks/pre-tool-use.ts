@@ -40,6 +40,7 @@ async function main() {
 		command,
 		cwd: process.cwd(),
 		helpers,
+		hooks,
 	};
 
 	// Rules that run before the read-only/internal/MCP early exit

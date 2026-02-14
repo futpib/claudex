@@ -34,8 +34,13 @@ export const logToolUse: Rule = {
 	},
 	async fn(context) {
 		const isMcpTool = context.toolName.startsWith('mcp__');
+		const isReadOnly = readOnlyTools.has(context.toolName);
 
-		if (readOnlyTools.has(context.toolName) || internalTools.has(context.toolName) || isMcpTool) {
+		if (internalTools.has(context.toolName) || isMcpTool) {
+			return { type: 'pass' };
+		}
+
+		if (isReadOnly && !context.hooks.logReadOnlyToolUse) {
 			return { type: 'pass' };
 		}
 

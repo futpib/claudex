@@ -30,6 +30,7 @@ export type RuleContext = {
 	command: string;
 	cwd: string;
 	helpers: typeof bashParserHelpers;
+	hooks: Record<string, boolean | undefined>;
 };
 
 export type RuleMeta = {
@@ -64,6 +65,7 @@ export const rulesByConfigKey = new Map<string, Rule>(allRules.map(r => [ r.meta
 
 export const extraConfigEntries: Array<{ configKey: string; recommended: boolean }> = [
 	{ configKey: 'logPrompts', recommended: true },
+	{ configKey: 'logReadOnlyToolUse', recommended: true },
 ];
 
 export const allConfigKeys: string[] = [

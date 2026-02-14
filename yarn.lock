@@ -185,10 +185,12 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@futpib/parser@npm:^1.0.4":
-  version: 1.0.4
-  resolution: "@futpib/parser@npm:1.0.4"
+"@futpib/parser@npm:^1.0.6":
+  version: 1.0.6
+  resolution: "@futpib/parser@npm:1.0.6"
   dependencies:
+    acorn: "npm:^8.15.0"
+    astring: "npm:^1.9.0"
     fp-ts: "npm:^2.16.11"
     mem: "npm:^10.0.0"
     monocle-ts: "npm:^2.3.13"
@@ -199,7 +201,7 @@ __metadata:
   peerDependenciesMeta:
     mutf-8:
       optional: true
-  checksum: 10/a86e8ae6b85e84a19b8b1d3f09097ff3b39871b4b40a90b4f1208e68e790e5eba9f0edcbcdb955e622636704f879fec8c100f89e42b68c512dd6529deb86b3ba
+  checksum: 10/fa60b5b8e1264e0c2535b22277b65ad4bcbe690c8a5fcab22b1d88bb2cda0765274bf9bb438a556b48d45293beda94270e3e94d22aaf3cd4b35f60260573fde2
   languageName: node
   linkType: hard
 
@@ -1178,6 +1180,15 @@ __metadata:
   languageName: node
   linkType: hard
 
+"astring@npm:^1.9.0":
+  version: 1.9.0
+  resolution: "astring@npm:1.9.0"
+  bin:
+    astring: bin/astring
+  checksum: 10/ee88f71d8534557b27993d6d035ae85d78488d8dbc6429cd8e8fdfcafec3c65928a3bdc518cf69767a1298d3361490559a4819cd4b314007edae1e94cf1f9e4c
+  languageName: node
+  linkType: hard
+
 "async-function@npm:^1.0.0":
   version: 1.0.0
   resolution: "async-function@npm:1.0.0"
@@ -1536,7 +1547,7 @@ __metadata:
   resolution: "claudex@workspace:."
   dependencies:
     "@ava/typescript": "npm:^6.0.0"
-    "@futpib/parser": "npm:^1.0.4"
+    "@futpib/parser": "npm:^1.0.6"
     "@modelcontextprotocol/sdk": "npm:^1.25.1"
     "@types/diff": "npm:^8.0.0"
     "@types/invariant": "npm:^2.2.37"

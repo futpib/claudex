@@ -254,3 +254,7 @@ test('getPipedFilterCommand - does not detect filter in strings', async t => {
 test('getPipedFilterCommand - handles complex command with redirections', async t => {
 	t.is(await getPipedFilterCommand('taxdome-gitlab-mr-ci -j 0 2>&1 | grep -E "^(Failed examples:|rspec )"'), 'grep');
 });
+
+test('getPipedFilterCommand - detects grep with regex pattern containing dollar sign', async t => {
+	t.is(await getPipedFilterCommand('ls -la /home/futpib/code/lnquant/indicators/ | grep "\\.ts$" | grep -v "\\.test\\.ts"'), 'grep');
+});
