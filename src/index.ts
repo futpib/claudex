@@ -410,6 +410,14 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			config.ssh.keys = [ ...(config.ssh.keys ?? []), ...cliSshKeys ];
 		}
 
+		// Print packages
+		if (config.packages && config.packages.length > 0) {
+			console.error('Packages:');
+			for (const pkg of config.packages) {
+				console.error(`  ${pkg}`);
+			}
+		}
+
 		const { username, projectRoot, imageName } = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
 		const randomSuffix = Math.random().toString(36).slice(2, 8);
 		const containerName = `claudex-${cwdBasename}-${randomSuffix}`;
