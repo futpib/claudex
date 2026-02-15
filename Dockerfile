@@ -32,7 +32,7 @@ RUN --mount=type=cache,target=/var/cache/pacman/pkg \
 	if [ -n "${PACKAGES}" ]; then \
 		OFFICIAL_PKGS=$(echo "${PACKAGES}" | tr ' ' '\n' | grep -Fxf <(pacman -Slq) | tr '\n' ' '); \
 		if [ -n "${OFFICIAL_PKGS}" ]; then \
-			pacman -S --noconfirm ${OFFICIAL_PKGS}; \
+			pacman -S --noconfirm --needed ${OFFICIAL_PKGS}; \
 		fi; \
 	fi
 
@@ -47,7 +47,7 @@ RUN --mount=type=cache,target=/var/cache/pacman/pkg \
 		useradd -m -G wheel builder; \
 		echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers; \
 		chmod 777 /tmp/yay-build; \
-		su - builder -c "yay -S --noconfirm --builddir /tmp/yay-build ${PACKAGES}"; \
+		su - builder -c "yay -S --noconfirm --needed --builddir /tmp/yay-build ${PACKAGES}"; \
 		userdel -r builder; \
 		sed -i '/%wheel ALL=(ALL) NOPASSWD: ALL/d' /etc/sudoers; \
 	fi
