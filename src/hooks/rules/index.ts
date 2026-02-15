@@ -10,6 +10,7 @@ import { banBackgroundBash } from './ban-background-bash.js';
 import { banCommandChaining } from './ban-command-chaining.js';
 import { banPipeToFilter } from './ban-pipe-to-filter.js';
 import { banFileOperationCommands } from './ban-file-operation-commands.js';
+import { banFindExec } from './ban-find-exec.js';
 import { banOutdatedYearInSearch } from './ban-outdated-year-in-search.js';
 import { banWrongPackageManager } from './ban-wrong-package-manager.js';
 import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
@@ -57,6 +58,7 @@ export const allRules: Rule[] = [
 	banCommandChaining,
 	banPipeToFilter,
 	banFileOperationCommands,
+	banFindExec,
 	banOutdatedYearInSearch,
 	banWrongPackageManager,
 	requireCoAuthorshipProof,

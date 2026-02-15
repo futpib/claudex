@@ -96,7 +96,10 @@ export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDeta
 	}
 
 	if (!hooks) {
-		return Object.fromEntries(allConfigKeys.map(k => [ k, false ])) as Required<HooksDetail>;
+		return Object.fromEntries([
+			...allRules.map(r => [ r.meta.configKey, r.meta.recommended ]),
+			...extraConfigEntries.map(entry => [ entry.configKey, entry.recommended ]),
+		]) as Required<HooksDetail>;
 	}
 
 	return Object.fromEntries(allConfigKeys.map(k => [ k, hooks[k] ?? false ])) as Required<HooksDetail>;

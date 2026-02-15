@@ -322,6 +322,41 @@ export async function getPipedFilterCommand(command: string): Promise<string | u
 	return undefined;
 }
 
+/**
+ * Gets the command name used with find -exec or -execdir.
+ * Returns the command name if found, undefined otherwise.
+ */
+export async function getFindExecCommand(command: string): Promise<string | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	let result: string | undefined;
+
+	someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (name !== 'find') {
+			return false;
+		}
+
+		for (let i = 0; i < cmd.args.length; i++) {
+			const value = getWordLiteralValue(cmd.args[i]!);
+			if ((value === '-exec' || value === '-execdir') && i + 1 < cmd.args.length) {
+				const execCmd = getWordLiteralValue(cmd.args[i + 1]!);
+				if (execCmd) {
+					result = execCmd;
+					return true;
+				}
+			}
+		}
+
+		return false;
+	});
+
+	return result;
+}
+
 export async function hasGitChangeDirectoryFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {

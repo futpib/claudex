@@ -895,6 +895,100 @@ test('accepts TaskUpdate tool', async t => {
 	}
 });
 
+test('rejects find -exec grep', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFindExec: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('find /home -name "*.h" -exec grep -l "json" {} \\;'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('find -exec grep'));
+		t.true(result.stderr.includes('rg'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('rejects find -exec with non-grep command', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFindExec: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('find . -name "*.tmp" -exec rm {} \\;'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('find -exec is not allowed'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('rejects find -execdir', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFindExec: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('find . -name "*.log" -execdir gzip {} \\;'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('find -exec is not allowed'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows find without -exec', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFindExec: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('find . -name "*.txt"'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.not(result.exitCode, 2);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows find -exec when hooks not configured', async t => {
+	const { configDir, cleanup } = await createHooksConfig({});
+	try {
+		const result = await runHook(
+			createBashToolInput('find . -name "*.tmp" -exec rm {} \\;'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
 test('accepts unknown tool names not in any schema', async t => {
 	const { configDir, cleanup } = await createHooksConfig({});
 	try {
