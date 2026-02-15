@@ -27,7 +27,7 @@ import {
 import { allConfigKeys } from './hooks/rules/index.js';
 import { collapseHomedir } from './utils.js';
 
-type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys';
+type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'group';
 
 type Scope =
 	| { type: 'project'; path: string; fromCwd?: boolean }
@@ -40,6 +40,7 @@ type ParsedArgs = {
 	file?: string;
 	key?: string;
 	value?: string;
+	paths?: string[];
 };
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -104,6 +105,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 	const action = positionals[0] as Action;
 	const key = positionals[1];
 	const value = positionals[2];
+	const paths = action === 'group' ? positionals.slice(2) : undefined;
 
 	if (isGlobal) {
 		if (scope) {
@@ -116,7 +118,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 	scope ??= { type: 'project', path: process.cwd(), fromCwd: true };
 
 	return {
-		action, scope, file, key, value,
+		action, scope, file, key, value, paths,
 	};
 }
 
@@ -458,9 +460,11 @@ async function getGlobalArrayValues(field: string): Promise<unknown[]> {
 	const entries = await readAllConfigFiles();
 	const values: unknown[] = [];
 	for (const entry of entries) {
-		const arr = (entry.config as Record<string, unknown>)[field];
-		if (Array.isArray(arr)) {
-			values.push(...arr);
+		const array = (entry.config as Record<string, unknown>)[field];
+		if (Array.isArray(array)) {
+			for (const item of array as unknown[]) {
+				values.push(item);
+			}
 		}
 	}
 
@@ -814,6 +818,47 @@ function handleKeys(): void {
 	}
 }
 
+async function handleGroup(name: string, paths: string[], file: string | undefined): Promise<void> {
+	const scope: Scope = { type: 'global' };
+	const filePath = await resolveWriteFile(scope, file);
+
+	let config: RootConfig;
+	try {
+		config = await readSingleConfigFile(filePath);
+	} catch {
+		config = {};
+	}
+
+	const oldContent = serializeConfig(config);
+
+	// Auto-create group if it doesn't exist
+	config.groups ??= {};
+	config.groups[name] ??= {};
+
+	// Resolve all paths concurrently (worktree → parent repo, then tilde-collapse)
+	config.projects ??= {};
+	const resolvedPaths = await Promise.all(paths.map(async projectPath => {
+		let resolvedPath = path.resolve(projectPath);
+		const worktreeParent = await getGitWorktreeParentPath(resolvedPath);
+		if (worktreeParent) {
+			resolvedPath = worktreeParent;
+		}
+
+		return collapseTilde(resolvedPath);
+	}));
+
+	// Assign each project to the group
+	for (const resolvedPath of resolvedPaths) {
+		const existingKey = findProjectKey(config.projects, resolvedPath);
+		const key = existingKey ?? resolvedPath;
+		config.projects[key] ??= {};
+		(config.projects[key] as Record<string, unknown>).group = name;
+	}
+
+	await writeSingleConfigFile(filePath, config);
+	printDiff(filePath, oldContent, serializeConfig(config));
+}
+
 export async function configMain(argv: string[]): Promise<void> {
 	const parsed = parseArgs(argv);
 
@@ -888,6 +933,19 @@ export async function configMain(argv: string[]): Promise<void> {
 
 		case 'keys': {
 			handleKeys();
+			break;
+		}
+
+		case 'group': {
+			if (!parsed.key) {
+				throw new Error('group requires a name argument');
+			}
+
+			if (!parsed.paths || parsed.paths.length === 0) {
+				throw new Error('group requires at least one project path');
+			}
+
+			await handleGroup(parsed.key, parsed.paths, parsed.file);
 			break;
 		}
 	}

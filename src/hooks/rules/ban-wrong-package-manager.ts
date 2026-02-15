@@ -12,13 +12,13 @@ const lockFiles: Array<{ file: string; pm: PackageManager }> = [
 	{ file: 'package-lock.json', pm: 'npm' },
 ];
 
-const allPmCommands = new Set(['npm', 'npx', 'yarn', 'bun', 'bunx', 'pnpm', 'pnpx']);
+const allPmCommands = new Set([ 'npm', 'npx', 'yarn', 'bun', 'bunx', 'pnpm', 'pnpx' ]);
 
 const allowedCommands: Record<PackageManager, Set<string>> = {
-	yarn: new Set(['yarn']),
-	bun: new Set(['bun', 'bunx']),
-	pnpm: new Set(['pnpm', 'pnpx']),
-	npm: new Set(['npm', 'npx']),
+	yarn: new Set([ 'yarn' ]),
+	bun: new Set([ 'bun', 'bunx' ]),
+	pnpm: new Set([ 'pnpm', 'pnpx' ]),
+	npm: new Set([ 'npm', 'npx' ]),
 };
 
 function detectPackageManager(cwd: string): PackageManager | undefined {
@@ -50,9 +50,7 @@ export const banWrongPackageManager: Rule = {
 
 		const commands = await context.helpers.extractCommandNames(context.command);
 		const allowed = allowedCommands[detectedPm];
-		const wrongCommands = [...commands].filter(
-			cmd => allPmCommands.has(cmd) && !allowed.has(cmd),
-		);
+		const wrongCommands = [ ...commands ].filter(cmd => allPmCommands.has(cmd) && !allowed.has(cmd));
 
 		if (wrongCommands.length === 0) {
 			return { type: 'pass' };
@@ -62,7 +60,7 @@ export const banWrongPackageManager: Rule = {
 			type: 'violation',
 			messages: [
 				`❌ Wrong package manager: ${wrongCommands.join(', ')} used in a ${detectedPm} project`,
-				`This project uses ${detectedPm} (detected from lock file). Use ${[...allowed].join('/')} instead.`,
+				`This project uses ${detectedPm} (detected from lock file). Use ${[ ...allowed ].join('/')} instead.`,
 			],
 		};
 	},

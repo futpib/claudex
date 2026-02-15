@@ -899,7 +899,7 @@ test('rejects find -exec grep', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banFindExec: true });
 	try {
 		const result = await runHook(
-			createBashToolInput('find /home -name "*.h" -exec grep -l "json" {} \\;'),
+			createBashToolInput(String.raw`find /home -name "*.h" -exec grep -l "json" {} \;`),
 			undefined,
 			{
 			// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -919,7 +919,7 @@ test('rejects find -exec with non-grep command', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banFindExec: true });
 	try {
 		const result = await runHook(
-			createBashToolInput('find . -name "*.tmp" -exec rm {} \\;'),
+			createBashToolInput(String.raw`find . -name "*.tmp" -exec rm {} \;`),
 			undefined,
 			{
 			// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -938,7 +938,7 @@ test('rejects find -execdir', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banFindExec: true });
 	try {
 		const result = await runHook(
-			createBashToolInput('find . -name "*.log" -execdir gzip {} \\;'),
+			createBashToolInput(String.raw`find . -name "*.log" -execdir gzip {} \;`),
 			undefined,
 			{
 			// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -975,7 +975,7 @@ test('allows find -exec when hooks not configured', async t => {
 	const { configDir, cleanup } = await createHooksConfig({});
 	try {
 		const result = await runHook(
-			createBashToolInput('find . -name "*.tmp" -exec rm {} \\;'),
+			createBashToolInput(String.raw`find . -name "*.tmp" -exec rm {} \;`),
 			undefined,
 			{
 			// eslint-disable-next-line @typescript-eslint/naming-convention

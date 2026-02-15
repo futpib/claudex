@@ -141,6 +141,7 @@ async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = fals
 		stderr: process.stderr,
 		env: {
 			...process.env,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
 			DOCKER_BUILDKIT: '1',
 		},
 	});
@@ -287,6 +288,13 @@ export async function main() {
 		.action(configAction);
 
 	configCommand.command('keys').description('List available configuration keys and their types')
+		.action(configAction);
+
+	configCommand.command('group').description('Assign projects to a group')
+		.argument('<name>', 'Group name')
+		.argument('<paths...>', 'Project paths to assign')
+		.option('--file <path>', 'Write to a specific file in config.json.d')
+		.passThroughOptions()
 		.action(configAction);
 
 	await program.parseAsync(process.argv);

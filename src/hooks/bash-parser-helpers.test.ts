@@ -256,5 +256,5 @@ test('getPipedFilterCommand - handles complex command with redirections', async 
 });
 
 test('getPipedFilterCommand - detects grep with regex pattern containing dollar sign', async t => {
-	t.is(await getPipedFilterCommand('ls -la /home/futpib/code/lnquant/indicators/ | grep "\\.ts$" | grep -v "\\.test\\.ts"'), 'grep');
+	t.is(await getPipedFilterCommand(String.raw`ls -la /home/futpib/code/lnquant/indicators/ | grep "\.ts$" | grep -v "\.test\.ts"`), 'grep');
 });

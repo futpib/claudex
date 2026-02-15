@@ -66,7 +66,8 @@ function getWordPartLiteralValue(part: BashWordPart): string | undefined {
 		case 'variableBraced':
 		case 'commandSubstitution':
 		case 'backtickSubstitution':
-		case 'arithmeticExpansion': {
+		case 'arithmeticExpansion':
+		case 'processSubstitution': {
 			// These types cannot be resolved to literal values
 			return undefined;
 		}
@@ -128,7 +129,8 @@ function extractCommandNamesFromWord(word: BashWord, commands: Set<string>): voi
 function extractCommandNamesFromWordPart(part: BashWordPart, commands: Set<string>): void {
 	switch (part.type) {
 		case 'commandSubstitution':
-		case 'backtickSubstitution': {
+		case 'backtickSubstitution':
+		case 'processSubstitution': {
 			const subCommands = extractCommandNamesFromAst(part.command);
 			for (const cmd of subCommands) {
 				commands.add(cmd);
@@ -341,9 +343,9 @@ export async function getFindExecCommand(command: string): Promise<string | unde
 		}
 
 		for (let i = 0; i < cmd.args.length; i++) {
-			const value = getWordLiteralValue(cmd.args[i]!);
+			const value = getWordLiteralValue(cmd.args[i]);
 			if ((value === '-exec' || value === '-execdir') && i + 1 < cmd.args.length) {
-				const execCmd = getWordLiteralValue(cmd.args[i + 1]!);
+				const execCmd = getWordLiteralValue(cmd.args[i + 1]);
 				if (execCmd) {
 					result = execCmd;
 					return true;

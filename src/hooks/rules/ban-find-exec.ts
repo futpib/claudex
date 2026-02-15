@@ -27,7 +27,7 @@ export const banFindExec: Rule = {
 			return {
 				type: 'violation',
 				messages: [
-					`❌ find -exec is not allowed`,
+					'❌ find -exec is not allowed',
 					'Use the Glob tool to find files by pattern, and the Grep tool to search file contents.',
 				],
 			};

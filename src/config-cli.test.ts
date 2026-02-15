@@ -1047,3 +1047,140 @@ test('set hooks true after detail form replaces detail with boolean', async t =>
 		await cleanup();
 	}
 });
+
+// --- Config group command tests ---
+
+test('config group assigns multiple projects to a group', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projA = await mkdtemp(path.join(tmpdir(), 'claudex-group-a-'));
+	const projB = await mkdtemp(path.join(tmpdir(), 'claudex-group-b-'));
+	try {
+		const result = await runConfigWithDir(configDir, [ 'group', 'mygroup', projA, projB ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			groups: Record<string, Record<string, unknown>>;
+			projects: Record<string, { group: string }>;
+		};
+		t.deepEqual(typed.groups.mygroup, {});
+		t.is(typed.projects[projA].group, 'mygroup');
+		t.is(typed.projects[projB].group, 'mygroup');
+	} finally {
+		await rm(projA, { recursive: true });
+		await rm(projB, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config group auto-creates group entry', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projC = await mkdtemp(path.join(tmpdir(), 'claudex-group-c-'));
+	try {
+		const result = await runConfigWithDir(configDir, [ 'group', 'newgroup', projC ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			groups: Record<string, Record<string, unknown>>;
+			projects: Record<string, { group: string }>;
+		};
+		t.deepEqual(typed.groups.newgroup, {});
+		t.is(typed.projects[projC].group, 'newgroup');
+	} finally {
+		await rm(projC, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config group preserves existing group settings', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projD = await mkdtemp(path.join(tmpdir(), 'claudex-group-d-'));
+	try {
+		// Pre-create a group with some settings
+		await runConfigWithDir(configDir, [ 'set', '--group', 'dev', 'settingSources', 'user' ]);
+
+		// Assign a project to the existing group
+		const result = await runConfigWithDir(configDir, [ 'group', 'dev', projD ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			groups: Record<string, { settingSources?: string }>;
+			projects: Record<string, { group: string }>;
+		};
+		t.is(typed.groups.dev.settingSources, 'user');
+		t.is(typed.projects[projD].group, 'dev');
+	} finally {
+		await rm(projD, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config group tilde-collapses paths under home directory', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const home = homedir();
+	const projectDir = await mkdtemp(path.join(home, '.claudex-test-group-'));
+
+	try {
+		const result = await runConfigWithDir(configDir, [ 'group', 'mygroup', projectDir ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const { projects } = config as { projects: Record<string, unknown> };
+
+		const realHome = await realpath(home);
+		const realProjectDir = await realpath(projectDir);
+		const expectedTildePath = '~' + realProjectDir.slice(realHome.length);
+
+		t.truthy(projects[expectedTildePath], `expected project key ${expectedTildePath}`);
+		t.is((projects[expectedTildePath] as { group: string }).group, 'mygroup');
+		t.is(projects[projectDir], undefined, 'should not have absolute path key');
+	} finally {
+		await rm(projectDir, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config group outputs diff to stderr', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const projE = await mkdtemp(path.join(tmpdir(), 'claudex-group-e-'));
+		const result = await runConfigWithDir(configDir, [ 'group', 'mygroup', projE ]);
+		await rm(projE, { recursive: true });
+		t.is(result.exitCode, 0);
+		t.true(result.stderr.includes('@@'), 'should have unified diff hunk header');
+		t.true(result.stderr.includes('mygroup'), 'diff should mention the group name');
+	} finally {
+		await cleanup();
+	}
+});
+
+test('config group is idempotent for already-assigned projects', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projF = await mkdtemp(path.join(tmpdir(), 'claudex-group-f-'));
+	try {
+		await runConfigWithDir(configDir, [ 'group', 'mygroup', projF ]);
+		const config1 = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+
+		// Run again with same path
+		const result = await runConfigWithDir(configDir, [ 'group', 'mygroup', projF ]);
+		t.is(result.exitCode, 0);
+		const config2 = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+
+		t.deepEqual(config1, config2);
+	} finally {
+		await rm(projF, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config group errors without paths', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'group', 'mygroup' ]);
+		t.not(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
