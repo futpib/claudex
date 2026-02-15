@@ -75,6 +75,33 @@ test('add appends to packages array', async t => {
 	}
 });
 
+test('add appends multiple values at once', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'cmake', 'ninja', 'vim' ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config as { packages: string[] }).packages, [ 'cmake', 'ninja', 'vim' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('add multiple values skips duplicates', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'vim' ]);
+		const result = await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'curl', 'vim', 'git' ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual((config as { packages: string[] }).packages, [ 'vim', 'curl', 'git' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
 test('add does not duplicate existing package', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {

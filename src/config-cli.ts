@@ -40,7 +40,7 @@ type ParsedArgs = {
 	file?: string;
 	key?: string;
 	value?: string;
-	paths?: string[];
+	extraValues?: string[];
 };
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -105,7 +105,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 	const action = positionals[0] as Action;
 	const key = positionals[1];
 	const value = positionals[2];
-	const paths = action === 'group' ? positionals.slice(2) : undefined;
+	const extraValues = (action === 'add' || action === 'group') ? positionals.slice(2) : undefined;
 
 	if (isGlobal) {
 		if (scope) {
@@ -118,7 +118,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 	scope ??= { type: 'project', path: process.cwd(), fromCwd: true };
 
 	return {
-		action, scope, file, key, value, paths,
+		action, scope, file, key, value, extraValues,
 	};
 }
 
@@ -471,52 +471,9 @@ async function getGlobalArrayValues(field: string): Promise<unknown[]> {
 	return values;
 }
 
-async function handleAdd(scope: Scope, key: string, value: string, file: string | undefined): Promise<void> {
+async function handleAdd(scope: Scope, key: string, values: string[], file: string | undefined): Promise<void> {
 	const keyInfo = parseKey(key);
 	validateKey(keyInfo, scope);
-
-	if (keyInfo.subKey) {
-		// For nested array fields (ssh.keys, ssh.hosts)
-		const filePath = await resolveWriteFile(scope, file);
-		let config: RootConfig;
-		try {
-			config = await readSingleConfigFile(filePath);
-		} catch {
-			config = {};
-		}
-
-		const oldContent = serializeConfig(config);
-		const section = ensureSection(config, scope);
-		const record = section as Record<string, unknown>;
-		const resolved = resolveBooleanToDetail(keyInfo.field, record[keyInfo.field]);
-		const parent = (resolved ?? {}) as Record<string, unknown>;
-		const existing = (parent[keyInfo.subKey] ?? []) as unknown[];
-		const coerced = coerceValue(keyInfo.field, value);
-		const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
-		if (existing.includes(collapsed)) {
-			console.error(`${key} already contains ${value} in ${scope.type} config`);
-			return;
-		}
-
-		if (scope.type !== 'global') {
-			const globalValues = await getGlobalArrayValues(keyInfo.field);
-			const globalParent = (globalValues.find(v => typeof v === 'object' && v !== null) ?? {}) as Record<string, unknown>;
-			const globalSubValues = (globalParent[keyInfo.subKey] ?? []) as unknown[];
-			if (globalSubValues.includes(collapsed)) {
-				console.error(`${key} already contains ${value} in global config`);
-				return;
-			}
-		}
-
-		existing.push(collapsed);
-
-		parent[keyInfo.subKey] = existing;
-		record[keyInfo.field] = parent;
-
-		await writeSingleConfigFile(filePath, config);
-		printDiff(filePath, oldContent, serializeConfig(config));
-		return;
-	}
 
 	const filePath = await resolveWriteFile(scope, file);
 	let config: RootConfig;
@@ -529,25 +486,49 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 	const oldContent = serializeConfig(config);
 	const section = ensureSection(config, scope);
 	const record = section as Record<string, unknown>;
-	const existing = (record[keyInfo.field] ?? []) as unknown[];
-	const coerced = coerceValue(keyInfo.field, value);
-	const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
-	if (existing.includes(collapsed)) {
-		console.error(`${keyInfo.field} already contains ${value} in ${scope.type} config`);
-		return;
-	}
 
-	if (scope.type !== 'global') {
-		const globalValues = await getGlobalArrayValues(keyInfo.field);
-		if (globalValues.includes(collapsed)) {
-			console.error(`${keyInfo.field} already contains ${value} in global config`);
-			return;
+	const globalValues = scope.type === 'global' ? undefined : await getGlobalArrayValues(keyInfo.field);
+
+	if (keyInfo.subKey) {
+		// For nested array fields (ssh.keys, ssh.hosts)
+		const resolved = resolveBooleanToDetail(keyInfo.field, record[keyInfo.field]);
+		const parent = (resolved ?? {}) as Record<string, unknown>;
+		const existing = (parent[keyInfo.subKey] ?? []) as unknown[];
+
+		const globalParent = (globalValues?.find(v => typeof v === 'object' && v !== null) ?? {}) as Record<string, unknown>;
+		const globalSubValues = globalValues ? (globalParent[keyInfo.subKey] ?? []) as unknown[] : [];
+
+		for (const value of values) {
+			const coerced = coerceValue(keyInfo.field, value);
+			const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
+			if (existing.includes(collapsed)) {
+				console.error(`${key} already contains ${value} in ${scope.type} config`);
+			} else if (globalSubValues.includes(collapsed)) {
+				console.error(`${key} already contains ${value} in global config`);
+			} else {
+				existing.push(collapsed);
+			}
 		}
+
+		parent[keyInfo.subKey] = existing;
+		record[keyInfo.field] = parent;
+	} else {
+		const existing = (record[keyInfo.field] ?? []) as unknown[];
+
+		for (const value of values) {
+			const coerced = coerceValue(keyInfo.field, value);
+			const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
+			if (existing.includes(collapsed)) {
+				console.error(`${keyInfo.field} already contains ${value} in ${scope.type} config`);
+			} else if (globalValues?.includes(collapsed)) {
+				console.error(`${keyInfo.field} already contains ${value} in global config`);
+			} else {
+				existing.push(collapsed);
+			}
+		}
+
+		record[keyInfo.field] = existing;
 	}
-
-	existing.push(collapsed);
-
-	record[keyInfo.field] = existing;
 
 	await writeSingleConfigFile(filePath, config);
 	printDiff(filePath, oldContent, serializeConfig(config));
@@ -905,11 +886,11 @@ export async function configMain(argv: string[]): Promise<void> {
 				throw new Error('add requires a key argument');
 			}
 
-			if (parsed.value === undefined) {
-				throw new Error('add requires a value argument');
+			if (!parsed.extraValues || parsed.extraValues.length === 0) {
+				throw new Error('add requires at least one value argument');
 			}
 
-			await handleAdd(parsed.scope, parsed.key, parsed.value, parsed.file);
+			await handleAdd(parsed.scope, parsed.key, parsed.extraValues, parsed.file);
 			break;
 		}
 
@@ -941,11 +922,11 @@ export async function configMain(argv: string[]): Promise<void> {
 				throw new Error('group requires a name argument');
 			}
 
-			if (!parsed.paths || parsed.paths.length === 0) {
+			if (!parsed.extraValues || parsed.extraValues.length === 0) {
 				throw new Error('group requires at least one project path');
 			}
 
-			await handleGroup(parsed.key, parsed.paths, parsed.file);
+			await handleGroup(parsed.key, parsed.extraValues, parsed.file);
 			break;
 		}
 	}

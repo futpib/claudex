@@ -278,7 +278,7 @@ export async function main() {
 	scopeOptions(configCommand.command('set').description('Set a configuration value').argument('<key>').argument('<value>'))
 		.action(configAction);
 
-	scopeOptions(configCommand.command('add').description('Append a value to an array field').argument('<key>').argument('<value>'))
+	scopeOptions(configCommand.command('add').description('Append value(s) to an array field').argument('<key>').argument('<values...>'))
 		.action(configAction);
 
 	scopeOptions(configCommand.command('remove').description('Remove a value from an array or record field').argument('<key>').argument('[value]'))
