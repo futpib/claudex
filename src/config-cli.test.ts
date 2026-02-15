@@ -673,10 +673,11 @@ test('add outputs diff to stderr, duplicate add produces no diff', async t => {
 		t.true(result.stderr.includes('git'), 'first add should mention the added value');
 		t.true(result.stderr.includes('@@'), 'first add should have unified diff hunk header');
 
-		// Adding the same value again should produce no diff
+		// Adding the same value again should produce no diff but show a message
 		const result2 = await runConfigWithDir(configDir, [ 'add', '--global', 'packages', 'git' ]);
 		t.is(result2.exitCode, 0);
-		t.is(result2.stderr, '', 'duplicate add should produce no stderr output');
+		t.false(result2.stderr.includes('@@'), 'duplicate add should not have unified diff hunk header');
+		t.true(result2.stderr.includes('already contains git'), 'duplicate add should mention that the value already exists');
 	} finally {
 		await cleanup();
 	}

@@ -10,6 +10,7 @@ import {
 	writeSingleConfigFile,
 	findConfigFileForProject,
 	findConfigFileForGroup,
+	readAllConfigFiles,
 	getGitWorktreeParentPath,
 	expandTilde,
 	resolveHooks,
@@ -453,6 +454,19 @@ async function handleSet(scope: Scope, key: string, value: string, file: string 
 	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
+async function getGlobalArrayValues(field: string): Promise<unknown[]> {
+	const entries = await readAllConfigFiles();
+	const values: unknown[] = [];
+	for (const entry of entries) {
+		const arr = (entry.config as Record<string, unknown>)[field];
+		if (Array.isArray(arr)) {
+			values.push(...arr);
+		}
+	}
+
+	return values;
+}
+
 async function handleAdd(scope: Scope, key: string, value: string, file: string | undefined): Promise<void> {
 	const keyInfo = parseKey(key);
 	validateKey(keyInfo, scope);
@@ -475,9 +489,22 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 		const existing = (parent[keyInfo.subKey] ?? []) as unknown[];
 		const coerced = coerceValue(keyInfo.field, value);
 		const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
-		if (!existing.includes(collapsed)) {
-			existing.push(collapsed);
+		if (existing.includes(collapsed)) {
+			console.error(`${key} already contains ${value} in ${scope.type} config`);
+			return;
 		}
+
+		if (scope.type !== 'global') {
+			const globalValues = await getGlobalArrayValues(keyInfo.field);
+			const globalParent = (globalValues.find(v => typeof v === 'object' && v !== null) ?? {}) as Record<string, unknown>;
+			const globalSubValues = (globalParent[keyInfo.subKey] ?? []) as unknown[];
+			if (globalSubValues.includes(collapsed)) {
+				console.error(`${key} already contains ${value} in global config`);
+				return;
+			}
+		}
+
+		existing.push(collapsed);
 
 		parent[keyInfo.subKey] = existing;
 		record[keyInfo.field] = parent;
@@ -501,9 +528,20 @@ async function handleAdd(scope: Scope, key: string, value: string, file: string 
 	const existing = (record[keyInfo.field] ?? []) as unknown[];
 	const coerced = coerceValue(keyInfo.field, value);
 	const collapsed = typeof coerced === 'string' ? collapseHomedir(coerced) : coerced;
-	if (!existing.includes(collapsed)) {
-		existing.push(collapsed);
+	if (existing.includes(collapsed)) {
+		console.error(`${keyInfo.field} already contains ${value} in ${scope.type} config`);
+		return;
 	}
+
+	if (scope.type !== 'global') {
+		const globalValues = await getGlobalArrayValues(keyInfo.field);
+		if (globalValues.includes(collapsed)) {
+			console.error(`${keyInfo.field} already contains ${value} in global config`);
+			return;
+		}
+	}
+
+	existing.push(collapsed);
 
 	record[keyInfo.field] = existing;
 
