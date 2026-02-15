@@ -3,14 +3,18 @@
 # Stage 1: Install Claude Code
 FROM archlinux:latest AS claude-code-installer
 RUN --mount=type=cache,target=/var/cache/pacman/pkg \
+	--mount=type=cache,target=/var/lib/pacman/sync \
 	pacman -Syu --noconfirm curl
 RUN curl -fsSL https://claude.ai/install.sh | bash
 
 # Stage 2: Build yay
 FROM archlinux:latest AS yay-builder
 RUN --mount=type=cache,target=/var/cache/pacman/pkg \
+	--mount=type=cache,target=/var/lib/pacman/sync \
 	pacman -Syu --noconfirm base-devel git
-RUN useradd -m -G wheel builder && \
+RUN --mount=type=cache,target=/var/cache/pacman/pkg \
+	--mount=type=cache,target=/var/lib/pacman/sync \
+	useradd -m -G wheel builder && \
 	echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers && \
 	su - builder -c 'git clone https://aur.archlinux.org/yay.git && cd yay && makepkg -si --noconfirm'
 
@@ -23,11 +27,13 @@ ARG USERNAME=claude
 
 # Install system dependencies (as root)
 RUN --mount=type=cache,target=/var/cache/pacman/pkg \
+	--mount=type=cache,target=/var/lib/pacman/sync \
 	pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh socat nodejs
 
 # Install official repo packages from PACKAGES early (while yay builds in parallel)
 ARG PACKAGES=""
 RUN --mount=type=cache,target=/var/cache/pacman/pkg \
+	--mount=type=cache,target=/var/lib/pacman/sync \
 	set -xe; \
 	if [ -n "${PACKAGES}" ]; then \
 		OFFICIAL_PKGS=$(echo "${PACKAGES}" | tr ' ' '\n' | grep -Fxf <(pacman -Slq) | tr '\n' ' '); \
@@ -41,6 +47,7 @@ COPY --from=yay-builder /usr/bin/yay /usr/bin/yay
 
 # Install remaining (AUR) packages with yay (skips already-installed official packages)
 RUN --mount=type=cache,target=/var/cache/pacman/pkg \
+	--mount=type=cache,target=/var/lib/pacman/sync \
 	--mount=type=cache,target=/tmp/yay-build \
 	set -xe; \
 	if [ -n "${PACKAGES}" ]; then \
