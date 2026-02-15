@@ -11,6 +11,7 @@ import { banCommandChaining } from './ban-command-chaining.js';
 import { banPipeToFilter } from './ban-pipe-to-filter.js';
 import { banFileOperationCommands } from './ban-file-operation-commands.js';
 import { banOutdatedYearInSearch } from './ban-outdated-year-in-search.js';
+import { banWrongPackageManager } from './ban-wrong-package-manager.js';
 import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
 import { logToolUse } from './log-tool-use.js';
 
@@ -57,6 +58,7 @@ export const allRules: Rule[] = [
 	banPipeToFilter,
 	banFileOperationCommands,
 	banOutdatedYearInSearch,
+	banWrongPackageManager,
 	requireCoAuthorshipProof,
 	logToolUse,
 ];
