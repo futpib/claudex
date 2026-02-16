@@ -173,7 +173,11 @@ claudex config <action> [scope flags] [key] [value]
 - `get <key>` — get a merged effective value
 - `set <key> <value>` — set a scalar value or record entry
 - `add <key> <value>` — append to an array field
+- `remove <key> [<value>]` — remove a value from an array or record field
 - `unset <key> [<value>]` — remove a key, or remove a specific value from an array
+- `keys` — list available configuration keys and their types
+- `group <name> <paths...>` — assign multiple projects to a group at once
+- `ungroup <paths...>` — remove group assignment from projects
 
 ### Scope Flags
 
@@ -182,6 +186,7 @@ claudex config <action> [scope flags] [key] [value]
 - `--project <path>` — `projects[<path>]` section (explicit)
 - `--group <name>` — `groups[<name>]` section
 - `--file <path>` — target a specific file (relative to config dir)
+- `--members` — list project paths belonging to a group (use with `list --group`)
 
 ### Key Format
 
@@ -226,6 +231,15 @@ claudex config list
 
 # Get a specific value
 claudex config get --group mygroup hostPorts
+
+# Assign multiple projects to a group
+claudex config group mygroup ~/code/foo ~/code/bar
+
+# Remove projects from their group
+claudex config ungroup ~/code/foo
+
+# List projects in a group
+claudex config list --group mygroup --members
 ```
 
 ## Configuration

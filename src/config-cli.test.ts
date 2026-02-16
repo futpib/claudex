@@ -1211,3 +1211,151 @@ test('config group errors without paths', async t => {
 		await cleanup();
 	}
 });
+
+// --- Config ungroup command tests ---
+
+test('config ungroup removes group from multiple projects', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projA = await mkdtemp(path.join(tmpdir(), 'claudex-ungroup-a-'));
+	const projB = await mkdtemp(path.join(tmpdir(), 'claudex-ungroup-b-'));
+	try {
+		// Assign both to a group
+		await runConfigWithDir(configDir, [ 'group', 'mygroup', projA, projB ]);
+
+		// Ungroup both
+		const result = await runConfigWithDir(configDir, [ 'ungroup', projA, projB ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			groups?: Record<string, Record<string, unknown>>;
+			projects?: Record<string, { group?: string }>;
+		};
+		// Group entry should remain
+		t.deepEqual(typed.groups?.mygroup, {});
+		// Projects should be cleaned up (empty after removing group)
+		t.is(typed.projects, undefined);
+	} finally {
+		await rm(projA, { recursive: true });
+		await rm(projB, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config ungroup cleans up empty project entries', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projA = await mkdtemp(path.join(tmpdir(), 'claudex-ungroup-cleanup-'));
+	try {
+		// Create a project with group and another field
+		await runConfigWithDir(configDir, [ 'group', 'mygroup', projA ]);
+		await runConfigWithDir(configDir, [ 'add', '--project', projA, 'packages', 'vim' ]);
+
+		// Ungroup
+		const result = await runConfigWithDir(configDir, [ 'ungroup', projA ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			projects?: Record<string, { group?: string; packages?: string[] }>;
+		};
+		// Project should still exist (has packages), but no group
+		t.truthy(typed.projects?.[projA]);
+		t.is(typed.projects?.[projA].group, undefined);
+		t.deepEqual(typed.projects?.[projA].packages, [ 'vim' ]);
+	} finally {
+		await rm(projA, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config ungroup is idempotent for projects without group', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projA = await mkdtemp(path.join(tmpdir(), 'claudex-ungroup-idempotent-'));
+	try {
+		// Ungrouping a project that was never grouped is a no-op
+		const result = await runConfigWithDir(configDir, [ 'ungroup', projA ]);
+		t.is(result.exitCode, 0);
+	} finally {
+		await rm(projA, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config ungroup errors without paths', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'ungroup' ]);
+		t.not(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('config ungroup tilde-collapses paths under home directory', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const home = homedir();
+	const projectDir = await mkdtemp(path.join(home, '.claudex-test-ungroup-'));
+
+	try {
+		// Assign to group (will tilde-collapse)
+		await runConfigWithDir(configDir, [ 'group', 'mygroup', projectDir ]);
+
+		// Ungroup using the absolute path (should match tilde-collapsed key)
+		const result = await runConfigWithDir(configDir, [ 'ungroup', projectDir ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			projects?: Record<string, unknown>;
+		};
+		// Project should be cleaned up entirely (only had group field)
+		t.is(typed.projects, undefined);
+	} finally {
+		await rm(projectDir, { recursive: true });
+		await cleanup();
+	}
+});
+
+// --- Config list --members tests ---
+
+test('config list --members shows member projects', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projA = await mkdtemp(path.join(tmpdir(), 'claudex-members-a-'));
+	const projB = await mkdtemp(path.join(tmpdir(), 'claudex-members-b-'));
+	try {
+		await runConfigWithDir(configDir, [ 'group', 'mygroup', projA, projB ]);
+
+		const result = await runConfigWithDir(configDir, [ 'list', '--group', 'mygroup', '--members' ]);
+		t.is(result.exitCode, 0);
+		const lines = result.stdout.trim().split('\n');
+		t.is(lines.length, 2);
+		t.true(lines.includes(projA));
+		t.true(lines.includes(projB));
+	} finally {
+		await rm(projA, { recursive: true });
+		await rm(projB, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('config list --members shows empty output for unknown group', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'list', '--group', 'nonexistent', '--members' ]);
+		t.is(result.exitCode, 0);
+		t.is(result.stdout.trim(), '');
+	} finally {
+		await cleanup();
+	}
+});
+
+test('config list --members errors without --group', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'list', '--members' ]);
+		t.not(result.exitCode, 0);
+		t.true(result.stderr.includes('--members requires --group'));
+	} finally {
+		await cleanup();
+	}
+});

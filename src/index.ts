@@ -270,6 +270,7 @@ export async function main() {
 	};
 
 	scopeOptions(configCommand.command('list').description('List merged configuration as JSON'))
+		.option('--members', 'List project paths belonging to the group (requires --group)')
 		.action(configAction);
 
 	scopeOptions(configCommand.command('get').description('Get a configuration value').argument('<key>'))
@@ -293,6 +294,12 @@ export async function main() {
 	configCommand.command('group').description('Assign projects to a group')
 		.argument('<name>', 'Group name')
 		.argument('<paths...>', 'Project paths to assign')
+		.option('--file <path>', 'Write to a specific file in config.json.d')
+		.passThroughOptions()
+		.action(configAction);
+
+	configCommand.command('ungroup').description('Remove group assignment from projects')
+		.argument('<paths...>', 'Project paths to ungroup')
 		.option('--file <path>', 'Write to a specific file in config.json.d')
 		.passThroughOptions()
 		.action(configAction);

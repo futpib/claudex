@@ -27,7 +27,7 @@ import {
 import { allConfigKeys } from './hooks/rules/index.js';
 import { collapseHomedir } from './utils.js';
 
-type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'group';
+type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'group' | 'ungroup';
 
 type Scope =
 	| { type: 'project'; path: string; fromCwd?: boolean }
@@ -41,6 +41,7 @@ type ParsedArgs = {
 	key?: string;
 	value?: string;
 	extraValues?: string[];
+	members?: boolean;
 };
 
 function parseArgs(argv: string[]): ParsedArgs {
@@ -49,6 +50,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 	let scope: Scope | undefined;
 	let file: string | undefined;
 	let isGlobal = false;
+	let members = false;
 
 	const positionals: string[] = [];
 
@@ -96,6 +98,12 @@ function parseArgs(argv: string[]): ParsedArgs {
 				break;
 			}
 
+			case '--members': {
+				members = true;
+
+				break;
+			}
+
 			default: {
 				positionals.push(arg);
 			}
@@ -106,6 +114,20 @@ function parseArgs(argv: string[]): ParsedArgs {
 	const key = positionals[1];
 	const value = positionals[2];
 	const extraValues = (action === 'add' || action === 'group') ? positionals.slice(2) : undefined;
+
+	if (action === 'ungroup') {
+		if (isGlobal) {
+			if (scope) {
+				throw new Error('--global cannot be combined with --project or --group');
+			}
+
+			scope = { type: 'global' };
+		}
+
+		scope ??= { type: 'project', path: process.cwd(), fromCwd: true };
+
+		return { action, scope, file, key: undefined, value: undefined, extraValues: positionals.slice(1), members };
+	}
 
 	if (isGlobal) {
 		if (scope) {
@@ -118,7 +140,7 @@ function parseArgs(argv: string[]): ParsedArgs {
 	scope ??= { type: 'project', path: process.cwd(), fromCwd: true };
 
 	return {
-		action, scope, file, key, value, extraValues,
+		action, scope, file, key, value, extraValues, members,
 	};
 }
 
@@ -353,7 +375,29 @@ function formatValue(value: unknown): string {
 	return JSON.stringify(value, null, 2);
 }
 
-async function handleList(scope: Scope): Promise<void> {
+async function handleList(scope: Scope, members?: boolean): Promise<void> {
+	if (members) {
+		if (scope.type !== 'group') {
+			throw new Error('--members requires --group');
+		}
+
+		const allFiles = await readAllConfigFiles();
+		let merged: RootConfig = {};
+		for (const entry of allFiles) {
+			merged = { ...merged, ...entry.config };
+		}
+
+		if (merged.projects) {
+			for (const [ projectPath, projectConfig ] of Object.entries(merged.projects)) {
+				if ((projectConfig as Record<string, unknown>).group === scope.name) {
+					console.log(projectPath);
+				}
+			}
+		}
+
+		return;
+	}
+
 	if (scope.type === 'project') {
 		const { config } = await getMergedConfig(scope.path);
 		console.log(JSON.stringify(config, null, 2));
@@ -371,8 +415,7 @@ async function handleList(scope: Scope): Promise<void> {
 
 	// Group - get from merged root
 	// We need to read the root config directly for group listing
-	const { getMergedConfig: _m, ...rest } = await import('./config.js');
-	const allFiles = await rest.readAllConfigFiles();
+	const allFiles = await readAllConfigFiles();
 	let merged: RootConfig = {};
 	for (const entry of allFiles) {
 		merged = { ...merged, ...entry.config };
@@ -840,6 +883,63 @@ async function handleGroup(name: string, paths: string[], file: string | undefin
 	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
+async function handleUngroup(paths: string[], file: string | undefined): Promise<void> {
+	const scope: Scope = { type: 'global' };
+	const filePath = await resolveWriteFile(scope, file);
+
+	let config: RootConfig;
+	try {
+		config = await readSingleConfigFile(filePath);
+	} catch {
+		config = {};
+	}
+
+	const oldContent = serializeConfig(config);
+
+	if (!config.projects) {
+		await writeSingleConfigFile(filePath, config);
+		printDiff(filePath, oldContent, serializeConfig(config));
+		return;
+	}
+
+	// Resolve all paths concurrently (worktree → parent repo, then tilde-collapse)
+	const resolvedPaths = await Promise.all(paths.map(async projectPath => {
+		let resolvedPath = path.resolve(projectPath);
+		const worktreeParent = await getGitWorktreeParentPath(resolvedPath);
+		if (worktreeParent) {
+			resolvedPath = worktreeParent;
+		}
+
+		return collapseTilde(resolvedPath);
+	}));
+
+	// Remove group from each project
+	for (const resolvedPath of resolvedPaths) {
+		const existingKey = findProjectKey(config.projects, resolvedPath);
+		if (!existingKey) {
+			continue;
+		}
+
+		const project = config.projects[existingKey] as Record<string, unknown>;
+		// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+		delete project.group;
+
+		// Clean up empty project entries
+		if (Object.keys(project).length === 0) {
+			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+			delete config.projects[existingKey];
+		}
+	}
+
+	// Clean up empty projects object
+	if (Object.keys(config.projects).length === 0) {
+		delete config.projects;
+	}
+
+	await writeSingleConfigFile(filePath, config);
+	printDiff(filePath, oldContent, serializeConfig(config));
+}
+
 export async function configMain(argv: string[]): Promise<void> {
 	const parsed = parseArgs(argv);
 
@@ -855,7 +955,7 @@ export async function configMain(argv: string[]): Promise<void> {
 
 	switch (parsed.action) {
 		case 'list': {
-			await handleList(parsed.scope);
+			await handleList(parsed.scope, parsed.members);
 			break;
 		}
 
@@ -927,6 +1027,15 @@ export async function configMain(argv: string[]): Promise<void> {
 			}
 
 			await handleGroup(parsed.key, parsed.extraValues, parsed.file);
+			break;
+		}
+
+		case 'ungroup': {
+			if (!parsed.extraValues || parsed.extraValues.length === 0) {
+				throw new Error('ungroup requires at least one project path');
+			}
+
+			await handleUngroup(parsed.extraValues, parsed.file);
 			break;
 		}
 	}
