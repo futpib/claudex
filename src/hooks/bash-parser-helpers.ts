@@ -441,6 +441,45 @@ export async function findAbsolutePathUnderCwd(command: string, cwd: string): Pr
 	return found;
 }
 
+/**
+ * Finds the first argument in a bash command that is an absolute path under the given home directory.
+ * Uses the AST to only check actual command arguments, not string contents.
+ * Returns the absolute path if found, undefined otherwise.
+ */
+export async function findAbsolutePathUnderHome(command: string, homeDir: string): Promise<string | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	const homeDirWithSlash = homeDir.endsWith('/') ? homeDir : homeDir + '/';
+	let found: string | undefined;
+
+	someSimpleCommand(ast, cmd => {
+		// Check command name
+		if (cmd.name) {
+			const name = getWordLiteralValue(cmd.name);
+			if (name && (name === homeDir || name.startsWith(homeDirWithSlash))) {
+				found = name;
+				return true;
+			}
+		}
+
+		// Check arguments
+		for (const arg of cmd.args) {
+			const value = getWordLiteralValue(arg);
+			if (value && (value === homeDir || value.startsWith(homeDirWithSlash))) {
+				found = value;
+				return true;
+			}
+		}
+
+		return false;
+	});
+
+	return found;
+}
+
 export async function hasCargoManifestPathFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {

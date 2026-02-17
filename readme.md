@@ -346,6 +346,7 @@ Or in `config.json`:
 | `banFindExec` | Ban `find -exec` / `-execdir` (use dedicated tools) |
 | `banOutdatedYearInSearch` | Ban web searches containing recent but outdated years (2020+ but before current) |
 | `banAbsolutePaths` | Ban absolute paths under cwd in Bash commands (use relative paths) |
+| `banHomeDirAbsolutePaths` | Ban absolute paths under home directory in Bash commands (use `~/...`) |
 | `banWrongPackageManager` | Ban using wrong package manager for the project |
 | `requireCoAuthorshipProof` | Require co-authorship proof PIN for Co-authored-by commits |
 | `logToolUse` | Log non-read-only tool usage |

@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, hasCargoManifestPathFlag, getPipedFilterCommand, findAbsolutePathUnderCwd,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, hasCargoManifestPathFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -293,4 +293,40 @@ EOF
 
 test('findAbsolutePathUnderCwd - does not match cwd as prefix of longer path', async t => {
 	t.is(await findAbsolutePathUnderCwd('cat /home/user/project-other/file.ts', '/home/user/project'), undefined);
+});
+
+test('findAbsolutePathUnderHome - detects absolute path argument under home', async t => {
+	t.is(await findAbsolutePathUnderHome('cat /home/futpib/code/tdesktop/foo.ts', '/home/futpib'), '/home/futpib/code/tdesktop/foo.ts');
+});
+
+test('findAbsolutePathUnderHome - detects home dir itself as argument', async t => {
+	t.is(await findAbsolutePathUnderHome('ls /home/futpib', '/home/futpib'), '/home/futpib');
+});
+
+test('findAbsolutePathUnderHome - detects absolute path as command name', async t => {
+	t.is(await findAbsolutePathUnderHome('/home/futpib/bin/run', '/home/futpib'), '/home/futpib/bin/run');
+});
+
+test('findAbsolutePathUnderHome - ignores paths outside home', async t => {
+	t.is(await findAbsolutePathUnderHome('cat /etc/hosts', '/home/futpib'), undefined);
+});
+
+test('findAbsolutePathUnderHome - ignores relative paths', async t => {
+	t.is(await findAbsolutePathUnderHome('cat ./src/foo.ts', '/home/futpib'), undefined);
+});
+
+test('findAbsolutePathUnderHome - does not detect paths inside strings', async t => {
+	t.is(await findAbsolutePathUnderHome('git commit -m "Fixed /home/futpib/code/bug.ts"', '/home/futpib'), undefined);
+});
+
+test('findAbsolutePathUnderHome - does not detect paths inside heredoc', async t => {
+	const command = `git commit -m "$(cat <<'EOF'
+Fixed /home/futpib/code/bug.ts
+EOF
+)"`;
+	t.is(await findAbsolutePathUnderHome(command, '/home/futpib'), undefined);
+});
+
+test('findAbsolutePathUnderHome - does not match home as prefix of longer path', async t => {
+	t.is(await findAbsolutePathUnderHome('cat /home/futpib2/file.ts', '/home/futpib'), undefined);
 });

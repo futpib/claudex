@@ -14,6 +14,7 @@ import { banFindExec } from './ban-find-exec.js';
 import { banOutdatedYearInSearch } from './ban-outdated-year-in-search.js';
 import { banWrongPackageManager } from './ban-wrong-package-manager.js';
 import { banAbsolutePaths } from './ban-absolute-paths.js';
+import { banHomeDirAbsolutePaths } from './ban-home-dir-absolute-paths.js';
 import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
 import { logToolUse } from './log-tool-use.js';
 
@@ -62,6 +63,7 @@ export const allRules: Rule[] = [
 	banFindExec,
 	banOutdatedYearInSearch,
 	banAbsolutePaths,
+	banHomeDirAbsolutePaths,
 	banWrongPackageManager,
 	requireCoAuthorshipProof,
 	logToolUse,
