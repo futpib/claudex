@@ -19,7 +19,7 @@ import { startHostSocketServer } from './host-socket/server.js';
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
 
-function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string): string[] {
+function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string, profileVolumes: string[] = []): string[] {
 	if (config.shareAdditionalDirectories === false || !config.volumes?.length) {
 		return [];
 	}
@@ -29,6 +29,7 @@ function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string
 		projectRoot,
 		paths.config,
 		paths.data,
+		...profileVolumes,
 	]);
 
 	const additionalDirs: string[] = [];
@@ -40,8 +41,10 @@ function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string
 	}
 
 	return additionalDirs.flatMap(dir => [
-		'--add-dir', dir,
-		'--allowedTools', `Read(${dir}/**)`,
+		'--add-dir',
+		dir,
+		'--allowedTools',
+		`Read(${dir}/**)`,
 	]);
 }
 
@@ -279,6 +282,7 @@ export async function main() {
 		.option('--global', 'Use global config (default)')
 		.option('--project <path>', 'Use project-scoped config')
 		.option('--group <name>', 'Use group-scoped config')
+		.option('--profile <name>', 'Use profile-scoped config')
 		.option('--file <path>', 'Write to a specific file in config.json.d')
 		.passThroughOptions();
 
@@ -418,7 +422,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	if (useDocker) {
 		const cwdBasename = path.basename(cwd);
-		const { config } = await getMergedConfig(cwd);
+		const { config, profileVolumes } = await getMergedConfig(cwd);
 
 		// Merge CLI flags with config
 		if (cliPackages?.length) {
@@ -586,7 +590,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const settingSources = config.settingSources ?? 'user,local';
 		console.error(`Setting sources: ${settingSources}`);
 
-		const addDirArgs = buildAddDirArgs(config, cwd, projectRoot);
+		const addDirArgs = buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
 
 		if (useDockerShell) {
 			dockerArgs.push('--entrypoint', 'bash', imageName);
@@ -601,14 +605,14 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		});
 	} else {
 		// Load config for settingSources even in non-Docker mode
-		const { config } = await getMergedConfig(cwd);
+		const { config, profileVolumes } = await getMergedConfig(cwd);
 		const settingSources = config.settingSources ?? 'user,local';
 		console.error(`Setting sources: ${settingSources}`);
 
 		const currentFileUrl = import.meta.url;
 		const currentFilePath = fileURLToPath(currentFileUrl);
 		const nonDockerProjectRoot = path.resolve(path.dirname(currentFilePath), '..');
-		const addDirArgs = buildAddDirArgs(config, cwd, nonDockerProjectRoot);
+		const addDirArgs = buildAddDirArgs(config, cwd, nonDockerProjectRoot, profileVolumes);
 
 		const claudeFullArgs = [ '--setting-sources', settingSources, ...addDirArgs, ...claudeArgs ];
 

@@ -185,6 +185,7 @@ claudex config <action> [scope flags] [key] [value]
 - `--global` — root-level config
 - `--project <path>` — `projects[<path>]` section (explicit)
 - `--group <name>` — `groups[<name>]` section
+- `--profile <name>` — `profiles[<name>]` section (profile definition)
 - `--file <path>` — target a specific file (relative to config dir)
 - `--members` — list project paths belonging to a group (use with `list --group`)
 
@@ -206,7 +207,59 @@ claudex config <action> [scope flags] [key] [value]
 | `mcpServers` | boolean / object | set, unset |
 | `mcpServers.<NAME>` | boolean | set, unset |
 | `notifications` | boolean | set, unset |
+| `profiles` | string[] | add, unset |
 | `group` | string (project only) | set, unset |
+
+### Profiles
+
+Profiles are reusable tool bundles that package together everything a tool needs: its apt package, config volumes, and environment variables.
+
+Define profiles at the root level, then reference them from any scope (global, group, or project) via the `profiles` array:
+
+```json
+{
+  "profiles": {
+    "jira": {
+      "packages": ["jira-cli"],
+      "volumes": ["~/.config/.jira/"],
+      "env": { "JIRA_API_TOKEN": "${JIRA_API_TOKEN}" }
+    },
+    "glab": {
+      "packages": ["glab"],
+      "volumes": ["~/.config/glab-cli/"]
+    }
+  },
+  "groups": {
+    "my-project": {
+      "profiles": ["jira", "glab"]
+    }
+  }
+}
+```
+
+Volumes from profiles are **excluded from `--add-dir`** — they're utility mounts (tool config), not project directories. Profile fields are applied before explicit config, so fields set directly on a group or project override the profile's values.
+
+```bash
+# Define a profile
+claudex config set --profile jira packages jira-cli
+claudex config add --profile jira volumes ~/.config/.jira/
+claudex config set --profile jira env.JIRA_API_TOKEN '${JIRA_API_TOKEN}'
+
+# Reference a profile from a group
+claudex config add --group my-project profiles jira
+
+# View a profile's config
+claudex config list --profile jira
+```
+
+#### Profiles vs Groups
+
+| | Profiles | Groups |
+|---|---|---|
+| **Purpose** | Bundle a tool + its config | Bundle related projects |
+| **Defined at** | Root `profiles` record | Root `groups` record |
+| **Referenced via** | `profiles: ["name"]` from any scope | `group: "name"` from a project |
+| **Volumes** | Excluded from `--add-dir` | Auto-shared between members |
 
 ### Examples
 

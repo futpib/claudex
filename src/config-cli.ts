@@ -10,6 +10,7 @@ import {
 	writeSingleConfigFile,
 	findConfigFileForProject,
 	findConfigFileForGroup,
+	findConfigFileForProfile,
 	readAllConfigFiles,
 	getGitWorktreeParentPath,
 	expandTilde,
@@ -32,7 +33,8 @@ type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'gr
 type Scope =
 	| { type: 'project'; path: string; fromCwd?: boolean }
 	| { type: 'global' }
-	| { type: 'group'; name: string };
+	| { type: 'group'; name: string }
+	| { type: 'profile'; name: string };
 
 type ParsedArgs = {
 	action: Action;
@@ -84,6 +86,18 @@ function parseArgs(argv: string[]): ParsedArgs {
 				}
 
 				scope = { type: 'group', name: groupName };
+
+				break;
+			}
+
+			case '--profile': {
+				i++;
+				const profileName = args[i];
+				if (!profileName) {
+					throw new Error('--profile requires a name argument');
+				}
+
+				scope = { type: 'profile', name: profileName };
 
 				break;
 			}
@@ -174,7 +188,7 @@ function findProjectKey(projects: Record<string, unknown>, scopePath: string): s
 	return Object.keys(projects).find(key => expandTilde(key) === expandedScopePath);
 }
 
-function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfig | undefined {
+function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfig | RootConfig | undefined {
 	switch (scope.type) {
 		case 'global': {
 			return config;
@@ -192,10 +206,14 @@ function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfi
 		case 'group': {
 			return config.groups?.[scope.name];
 		}
+
+		case 'profile': {
+			return (config.profiles)?.[scope.name];
+		}
 	}
 }
 
-function ensureSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfig {
+function ensureSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfig | RootConfig {
 	switch (scope.type) {
 		case 'global': {
 			return config;
@@ -213,6 +231,13 @@ function ensureSection(config: RootConfig, scope: Scope): BaseConfig | ProjectCo
 			config.groups ??= {};
 			config.groups[scope.name] ??= {};
 			return config.groups[scope.name];
+		}
+
+		case 'profile': {
+			const profiles = ((config as Record<string, unknown>).profiles ?? {}) as Record<string, BaseConfig>;
+			(config as Record<string, unknown>).profiles = profiles;
+			profiles[scope.name] ??= {};
+			return profiles[scope.name];
 		}
 	}
 }
@@ -347,6 +372,19 @@ async function resolveWriteFile(scope: Scope, file: string | undefined): Promise
 
 			return result.path;
 		}
+
+		case 'profile': {
+			const result = await findConfigFileForProfile(scope.name);
+			if (result === 'ambiguous') {
+				throw new Error(`Profile "${scope.name}" is defined in multiple config files. Use --file to specify which one.`);
+			}
+
+			if (result === 'none') {
+				return defaultFile;
+			}
+
+			return result.path;
+		}
 	}
 }
 
@@ -415,6 +453,23 @@ async function handleList(scope: Scope, members?: boolean): Promise<void> {
 		return;
 	}
 
+	if (scope.type === 'profile') {
+		const allFiles = await readAllConfigFiles();
+		let merged: RootConfig = {};
+		for (const entry of allFiles) {
+			merged = { ...merged, ...entry.config };
+		}
+
+		const profileConfig = (merged.profiles)?.[scope.name];
+		if (profileConfig) {
+			console.log(JSON.stringify(profileConfig, null, 2));
+		} else {
+			console.log('{}');
+		}
+
+		return;
+	}
+
 	// Group - get from merged root
 	// We need to read the root config directly for group listing
 	const allFiles = await readAllConfigFiles();
@@ -451,6 +506,16 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 	let section: BaseConfig | ProjectConfig | undefined;
 	if (scope.type === 'global') {
 		section = config;
+	} else if (scope.type === 'profile') {
+		// For profile, read root and get profile section
+		const configModule = await import('./config.js');
+		const allFiles = await configModule.readAllConfigFiles();
+		let merged: RootConfig = {};
+		for (const entry of allFiles) {
+			merged = { ...merged, ...entry.config };
+		}
+
+		section = (merged.profiles)?.[scope.name];
 	} else {
 		// For group, read root and get group section
 		const configModule = await import('./config.js');
@@ -787,6 +852,7 @@ function getKeyEntries(): KeyEntry[] {
 		hooks: 'boolean',
 		mcpServers: 'boolean',
 		notifications: 'boolean',
+		profiles: 'string[]',
 	};
 
 	for (const field of validTopLevelKeys) {

@@ -54,7 +54,7 @@ for (const action of [ 'list', 'get', 'set', 'add', 'remove', 'unset' ]) {
 	test(`config ${action} --help exits 0 and lists scope options`, async t => {
 		const { exitCode, stdout } = await runCli([ 'config', action, '--help' ]);
 		t.is(exitCode, 0);
-		for (const flag of [ '--global', '--project', '--group', '--file' ]) {
+		for (const flag of [ '--global', '--project', '--group', '--profile', '--file' ]) {
 			t.true(stdout.includes(flag), `config ${action} help should mention ${flag}`);
 		}
 	});

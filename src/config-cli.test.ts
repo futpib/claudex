@@ -1359,3 +1359,190 @@ test('config list --members errors without --group', async t => {
 		await cleanup();
 	}
 });
+
+// --- Profile scope tests ---
+
+test('profile scope writes to correct file', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'jira', 'packages', 'jira-cli' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual(
+			(config as { profiles: Record<string, { packages: string[] }> }).profiles.jira.packages,
+			[ 'jira-cli' ],
+		);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set field on profile scope', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--profile', 'jira', 'settingSources', 'user' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.is(
+			(config as { profiles: Record<string, { settingSources: string }> }).profiles.jira.settingSources,
+			'user',
+		);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('set record field on profile scope (env.KEY)', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		// eslint-disable-next-line no-template-curly-in-string
+		const templateString = '${JIRA_API_TOKEN}';
+		await runConfigWithDir(configDir, [ 'set', '--profile', 'jira', 'env.JIRA_API_TOKEN', templateString ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.is(
+			(config as { profiles: Record<string, { env: Record<string, string> }> }).profiles.jira.env.JIRA_API_TOKEN,
+			templateString,
+		);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('add volumes to profile scope', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'jira', 'volumes', '~/.config/.jira/' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual(
+			(config as { profiles: Record<string, { volumes: string[] }> }).profiles.jira.volumes,
+			[ '~/.config/.jira/' ],
+		);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('get reads value from profile scope', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'gh', 'packages', 'github-cli' ]);
+		const result = await runConfigWithDir(configDir, [ 'get', '--profile', 'gh', 'packages' ]);
+		t.is(result.exitCode, 0);
+		t.deepEqual(JSON.parse(result.stdout), [ 'github-cli' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('list outputs profile config as JSON', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'glab', 'packages', 'glab' ]);
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'glab', 'volumes', '~/.config/glab-cli/' ]);
+		const result = await runConfigWithDir(configDir, [ 'list', '--profile', 'glab' ]);
+		t.is(result.exitCode, 0);
+		// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+		const parsed = JSON.parse(result.stdout);
+		t.deepEqual(parsed.packages, [ 'glab' ]);
+		t.deepEqual(parsed.volumes, [ '~/.config/glab-cli/' ]);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('list outputs empty object for unknown profile', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const result = await runConfigWithDir(configDir, [ 'list', '--profile', 'nonexistent' ]);
+		t.is(result.exitCode, 0);
+		t.is(result.stdout.trim(), '{}');
+	} finally {
+		await cleanup();
+	}
+});
+
+test('remove value from profile array field', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'dev', 'packages', 'vim' ]);
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'dev', 'packages', 'curl' ]);
+		await runConfigWithDir(configDir, [ 'remove', '--profile', 'dev', 'packages', 'vim' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual(
+			(config as { profiles: Record<string, { packages: string[] }> }).profiles.dev.packages,
+			[ 'curl' ],
+		);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('unset removes field from profile', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		await runConfigWithDir(configDir, [ 'set', '--profile', 'dev', 'settingSources', 'user' ]);
+		await runConfigWithDir(configDir, [ 'unset', '--profile', 'dev', 'settingSources' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.is(
+			(config as { profiles: Record<string, { settingSources?: string }> }).profiles.dev.settingSources,
+			undefined,
+		);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('add profiles reference to group', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		// Create a profile definition
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'jira', 'packages', 'jira-cli' ]);
+
+		// Reference the profile from a group
+		await runConfigWithDir(configDir, [ 'add', '--group', 'mygroup', 'profiles', 'jira' ]);
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		t.deepEqual(
+			(config as { groups: Record<string, { profiles: string[] }> }).groups.mygroup.profiles,
+			[ 'jira' ],
+		);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('config keys includes profiles', async t => {
+	const result = await runConfig([ 'keys' ]);
+	t.is(result.exitCode, 0);
+	t.true(result.stdout.includes('profiles'));
+});
+
+test('profile scope resolves file when profile exists in specific config file', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	try {
+		const claudexDir = path.join(configDir, 'claudex');
+		const configJsonDirectory = path.join(claudexDir, 'config.json.d');
+		await mkdir(configJsonDirectory, { recursive: true });
+
+		// Pre-create a config file with a profile
+		await writeFile(
+			path.join(configJsonDirectory, '99-private.json'),
+			JSON.stringify({ profiles: { jira: { packages: [ 'jira-cli' ] } } }),
+		);
+
+		// Add a volume to the profile - should write to the same file
+		await runConfigWithDir(configDir, [ 'add', '--profile', 'jira', 'volumes', '~/.config/.jira/' ]);
+
+		const config = await readJsonFile(path.join(configJsonDirectory, '99-private.json'));
+		const typed = config as { profiles: Record<string, { packages?: string[]; volumes?: string[] }> };
+		t.deepEqual(typed.profiles.jira.packages, [ 'jira-cli' ]);
+		t.deepEqual(typed.profiles.jira.volumes, [ '~/.config/.jira/' ]);
+
+		// Config.json should not exist
+		try {
+			await readJsonFile(path.join(claudexDir, 'config.json'));
+			t.fail('config.json should not have been created');
+		} catch {
+			t.pass('config.json correctly does not exist');
+		}
+	} finally {
+		await cleanup();
+	}
+});

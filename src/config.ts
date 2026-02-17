@@ -45,6 +45,7 @@ const baseConfigSchema = z.object({
 	hooks: hooksConfigSchema.optional(),
 	mcpServers: mcpServersConfigSchema.optional(),
 	notifications: z.boolean().optional(),
+	profiles: z.array(z.string()).optional(), // References to named profiles defined at root level
 });
 
 // Project config can reference a group
@@ -52,10 +53,11 @@ const projectConfigSchema = baseConfigSchema.extend({
 	group: z.string().optional(),
 });
 
-// Root config adds projects mapping and groups
+// Root config adds projects mapping, groups, and profile definitions
 const rootConfigSchema = baseConfigSchema.extend({
 	groups: z.record(z.string(), baseConfigSchema).optional(),
 	projects: z.record(z.string(), projectConfigSchema).optional(),
+	profiles: z.record(z.string(), baseConfigSchema).optional(), // Overrides the string[] from baseConfigSchema at root level
 });
 
 export { baseConfigSchema, rootConfigSchema };
@@ -297,6 +299,11 @@ function mergeMcpServersConfigs(base: McpServersConfig | undefined, overlay: Mcp
 }
 
 function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
+	const profiles = dedupeStrings([
+		...(base.profiles ?? []),
+		...(overlay.profiles ?? []),
+	]);
+
 	const packages = dedupeStrings([
 		...(base.packages ?? []),
 		...(overlay.packages ?? []),
@@ -350,6 +357,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	const notifications = overlay.notifications ?? base.notifications;
 
 	return {
+		profiles: profiles.length > 0 ? profiles : undefined,
 		packages: packages.length > 0 ? packages : undefined,
 		volumes: volumes.length > 0 ? volumes : undefined,
 		env: Object.keys(env).length > 0 ? env : undefined,
@@ -388,8 +396,31 @@ function mergeProjectConfigs(base: ProjectConfig, overlay: ProjectConfig): Proje
 	};
 }
 
+function extractBaseConfig(root: RootConfig): BaseConfig {
+	const { groups: _, projects: _p, profiles: _pr, ...base } = root;
+	return base;
+}
+
 function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
-	const merged = mergeBaseConfigs(base, overlay);
+	const merged = mergeBaseConfigs(extractBaseConfig(base), extractBaseConfig(overlay));
+
+	// Merge profile definitions: combine keys, merge configs for same profile name
+	let profiles: Record<string, BaseConfig> | undefined;
+
+	if (base.profiles ?? overlay.profiles) {
+		profiles = {};
+		const allProfileNames = new Set([
+			...Object.keys(base.profiles ?? {}),
+			...Object.keys(overlay.profiles ?? {}),
+		]);
+
+		for (const profileName of allProfileNames) {
+			const baseProfile = (base.profiles)?.[profileName];
+			const overlayProfile = (overlay.profiles)?.[profileName];
+
+			profiles[profileName] = baseProfile && overlayProfile ? mergeBaseConfigs(baseProfile, overlayProfile) : (overlayProfile ?? baseProfile)!;
+		}
+	}
 
 	// Merge groups: combine keys, merge configs for same group name
 	let groups: Record<string, BaseConfig> | undefined;
@@ -429,6 +460,7 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 
 	return {
 		...merged,
+		profiles,
 		groups,
 		projects,
 	};
@@ -565,6 +597,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		hooks: config.hooks,
 		mcpServers: config.mcpServers,
 		notifications: config.notifications,
+		// Profiles references are consumed during resolution and not carried to final output
 	};
 }
 
@@ -589,7 +622,48 @@ function mergeProjectConfig(
 export type MergedConfigResult = {
 	config: ClaudexConfig;
 	configFiles: string[];
+	profileVolumes: string[];
 };
+
+function resolveProfiles(
+	rootConfig: RootConfig,
+	merged: ClaudexConfig,
+): { config: ClaudexConfig; profileVolumes: string[] } {
+	const profileNames = merged.profiles;
+	if (!profileNames || profileNames.length === 0) {
+		return { config: merged, profileVolumes: [] };
+	}
+
+	const profileDefinitions = rootConfig.profiles;
+	if (!profileDefinitions) {
+		return { config: merged, profileVolumes: [] };
+	}
+
+	// Merge all referenced profiles into a single base config
+	let profilesMerged: BaseConfig = {};
+	for (const name of profileNames) {
+		const profile = profileDefinitions[name];
+		if (profile) {
+			profilesMerged = mergeBaseConfigs(profilesMerged, profile);
+		}
+	}
+
+	// Collect profile volumes (expanded container paths)
+	const profileVolumes: string[] = [];
+	if (profilesMerged.volumes) {
+		for (const volume of profilesMerged.volumes) {
+			const expanded = expandVolumePaths(volume);
+			profileVolumes.push(expanded.container);
+		}
+	}
+
+	// Apply profiles first, then overlay the explicit config on top
+	// This way explicit project/group fields override profile defaults
+	const { profiles: _, ...mergedWithoutProfiles } = merged;
+	const result = mergeBaseConfigs(profilesMerged, mergedWithoutProfiles);
+
+	return { config: result, profileVolumes };
+}
 
 export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> {
 	const { config: rootConfig, configFiles } = await readRootConfig();
@@ -602,7 +676,7 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 	const resolutionPath = gitRoot ?? cwd;
 
 	// Build merge chain: root → group → worktree parent → project
-	let merged: ClaudexConfig = rootConfig;
+	let merged: ClaudexConfig = extractBaseConfig(rootConfig);
 
 	if (worktreeParent) {
 		const parentProjectConfig = findMatchingProject(rootConfig, worktreeParent);
@@ -615,6 +689,10 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 	if (projectConfig) {
 		merged = mergeProjectConfig(rootConfig, merged, projectConfig);
 	}
+
+	// Resolve profile references into the merged config
+	const { config: resolvedConfig, profileVolumes } = resolveProfiles(rootConfig, merged);
+	merged = resolvedConfig;
 
 	// Auto-share volumes between group members (shareVolumes defaults to true)
 	if (merged.shareVolumes !== false && projectConfig?.group) {
@@ -636,7 +714,7 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 	}
 
 	// Sort for consistent Docker cache
-	return { config: sortConfig(merged), configFiles };
+	return { config: sortConfig(merged), configFiles, profileVolumes };
 }
 
 // Legacy function for backward compatibility - deprecated
@@ -724,6 +802,24 @@ export async function findConfigFileForProject(projectPath: string): Promise<Fin
 export async function findConfigFileForGroup(groupName: string): Promise<FindConfigFileResult> {
 	const entries = await readAllConfigFiles();
 	const matches = entries.filter(entry => entry.config.groups?.[groupName] !== undefined);
+
+	if (matches.length === 1) {
+		return matches[0];
+	}
+
+	if (matches.length > 1) {
+		return 'ambiguous';
+	}
+
+	return 'none';
+}
+
+export async function findConfigFileForProfile(profileName: string): Promise<FindConfigFileResult> {
+	const entries = await readAllConfigFiles();
+	const matches = entries.filter(entry => {
+		const profiles = entry.config.profiles as Record<string, unknown> | undefined;
+		return profiles?.[profileName] !== undefined;
+	});
 
 	if (matches.length === 1) {
 		return matches[0];
