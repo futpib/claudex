@@ -31,15 +31,18 @@ function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string
 		paths.data,
 	]);
 
-	const addDirArgs: string[] = [];
+	const additionalDirs: string[] = [];
 	for (const volume of config.volumes) {
 		const expanded = expandVolumePaths(volume);
 		if (!excludedPaths.has(expanded.container)) {
-			addDirArgs.push('--add-dir', expanded.container);
+			additionalDirs.push(expanded.container);
 		}
 	}
 
-	return addDirArgs;
+	return additionalDirs.flatMap(dir => [
+		'--add-dir', dir,
+		'--allowedTools', `Read(${dir}/**)`,
+	]);
 }
 
 type SshAgentInfo = {
