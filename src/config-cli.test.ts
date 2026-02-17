@@ -1514,6 +1514,88 @@ test('config keys includes profiles', async t => {
 	t.true(result.stdout.includes('profiles'));
 });
 
+test('add redirects to group when group has value and project does not', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projectDir = await mkdtemp(path.join(tmpdir(), 'claudex-group-redirect-'));
+	try {
+		// Set up a group with packages and assign the project to it
+		await runConfigWithDir(configDir, [ 'group', 'mygroup', projectDir ]);
+		await runConfigWithDir(configDir, [ 'add', '--group', 'mygroup', 'packages', 'gcc' ]);
+
+		// Run add from the project cwd without explicit scope
+		const result = await runConfigWithDir(configDir, [ 'add', 'packages', 'mold', 'lld' ], projectDir);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			groupDefinitions: Record<string, { packages?: string[] }>;
+			projects: Record<string, { group: string; packages?: string[] }>;
+		};
+
+		// Packages should be on the group, not the project
+		t.deepEqual(typed.groupDefinitions.mygroup.packages, [ 'gcc', 'mold', 'lld' ]);
+		t.is(typed.projects[projectDir]?.packages, undefined);
+	} finally {
+		await rm(projectDir, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('add stays on project when neither project nor group has value for field', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projectDir = await mkdtemp(path.join(tmpdir(), 'claudex-group-neither-'));
+	try {
+		// Set up a group without packages and assign the project to it
+		await runConfigWithDir(configDir, [ 'group', 'mygroup', projectDir ]);
+
+		// Run add from the project cwd without explicit scope
+		const result = await runConfigWithDir(configDir, [ 'add', 'packages', 'mold', 'lld' ], projectDir);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			groupDefinitions: Record<string, { packages?: string[] }>;
+			projects: Record<string, { group: string; packages?: string[] }>;
+		};
+
+		// Packages should be on the project since group has no packages either
+		t.deepEqual(typed.projects[projectDir]?.packages, [ 'mold', 'lld' ]);
+		t.is(typed.groupDefinitions.mygroup.packages, undefined);
+	} finally {
+		await rm(projectDir, { recursive: true });
+		await cleanup();
+	}
+});
+
+test('add stays on project when project already has own value for field', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projectDir = await mkdtemp(path.join(tmpdir(), 'claudex-group-no-redirect-'));
+	try {
+		// Set up a group and assign the project to it
+		await runConfigWithDir(configDir, [ 'group', 'mygroup', projectDir ]);
+
+		// Give the project its own packages
+		await runConfigWithDir(configDir, [ 'add', '--project', projectDir, 'packages', 'vim' ]);
+
+		// Run add from the project cwd without explicit scope
+		const result = await runConfigWithDir(configDir, [ 'add', 'packages', 'mold' ], projectDir);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
+		const typed = config as {
+			groupDefinitions: Record<string, { packages?: string[] }>;
+			projects: Record<string, { group: string; packages?: string[] }>;
+		};
+
+		// Packages should stay on the project since it already had its own
+		t.deepEqual(typed.projects[projectDir]?.packages, [ 'vim', 'mold' ]);
+		t.is(typed.groupDefinitions.mygroup.packages, undefined);
+	} finally {
+		await rm(projectDir, { recursive: true });
+		await cleanup();
+	}
+});
+
 test('profile scope resolves file when profile exists in specific config file', async t => {
 	const { configDir, cleanup } = await createTemporaryConfigDir();
 	try {

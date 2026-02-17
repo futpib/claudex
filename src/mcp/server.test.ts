@@ -67,7 +67,7 @@ test('requirements_remove removes a requirement', async t => {
 	await client.callTool({ name: 'requirements_add', arguments: { requirement: 'To be removed' } });
 
 	const listResult = await client.callTool({ name: 'requirements_list', arguments: {} });
-	const listText = (listResult.content as Array<{ text: string }>)[0]!.text;
+	const listText = (listResult.content as Array<{ text: string }>)[0].text;
 	const lastIndex = listText.trim().split('\n').length;
 
 	const result = await client.callTool({ name: 'requirements_remove', arguments: { index: lastIndex } });

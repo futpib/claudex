@@ -580,9 +580,77 @@ async function getGlobalArrayValues(field: string): Promise<unknown[]> {
 	return values;
 }
 
+async function resolveGroupScope(scope: Scope, field: string, subKey: string | undefined): Promise<Scope> {
+	if (scope.type !== 'project' || !('fromCwd' in scope && scope.fromCwd)) {
+		return scope;
+	}
+
+	const entries = await readAllConfigFiles();
+	const expandedPath = expandTilde(path.resolve(scope.path));
+
+	// Find the project's group and check if project/group have their own value for the field
+	let groupName: string | undefined;
+	let projectHasOwnValue = false;
+	let groupHasOwnValue = false;
+
+	for (const entry of entries) {
+		if (entry.config.projects) {
+			for (const [ projectPath, projectConfig ] of Object.entries(entry.config.projects)) {
+				if (expandTilde(projectPath) !== expandedPath) {
+					continue;
+				}
+
+				if (projectConfig.group) {
+					groupName = projectConfig.group;
+				}
+
+				const record = projectConfig as Record<string, unknown>;
+				if (subKey) {
+					const parent = record[field];
+					if (typeof parent === 'object' && parent !== null && subKey in (parent as Record<string, unknown>)) {
+						projectHasOwnValue = true;
+					}
+				} else if (record[field] !== undefined) {
+					projectHasOwnValue = true;
+				}
+			}
+		}
+	}
+
+	// Check if the group has its own value for the field
+	if (groupName) {
+		for (const entry of entries) {
+			const groupConfig = entry.config.groupDefinitions?.[groupName];
+			if (!groupConfig) {
+				continue;
+			}
+
+			const record = groupConfig as Record<string, unknown>;
+			if (subKey) {
+				const parent = record[field];
+				if (typeof parent === 'object' && parent !== null && subKey in (parent as Record<string, unknown>)) {
+					groupHasOwnValue = true;
+				}
+			} else if (record[field] !== undefined) {
+				groupHasOwnValue = true;
+			}
+		}
+	}
+
+	if (groupName && !projectHasOwnValue && groupHasOwnValue) {
+		return { type: 'group', name: groupName };
+	}
+
+	return scope;
+}
+
 async function handleAdd(scope: Scope, key: string, values: string[], file: string | undefined): Promise<void> {
 	const keyInfo = parseKey(key);
 	validateKey(keyInfo, scope);
+
+	if (!file) {
+		scope = await resolveGroupScope(scope, keyInfo.field, keyInfo.subKey);
+	}
 
 	const filePath = await resolveWriteFile(scope, file);
 	let config: RootConfig;
