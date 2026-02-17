@@ -28,6 +28,7 @@
     "claudex-hook-user-prompt-submit": "./build/hooks/user-prompt-submit.js",
     "claudex-in-docker": "./build/cli-in-docker.js",
     "claudex-mcp": "./build/mcp/cli.js",
+    "claudex-memory-search": "./build/memory-search/cli.js",
     "claudex-submit-co-authorship-proof": "./build/hooks/submit-co-authorship-proof.js"
   },
   "devDependencies": {
