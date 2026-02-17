@@ -402,6 +402,45 @@ export async function hasGitChangeDirectoryFlag(command: string): Promise<boolea
 /**
  * Checks if a cargo command uses the --manifest-path flag.
  */
+/**
+ * Finds the first argument in a bash command that is an absolute path under the given cwd.
+ * Uses the AST to only check actual command arguments, not string contents.
+ * Returns the absolute path if found, undefined otherwise.
+ */
+export async function findAbsolutePathUnderCwd(command: string, cwd: string): Promise<string | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	const cwdWithSlash = cwd.endsWith('/') ? cwd : cwd + '/';
+	let found: string | undefined;
+
+	someSimpleCommand(ast, cmd => {
+		// Check command name
+		if (cmd.name) {
+			const name = getWordLiteralValue(cmd.name);
+			if (name && (name === cwd || name.startsWith(cwdWithSlash))) {
+				found = name;
+				return true;
+			}
+		}
+
+		// Check arguments
+		for (const arg of cmd.args) {
+			const value = getWordLiteralValue(arg);
+			if (value && (value === cwd || value.startsWith(cwdWithSlash))) {
+				found = value;
+				return true;
+			}
+		}
+
+		return false;
+	});
+
+	return found;
+}
+
 export async function hasCargoManifestPathFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {

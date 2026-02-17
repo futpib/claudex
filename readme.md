@@ -343,7 +343,10 @@ Or in `config.json`:
 | `banCommandChaining` | Ban `&&`, `\|\|`, `;` command chaining |
 | `banPipeToFilter` | Ban piping to filter commands (grep, head, tail, etc.) |
 | `banFileOperationCommands` | Ban cat, sed, head, tail, awk (use dedicated tools) |
+| `banFindExec` | Ban `find -exec` / `-execdir` (use dedicated tools) |
 | `banOutdatedYearInSearch` | Ban web searches containing recent but outdated years (2020+ but before current) |
+| `banAbsolutePaths` | Ban absolute paths under cwd in Bash commands (use relative paths) |
+| `banWrongPackageManager` | Ban using wrong package manager for the project |
 | `requireCoAuthorshipProof` | Require co-authorship proof PIN for Co-authored-by commits |
 | `logToolUse` | Log non-read-only tool usage |
 
@@ -353,7 +356,7 @@ Or in `config.json`:
 |---|---|
 | `claudex` | Register the claudex MCP server in `~/.claude.json` |
 
-Setting `hooks: true` enables all 12 checks and registers hooks in `~/.claude/settings.json`. Setting `hooks: { ... }` enables only listed checks; any truthy value triggers hook registration. When `hooks` is not set (default), no checks fire and no hooks are registered.
+Setting `hooks: true` enables all checks and registers hooks in `~/.claude/settings.json`. Setting `hooks: { ... }` enables only listed checks; any truthy value triggers hook registration. When `hooks` is not set (default), no checks fire and no hooks are registered.
 
 ### Hook Registration
 

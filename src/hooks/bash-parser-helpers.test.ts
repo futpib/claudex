@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, hasCargoManifestPathFlag, getPipedFilterCommand,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, hasCargoManifestPathFlag, getPipedFilterCommand, findAbsolutePathUnderCwd,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -257,4 +257,40 @@ test('getPipedFilterCommand - handles complex command with redirections', async 
 
 test('getPipedFilterCommand - detects grep with regex pattern containing dollar sign', async t => {
 	t.is(await getPipedFilterCommand(String.raw`ls -la /home/futpib/code/lnquant/indicators/ | grep "\.ts$" | grep -v "\.test\.ts"`), 'grep');
+});
+
+test('findAbsolutePathUnderCwd - detects absolute path argument under cwd', async t => {
+	t.is(await findAbsolutePathUnderCwd('pytest /home/user/project/tests', '/home/user/project'), '/home/user/project/tests');
+});
+
+test('findAbsolutePathUnderCwd - detects cwd itself as argument', async t => {
+	t.is(await findAbsolutePathUnderCwd('ls /home/user/project', '/home/user/project'), '/home/user/project');
+});
+
+test('findAbsolutePathUnderCwd - detects absolute path as command name', async t => {
+	t.is(await findAbsolutePathUnderCwd('/home/user/project/bin/run', '/home/user/project'), '/home/user/project/bin/run');
+});
+
+test('findAbsolutePathUnderCwd - ignores paths outside cwd', async t => {
+	t.is(await findAbsolutePathUnderCwd('cat /etc/hosts', '/home/user/project'), undefined);
+});
+
+test('findAbsolutePathUnderCwd - ignores relative paths', async t => {
+	t.is(await findAbsolutePathUnderCwd('cat ./src/foo.ts', '/home/user/project'), undefined);
+});
+
+test('findAbsolutePathUnderCwd - does not detect paths inside strings', async t => {
+	t.is(await findAbsolutePathUnderCwd('git commit -m "Fixed /home/user/project/bug.ts"', '/home/user/project'), undefined);
+});
+
+test('findAbsolutePathUnderCwd - does not detect paths inside heredoc', async t => {
+	const command = `git commit -m "$(cat <<'EOF'
+Fixed /home/user/project/bug.ts
+EOF
+)"`;
+	t.is(await findAbsolutePathUnderCwd(command, '/home/user/project'), undefined);
+});
+
+test('findAbsolutePathUnderCwd - does not match cwd as prefix of longer path', async t => {
+	t.is(await findAbsolutePathUnderCwd('cat /home/user/project-other/file.ts', '/home/user/project'), undefined);
 });
