@@ -126,7 +126,9 @@ function parseArgs(argv: string[]): ParsedArgs {
 
 		scope ??= { type: 'project', path: process.cwd(), fromCwd: true };
 
-		return { action, scope, file, key: undefined, value: undefined, extraValues: positionals.slice(1), members };
+		return {
+			action, scope, file, key: undefined, value: undefined, extraValues: positionals.slice(1), members,
+		};
 	}
 
 	if (isGlobal) {
@@ -921,7 +923,7 @@ async function handleUngroup(paths: string[], file: string | undefined): Promise
 		}
 
 		const project = config.projects[existingKey] as Record<string, unknown>;
-		// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+
 		delete project.group;
 
 		// Clean up empty project entries

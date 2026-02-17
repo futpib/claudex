@@ -40,6 +40,7 @@ const baseConfigSchema = z.object({
 	hostPorts: z.array(z.number().int().positive()).optional(),
 	extraHosts: z.record(z.string(), z.string()).optional(),
 	shareVolumes: z.boolean().optional(), // Default true - auto-share volumes between group members
+	shareAdditionalDirectories: z.boolean().optional(), // Default true - auto-pass --add-dir for configured volumes
 	settingSources: z.string().optional(), // Default "user,local" - controls --setting-sources flag for Claude Code
 	hooks: hooksConfigSchema.optional(),
 	mcpServers: mcpServersConfigSchema.optional(),
@@ -333,6 +334,9 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	// ShareVolumes: overlay takes precedence if defined, otherwise use base
 	const shareVolumes = overlay.shareVolumes ?? base.shareVolumes;
 
+	// ShareAdditionalDirectories: overlay takes precedence if defined, otherwise use base
+	const shareAdditionalDirectories = overlay.shareAdditionalDirectories ?? base.shareAdditionalDirectories;
+
 	// SettingSources: overlay takes precedence if defined, otherwise use base
 	const settingSources = overlay.settingSources ?? base.settingSources;
 
@@ -358,6 +362,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 		hostPorts: hostPorts.length > 0 ? hostPorts : undefined,
 		extraHosts: Object.keys(extraHosts).length > 0 ? extraHosts : undefined,
 		shareVolumes,
+		shareAdditionalDirectories,
 		settingSources,
 		hooks,
 		mcpServers,

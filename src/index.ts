@@ -19,6 +19,29 @@ import { startHostSocketServer } from './host-socket/server.js';
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
 
+function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string): string[] {
+	if (config.shareAdditionalDirectories === false || !config.volumes?.length) {
+		return [];
+	}
+
+	const excludedPaths = new Set([
+		cwd,
+		projectRoot,
+		paths.config,
+		paths.data,
+	]);
+
+	const addDirArgs: string[] = [];
+	for (const volume of config.volumes) {
+		const expanded = expandVolumePaths(volume);
+		if (!excludedPaths.has(expanded.container)) {
+			addDirArgs.push('--add-dir', expanded.container);
+		}
+	}
+
+	return addDirArgs;
+}
+
 type SshAgentInfo = {
 	socketPath: string;
 	pid: string;
@@ -560,10 +583,12 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const settingSources = config.settingSources ?? 'user,local';
 		console.error(`Setting sources: ${settingSources}`);
 
+		const addDirArgs = buildAddDirArgs(config, cwd, projectRoot);
+
 		if (useDockerShell) {
 			dockerArgs.push('--entrypoint', 'bash', imageName);
 		} else {
-			dockerArgs.push('--entrypoint', 'node', imageName, cliInDockerPath, '--setting-sources', settingSources, ...claudeArgs);
+			dockerArgs.push('--entrypoint', 'node', imageName, cliInDockerPath, '--setting-sources', settingSources, ...addDirArgs, ...claudeArgs);
 		}
 
 		claudeChildProcess = execa('docker', dockerArgs, {
@@ -577,7 +602,12 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const settingSources = config.settingSources ?? 'user,local';
 		console.error(`Setting sources: ${settingSources}`);
 
-		const claudeFullArgs = [ '--setting-sources', settingSources, ...claudeArgs ];
+		const currentFileUrl = import.meta.url;
+		const currentFilePath = fileURLToPath(currentFileUrl);
+		const nonDockerProjectRoot = path.resolve(path.dirname(currentFilePath), '..');
+		const addDirArgs = buildAddDirArgs(config, cwd, nonDockerProjectRoot);
+
+		const claudeFullArgs = [ '--setting-sources', settingSources, ...addDirArgs, ...claudeArgs ];
 
 		claudeChildProcess = execa('claude', claudeFullArgs, {
 			stdin: process.stdin,
