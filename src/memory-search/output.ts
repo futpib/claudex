@@ -89,10 +89,12 @@ export function formatMatch(match: SearchMatch, patterns: RegExp[], maxLineWidth
 	return lines.join('\n');
 }
 
-export function formatSummary(count: number): string {
+export function formatSummary(count: number, projectPath: string, sessionCount: number): string {
+	const projectInfo = `${ansi.dim}Searched ${sessionCount} session${sessionCount === 1 ? '' : 's'} for project ${projectPath}${ansi.reset}`;
+
 	if (count === 0) {
-		return 'No matches found.';
+		return `${projectInfo}\nNo matches found.`;
 	}
 
-	return `\n${ansi.dim}${count} match${count === 1 ? '' : 'es'} found.${ansi.reset}`;
+	return `\n${projectInfo}\n${ansi.dim}${count} match${count === 1 ? '' : 'es'} found.${ansi.reset}`;
 }

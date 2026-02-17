@@ -13,7 +13,8 @@ export async function main(): Promise<void> {
 	program
 		.name('claudex-memory-search')
 		.description('Search Claude Code conversation transcripts')
-		.argument('<pattern>', 'Regex pattern to search for')
+		.showHelpAfterError()
+		.argument('<pattern>', 'Pattern to search for (literal string and regex)')
 		.option('-u, --user', 'Search user messages')
 		.option('-a, --assistant', 'Search assistant text responses')
 		.option('-c, --bash-command', 'Search bash commands')
@@ -84,7 +85,7 @@ export async function main(): Promise<void> {
 			const sessions = await discoverSessions(searchOptions.projectPath, searchOptions.sessionId);
 
 			if (sessions.length === 0) {
-				console.error('No session files found.');
+				console.error(`No session files found for project ${searchOptions.projectPath}`);
 				process.exitCode = 1;
 				return;
 			}
@@ -114,7 +115,7 @@ export async function main(): Promise<void> {
 					count++;
 				}
 
-				console.log(formatSummary(count));
+				console.log(formatSummary(count, searchOptions.projectPath, sessions.length));
 			}
 		});
 
