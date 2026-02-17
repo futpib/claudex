@@ -1,7 +1,11 @@
-import type { Tool } from '@modelcontextprotocol/sdk/types.js';
+import type { ZodObject } from 'zod';
 
 export type ToolHandler = {
-	definition: Tool;
+	definition: {
+		name: string;
+		description: string;
+		inputSchema: ZodObject;
+	};
 	handle: (args: unknown) => Promise<Array<{ type: 'text'; text: string }>>;
 };
 

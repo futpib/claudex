@@ -1,3 +1,4 @@
+import { z } from 'zod';
 import { registerTool } from './index.js';
 
 // In-memory storage - resets when claudex session ends
@@ -15,13 +16,9 @@ registerTool({
 	definition: {
 		name: 'requirements_add',
 		description: 'Add a requirement that must be satisfied for the task to be complete.',
-		inputSchema: {
-			type: 'object',
-			properties: {
-				requirement: { type: 'string', description: 'The requirement text' },
-			},
-			required: [ 'requirement' ],
-		},
+		inputSchema: z.object({
+			requirement: z.string().describe('The requirement text'),
+		}),
 	},
 	async handle(args) {
 		const { requirement } = args as { requirement: string };
@@ -34,13 +31,9 @@ registerTool({
 	definition: {
 		name: 'requirements_remove',
 		description: 'Remove a requirement by its number (1-indexed).',
-		inputSchema: {
-			type: 'object',
-			properties: {
-				index: { type: 'number', description: 'The requirement number to remove (1-indexed)' },
-			},
-			required: [ 'index' ],
-		},
+		inputSchema: z.object({
+			index: z.number().describe('The requirement number to remove (1-indexed)'),
+		}),
 	},
 	async handle(args) {
 		const { index } = args as { index: number };
@@ -57,10 +50,7 @@ registerTool({
 	definition: {
 		name: 'requirements_list',
 		description: 'List all current requirements.',
-		inputSchema: {
-			type: 'object',
-			properties: {},
-		},
+		inputSchema: z.object({}),
 	},
 	async handle() {
 		return [ { type: 'text', text: formatRequirements() } ];
