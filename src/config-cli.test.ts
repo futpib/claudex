@@ -307,7 +307,7 @@ test('group scope writes to correct file', async t => {
 		await runConfigWithDir(configDir, [ 'set', '--group', 'mygroup', 'settingSources', 'user' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.is(
-			(config as { groups: Record<string, { settingSources: string }> }).groups.mygroup.settingSources,
+			(config as { groupDefinitions: Record<string, { settingSources: string }> }).groupDefinitions.mygroup.settingSources,
 			'user',
 		);
 	} finally {
@@ -417,7 +417,7 @@ test('set group field with --group', async t => {
 		await runConfigWithDir(configDir, [ 'set', '--group', 'dev', 'extraHosts.myhost', '10.0.0.1' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.is(
-			(config as { groups: Record<string, { extraHosts: Record<string, string> }> }).groups.dev.extraHosts.myhost,
+			(config as { groupDefinitions: Record<string, { extraHosts: Record<string, string> }> }).groupDefinitions.dev.extraHosts.myhost,
 			'10.0.0.1',
 		);
 	} finally {
@@ -1087,10 +1087,10 @@ test('config group assigns multiple projects to a group', async t => {
 
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		const typed = config as {
-			groups: Record<string, Record<string, unknown>>;
+			groupDefinitions: Record<string, Record<string, unknown>>;
 			projects: Record<string, { group: string }>;
 		};
-		t.deepEqual(typed.groups.mygroup, {});
+		t.deepEqual(typed.groupDefinitions.mygroup, {});
 		t.is(typed.projects[projA].group, 'mygroup');
 		t.is(typed.projects[projB].group, 'mygroup');
 	} finally {
@@ -1109,10 +1109,10 @@ test('config group auto-creates group entry', async t => {
 
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		const typed = config as {
-			groups: Record<string, Record<string, unknown>>;
+			groupDefinitions: Record<string, Record<string, unknown>>;
 			projects: Record<string, { group: string }>;
 		};
-		t.deepEqual(typed.groups.newgroup, {});
+		t.deepEqual(typed.groupDefinitions.newgroup, {});
 		t.is(typed.projects[projC].group, 'newgroup');
 	} finally {
 		await rm(projC, { recursive: true });
@@ -1133,10 +1133,10 @@ test('config group preserves existing group settings', async t => {
 
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		const typed = config as {
-			groups: Record<string, { settingSources?: string }>;
+			groupDefinitions: Record<string, { settingSources?: string }>;
 			projects: Record<string, { group: string }>;
 		};
-		t.is(typed.groups.dev.settingSources, 'user');
+		t.is(typed.groupDefinitions.dev.settingSources, 'user');
 		t.is(typed.projects[projD].group, 'dev');
 	} finally {
 		await rm(projD, { recursive: true });
@@ -1228,11 +1228,11 @@ test('config ungroup removes group from multiple projects', async t => {
 
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		const typed = config as {
-			groups?: Record<string, Record<string, unknown>>;
+			groupDefinitions?: Record<string, Record<string, unknown>>;
 			projects?: Record<string, { group?: string }>;
 		};
 		// Group entry should remain
-		t.deepEqual(typed.groups?.mygroup, {});
+		t.deepEqual(typed.groupDefinitions?.mygroup, {});
 		// Projects should be cleaned up (empty after removing group)
 		t.is(typed.projects, undefined);
 	} finally {
@@ -1368,7 +1368,7 @@ test('profile scope writes to correct file', async t => {
 		await runConfigWithDir(configDir, [ 'add', '--profile', 'jira', 'packages', 'jira-cli' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.deepEqual(
-			(config as { profiles: Record<string, { packages: string[] }> }).profiles.jira.packages,
+			(config as { profileDefinitions: Record<string, { packages: string[] }> }).profileDefinitions.jira.packages,
 			[ 'jira-cli' ],
 		);
 	} finally {
@@ -1382,7 +1382,7 @@ test('set field on profile scope', async t => {
 		await runConfigWithDir(configDir, [ 'set', '--profile', 'jira', 'settingSources', 'user' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.is(
-			(config as { profiles: Record<string, { settingSources: string }> }).profiles.jira.settingSources,
+			(config as { profileDefinitions: Record<string, { settingSources: string }> }).profileDefinitions.jira.settingSources,
 			'user',
 		);
 	} finally {
@@ -1398,7 +1398,7 @@ test('set record field on profile scope (env.KEY)', async t => {
 		await runConfigWithDir(configDir, [ 'set', '--profile', 'jira', 'env.JIRA_API_TOKEN', templateString ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.is(
-			(config as { profiles: Record<string, { env: Record<string, string> }> }).profiles.jira.env.JIRA_API_TOKEN,
+			(config as { profileDefinitions: Record<string, { env: Record<string, string> }> }).profileDefinitions.jira.env.JIRA_API_TOKEN,
 			templateString,
 		);
 	} finally {
@@ -1412,7 +1412,7 @@ test('add volumes to profile scope', async t => {
 		await runConfigWithDir(configDir, [ 'add', '--profile', 'jira', 'volumes', '~/.config/.jira/' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.deepEqual(
-			(config as { profiles: Record<string, { volumes: string[] }> }).profiles.jira.volumes,
+			(config as { profileDefinitions: Record<string, { volumes: string[] }> }).profileDefinitions.jira.volumes,
 			[ '~/.config/.jira/' ],
 		);
 	} finally {
@@ -1467,7 +1467,7 @@ test('remove value from profile array field', async t => {
 		await runConfigWithDir(configDir, [ 'remove', '--profile', 'dev', 'packages', 'vim' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.deepEqual(
-			(config as { profiles: Record<string, { packages: string[] }> }).profiles.dev.packages,
+			(config as { profileDefinitions: Record<string, { packages: string[] }> }).profileDefinitions.dev.packages,
 			[ 'curl' ],
 		);
 	} finally {
@@ -1482,7 +1482,7 @@ test('unset removes field from profile', async t => {
 		await runConfigWithDir(configDir, [ 'unset', '--profile', 'dev', 'settingSources' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.is(
-			(config as { profiles: Record<string, { settingSources?: string }> }).profiles.dev.settingSources,
+			(config as { profileDefinitions: Record<string, { settingSources?: string }> }).profileDefinitions.dev.settingSources,
 			undefined,
 		);
 	} finally {
@@ -1500,7 +1500,7 @@ test('add profiles reference to group', async t => {
 		await runConfigWithDir(configDir, [ 'add', '--group', 'mygroup', 'profiles', 'jira' ]);
 		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
 		t.deepEqual(
-			(config as { groups: Record<string, { profiles: string[] }> }).groups.mygroup.profiles,
+			(config as { groupDefinitions: Record<string, { profiles: string[] }> }).groupDefinitions.mygroup.profiles,
 			[ 'jira' ],
 		);
 	} finally {
@@ -1524,16 +1524,16 @@ test('profile scope resolves file when profile exists in specific config file', 
 		// Pre-create a config file with a profile
 		await writeFile(
 			path.join(configJsonDirectory, '99-private.json'),
-			JSON.stringify({ profiles: { jira: { packages: [ 'jira-cli' ] } } }),
+			JSON.stringify({ profileDefinitions: { jira: { packages: [ 'jira-cli' ] } } }),
 		);
 
 		// Add a volume to the profile - should write to the same file
 		await runConfigWithDir(configDir, [ 'add', '--profile', 'jira', 'volumes', '~/.config/.jira/' ]);
 
 		const config = await readJsonFile(path.join(configJsonDirectory, '99-private.json'));
-		const typed = config as { profiles: Record<string, { packages?: string[]; volumes?: string[] }> };
-		t.deepEqual(typed.profiles.jira.packages, [ 'jira-cli' ]);
-		t.deepEqual(typed.profiles.jira.volumes, [ '~/.config/.jira/' ]);
+		const typed = config as { profileDefinitions: Record<string, { packages?: string[]; volumes?: string[] }> };
+		t.deepEqual(typed.profileDefinitions.jira.packages, [ 'jira-cli' ]);
+		t.deepEqual(typed.profileDefinitions.jira.volumes, [ '~/.config/.jira/' ]);
 
 		// Config.json should not exist
 		try {

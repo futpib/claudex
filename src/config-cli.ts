@@ -204,11 +204,11 @@ function getSection(config: RootConfig, scope: Scope): BaseConfig | ProjectConfi
 		}
 
 		case 'group': {
-			return config.groups?.[scope.name];
+			return config.groupDefinitions?.[scope.name];
 		}
 
 		case 'profile': {
-			return (config.profiles)?.[scope.name];
+			return config.profileDefinitions?.[scope.name];
 		}
 	}
 }
@@ -228,16 +228,15 @@ function ensureSection(config: RootConfig, scope: Scope): BaseConfig | ProjectCo
 		}
 
 		case 'group': {
-			config.groups ??= {};
-			config.groups[scope.name] ??= {};
-			return config.groups[scope.name];
+			config.groupDefinitions ??= {};
+			config.groupDefinitions[scope.name] ??= {};
+			return config.groupDefinitions[scope.name];
 		}
 
 		case 'profile': {
-			const profiles = ((config as Record<string, unknown>).profiles ?? {}) as Record<string, BaseConfig>;
-			(config as Record<string, unknown>).profiles = profiles;
-			profiles[scope.name] ??= {};
-			return profiles[scope.name];
+			config.profileDefinitions ??= {};
+			config.profileDefinitions[scope.name] ??= {};
+			return config.profileDefinitions[scope.name];
 		}
 	}
 }
@@ -448,7 +447,7 @@ async function handleList(scope: Scope, members?: boolean): Promise<void> {
 	const { config: rootConfig } = await getMergedConfig(process.cwd());
 
 	if (scope.type === 'global') {
-		const { projects: _, groups: _g, ...base } = rootConfig as unknown as RootConfig;
+		const { projects: _, groupDefinitions: _g, profileDefinitions: _pd, ...base } = rootConfig as unknown as RootConfig;
 		console.log(JSON.stringify(base, null, 2));
 		return;
 	}
@@ -460,7 +459,7 @@ async function handleList(scope: Scope, members?: boolean): Promise<void> {
 			merged = { ...merged, ...entry.config };
 		}
 
-		const profileConfig = (merged.profiles)?.[scope.name];
+		const profileConfig = merged.profileDefinitions?.[scope.name];
 		if (profileConfig) {
 			console.log(JSON.stringify(profileConfig, null, 2));
 		} else {
@@ -478,7 +477,7 @@ async function handleList(scope: Scope, members?: boolean): Promise<void> {
 		merged = { ...merged, ...entry.config };
 	}
 
-	const groupConfig = merged.groups?.[scope.name];
+	const groupConfig = merged.groupDefinitions?.[scope.name];
 	if (groupConfig) {
 		console.log(JSON.stringify(groupConfig, null, 2));
 	} else {
@@ -515,7 +514,7 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 			merged = { ...merged, ...entry.config };
 		}
 
-		section = (merged.profiles)?.[scope.name];
+		section = merged.profileDefinitions?.[scope.name];
 	} else {
 		// For group, read root and get group section
 		const configModule = await import('./config.js');
@@ -525,7 +524,7 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 			merged = { ...merged, ...entry.config };
 		}
 
-		section = merged.groups?.[scope.name];
+		section = merged.groupDefinitions?.[scope.name];
 	}
 
 	const value = getValue(section, keyInfo);
@@ -924,8 +923,8 @@ async function handleGroup(name: string, paths: string[], file: string | undefin
 	const oldContent = serializeConfig(config);
 
 	// Auto-create group if it doesn't exist
-	config.groups ??= {};
-	config.groups[name] ??= {};
+	config.groupDefinitions ??= {};
+	config.groupDefinitions[name] ??= {};
 
 	// Resolve all paths concurrently (worktree → parent repo, then tilde-collapse)
 	config.projects ??= {};

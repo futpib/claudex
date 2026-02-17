@@ -184,8 +184,8 @@ claudex config <action> [scope flags] [key] [value]
 - *(none)* — current project (`projects[<cwd>]` section)
 - `--global` — root-level config
 - `--project <path>` — `projects[<path>]` section (explicit)
-- `--group <name>` — `groups[<name>]` section
-- `--profile <name>` — `profiles[<name>]` section (profile definition)
+- `--group <name>` — `groupDefinitions[<name>]` section
+- `--profile <name>` — `profileDefinitions[<name>]` section
 - `--file <path>` — target a specific file (relative to config dir)
 - `--members` — list project paths belonging to a group (use with `list --group`)
 
@@ -214,11 +214,11 @@ claudex config <action> [scope flags] [key] [value]
 
 Profiles are reusable tool bundles that package together everything a tool needs: its apt package, config volumes, and environment variables.
 
-Define profiles at the root level, then reference them from any scope (global, group, or project) via the `profiles` array:
+Define profiles in `profileDefinitions` at the root level, then reference them from any scope (global, group, or project) via the `profiles` array:
 
 ```json
 {
-  "profiles": {
+  "profileDefinitions": {
     "gh": {
       "packages": ["github-cli"],
       "volumes": ["~/.config/gh/"]
@@ -229,7 +229,7 @@ Define profiles at the root level, then reference them from any scope (global, g
     }
   },
   "profiles": ["gh"],
-  "groups": {
+  "groupDefinitions": {
     "my-project": {
       "profiles": ["gh", "glab"]
     }
@@ -259,7 +259,7 @@ claudex config list --profile gh
 | | Profiles | Groups |
 |---|---|---|
 | **Purpose** | Bundle a tool + its config | Bundle related projects |
-| **Defined at** | Root `profiles` record | Root `groups` record |
+| **Defined at** | Root `profileDefinitions` record | Root `groupDefinitions` record |
 | **Referenced via** | `profiles: ["name"]` from any scope | `group: "name"` from a project |
 | **Volumes** | Excluded from `--add-dir` | Auto-shared between members |
 

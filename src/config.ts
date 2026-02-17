@@ -53,11 +53,11 @@ const projectConfigSchema = baseConfigSchema.extend({
 	group: z.string().optional(),
 });
 
-// Root config adds projects mapping, groups, and profile definitions
+// Root config adds projects mapping, group definitions, and profile definitions
 const rootConfigSchema = baseConfigSchema.extend({
-	groups: z.record(z.string(), baseConfigSchema).optional(),
+	groupDefinitions: z.record(z.string(), baseConfigSchema).optional(),
 	projects: z.record(z.string(), projectConfigSchema).optional(),
-	profiles: z.record(z.string(), baseConfigSchema).optional(), // Overrides the string[] from baseConfigSchema at root level
+	profileDefinitions: z.record(z.string(), baseConfigSchema).optional(),
 });
 
 export { baseConfigSchema, rootConfigSchema };
@@ -397,7 +397,7 @@ function mergeProjectConfigs(base: ProjectConfig, overlay: ProjectConfig): Proje
 }
 
 function extractBaseConfig(root: RootConfig): BaseConfig {
-	const { groups: _, projects: _p, profiles: _pr, ...base } = root;
+	const { groupDefinitions: _, projects: _p, profileDefinitions: _pr, ...base } = root;
 	return base;
 }
 
@@ -405,38 +405,38 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 	const merged = mergeBaseConfigs(extractBaseConfig(base), extractBaseConfig(overlay));
 
 	// Merge profile definitions: combine keys, merge configs for same profile name
-	let profiles: Record<string, BaseConfig> | undefined;
+	let profileDefinitions: Record<string, BaseConfig> | undefined;
 
-	if (base.profiles ?? overlay.profiles) {
-		profiles = {};
+	if (base.profileDefinitions ?? overlay.profileDefinitions) {
+		profileDefinitions = {};
 		const allProfileNames = new Set([
-			...Object.keys(base.profiles ?? {}),
-			...Object.keys(overlay.profiles ?? {}),
+			...Object.keys(base.profileDefinitions ?? {}),
+			...Object.keys(overlay.profileDefinitions ?? {}),
 		]);
 
 		for (const profileName of allProfileNames) {
-			const baseProfile = (base.profiles)?.[profileName];
-			const overlayProfile = (overlay.profiles)?.[profileName];
+			const baseProfile = (base.profileDefinitions)?.[profileName];
+			const overlayProfile = (overlay.profileDefinitions)?.[profileName];
 
-			profiles[profileName] = baseProfile && overlayProfile ? mergeBaseConfigs(baseProfile, overlayProfile) : (overlayProfile ?? baseProfile)!;
+			profileDefinitions[profileName] = baseProfile && overlayProfile ? mergeBaseConfigs(baseProfile, overlayProfile) : (overlayProfile ?? baseProfile)!;
 		}
 	}
 
-	// Merge groups: combine keys, merge configs for same group name
-	let groups: Record<string, BaseConfig> | undefined;
+	// Merge group definitions: combine keys, merge configs for same group name
+	let groupDefinitions: Record<string, BaseConfig> | undefined;
 
-	if (base.groups ?? overlay.groups) {
-		groups = {};
+	if (base.groupDefinitions ?? overlay.groupDefinitions) {
+		groupDefinitions = {};
 		const allGroupNames = new Set([
-			...Object.keys(base.groups ?? {}),
-			...Object.keys(overlay.groups ?? {}),
+			...Object.keys(base.groupDefinitions ?? {}),
+			...Object.keys(overlay.groupDefinitions ?? {}),
 		]);
 
 		for (const groupName of allGroupNames) {
-			const baseGroup = base.groups?.[groupName];
-			const overlayGroup = overlay.groups?.[groupName];
+			const baseGroup = base.groupDefinitions?.[groupName];
+			const overlayGroup = overlay.groupDefinitions?.[groupName];
 
-			groups[groupName] = baseGroup && overlayGroup ? mergeBaseConfigs(baseGroup, overlayGroup) : (overlayGroup ?? baseGroup)!;
+			groupDefinitions[groupName] = baseGroup && overlayGroup ? mergeBaseConfigs(baseGroup, overlayGroup) : (overlayGroup ?? baseGroup)!;
 		}
 	}
 
@@ -460,8 +460,8 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 
 	return {
 		...merged,
-		profiles,
-		groups,
+		profileDefinitions,
+		groupDefinitions,
 		projects,
 	};
 }
@@ -485,7 +485,7 @@ function findMatchingProject(rootConfig: RootConfig, cwd: string): ProjectConfig
 }
 
 function resolveGroup(rootConfig: RootConfig, groupName: string): BaseConfig | undefined {
-	return rootConfig.groups?.[groupName];
+	return rootConfig.groupDefinitions?.[groupName];
 }
 
 function getGroupSiblingPaths(
@@ -634,7 +634,7 @@ function resolveProfiles(
 		return { config: merged, profileVolumes: [] };
 	}
 
-	const profileDefinitions = rootConfig.profiles;
+	const { profileDefinitions } = rootConfig;
 	if (!profileDefinitions) {
 		return { config: merged, profileVolumes: [] };
 	}
@@ -801,7 +801,7 @@ export async function findConfigFileForProject(projectPath: string): Promise<Fin
 
 export async function findConfigFileForGroup(groupName: string): Promise<FindConfigFileResult> {
 	const entries = await readAllConfigFiles();
-	const matches = entries.filter(entry => entry.config.groups?.[groupName] !== undefined);
+	const matches = entries.filter(entry => entry.config.groupDefinitions?.[groupName] !== undefined);
 
 	if (matches.length === 1) {
 		return matches[0];
@@ -816,10 +816,7 @@ export async function findConfigFileForGroup(groupName: string): Promise<FindCon
 
 export async function findConfigFileForProfile(profileName: string): Promise<FindConfigFileResult> {
 	const entries = await readAllConfigFiles();
-	const matches = entries.filter(entry => {
-		const profiles = entry.config.profiles as Record<string, unknown> | undefined;
-		return profiles?.[profileName] !== undefined;
-	});
+	const matches = entries.filter(entry => entry.config.profileDefinitions?.[profileName] !== undefined);
 
 	if (matches.length === 1) {
 		return matches[0];
