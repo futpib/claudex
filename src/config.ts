@@ -45,6 +45,7 @@ const baseConfigSchema = z.object({
 	hooks: hooksConfigSchema.optional(),
 	mcpServers: mcpServersConfigSchema.optional(),
 	notifications: z.boolean().optional(),
+	hooksDescriptions: z.boolean().optional(), // Default true - inject active hook rule descriptions into CLAUDE.md
 	profiles: z.array(z.string()).optional(), // References to named profiles defined at root level
 });
 
@@ -356,6 +357,9 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	// Notifications: overlay takes precedence if defined, otherwise use base
 	const notifications = overlay.notifications ?? base.notifications;
 
+	// HooksDescriptions: overlay takes precedence if defined, otherwise use base
+	const hooksDescriptions = overlay.hooksDescriptions ?? base.hooksDescriptions;
+
 	return {
 		profiles: profiles.length > 0 ? profiles : undefined,
 		packages: packages.length > 0 ? packages : undefined,
@@ -375,6 +379,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 		hooks,
 		mcpServers,
 		notifications,
+		hooksDescriptions,
 	};
 }
 
@@ -597,6 +602,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		hooks: config.hooks,
 		mcpServers: config.mcpServers,
 		notifications: config.notifications,
+		hooksDescriptions: config.hooksDescriptions,
 		// Profiles references are consumed during resolution and not carried to final output
 	};
 }

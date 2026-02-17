@@ -6,6 +6,7 @@ export const banGitCommitAmend: Rule = {
 		configKey: 'banGitCommitAmend',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use git commit --amend; create new commits instead',
 	},
 	fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

@@ -6,6 +6,7 @@ export const banCommandChaining: Rule = {
 		configKey: 'banCommandChaining',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not chain bash commands with &&, ||, or ;; run commands separately',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

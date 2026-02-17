@@ -37,6 +37,7 @@ export const banWrongPackageManager: Rule = {
 		configKey: 'banWrongPackageManager',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use the wrong package manager; use the one matching the project lock file',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

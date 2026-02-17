@@ -8,6 +8,7 @@ export const requireCoAuthorshipProof: Rule = {
 		name: 'require-co-authorship-proof',
 		configKey: 'requireCoAuthorshipProof',
 		recommended: false,
+		description: 'Commits with co-authorship require proof of human review before committing',
 		phase: 'main',
 	},
 	async fn(context): Promise<RuleResult> {

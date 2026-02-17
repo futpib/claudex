@@ -6,6 +6,7 @@ export const banPipeToFilter: Rule = {
 		configKey: 'banPipeToFilter',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not pipe output to grep, head, tail, awk, sed, cut, sort, uniq, wc, tr; use Read/Grep tools instead',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

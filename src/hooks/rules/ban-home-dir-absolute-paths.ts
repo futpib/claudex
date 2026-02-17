@@ -7,6 +7,7 @@ export const banHomeDirAbsolutePaths: Rule = {
 		configKey: 'banHomeDirAbsolutePaths',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use absolute home directory paths in bash commands; use ~ (tilde) expansion instead',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

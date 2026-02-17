@@ -6,6 +6,7 @@ export const banGitAddAll: Rule = {
 		configKey: 'banGitAddAll',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use git add -A/--all; use git add . or name files explicitly',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

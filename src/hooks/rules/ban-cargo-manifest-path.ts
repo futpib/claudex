@@ -6,6 +6,7 @@ export const banCargoManifestPath: Rule = {
 		configKey: 'banCargoManifestPath',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use cargo --manifest-path; run cargo commands in the project directory',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

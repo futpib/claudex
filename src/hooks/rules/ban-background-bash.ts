@@ -6,6 +6,7 @@ export const banBackgroundBash: Rule = {
 		configKey: 'banBackgroundBash',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not run bash commands in the background',
 	},
 	fn(context) {
 		if (context.knownInput?.tool_name !== 'Bash') {

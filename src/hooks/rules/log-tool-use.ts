@@ -31,6 +31,7 @@ export const logToolUse: Rule = {
 		configKey: 'logToolUse',
 		recommended: true,
 		phase: 'pre-exit',
+		description: 'Tool usage is being logged',
 	},
 	async fn(context) {
 		const isMcpTool = context.toolName.startsWith('mcp__');

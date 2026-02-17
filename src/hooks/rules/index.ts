@@ -42,6 +42,7 @@ export type RuleMeta = {
 	configKey: string;
 	recommended: boolean;
 	phase: 'pre-exit' | 'main';
+	description: string;
 };
 
 export type Rule = {

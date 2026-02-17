@@ -7,6 +7,7 @@ export const banAbsolutePaths: Rule = {
 		configKey: 'banAbsolutePaths',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use absolute paths under cwd in bash commands; use relative paths instead',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

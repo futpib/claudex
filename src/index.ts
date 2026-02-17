@@ -624,7 +624,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	}
 
 	try {
-		await createClaudeCodeMemory();
+		await createClaudeCodeMemory(earlyConfig.config.hooksDescriptions === false ? undefined : hooksResolved);
 	} catch (error) {
 		if (!(
 			error instanceof Error

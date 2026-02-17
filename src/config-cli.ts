@@ -851,6 +851,7 @@ function getKeyEntries(): KeyEntry[] {
 		hooks: 'boolean',
 		mcpServers: 'boolean',
 		notifications: 'boolean',
+		hooksDescriptions: 'boolean',
 		profiles: 'string[]',
 	};
 

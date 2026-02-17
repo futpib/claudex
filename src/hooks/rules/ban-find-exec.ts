@@ -6,6 +6,7 @@ export const banFindExec: Rule = {
 		configKey: 'banFindExec',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use find -exec; use Glob to find files and Grep to search file contents',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

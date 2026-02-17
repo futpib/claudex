@@ -6,6 +6,7 @@ export const banFileOperationCommands: Rule = {
 		configKey: 'banFileOperationCommands',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use cat, sed, head, tail, or awk for file operations; use Read/Edit/Write tools instead',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

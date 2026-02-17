@@ -6,6 +6,7 @@ export const banGitC: Rule = {
 		configKey: 'banGitC',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use git -C; run git commands in the current directory',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

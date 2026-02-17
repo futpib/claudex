@@ -7,6 +7,7 @@ export const banGitCheckoutRedundantStartPoint: Rule = {
 		configKey: 'banGitCheckoutRedundantStartPoint',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not specify a redundant start-point in git checkout -b when already on that commit',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {

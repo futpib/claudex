@@ -6,6 +6,7 @@ export const banOutdatedYearInSearch: Rule = {
 		configKey: 'banOutdatedYearInSearch',
 		recommended: true,
 		phase: 'pre-exit',
+		description: 'Do not use outdated years in web search queries; use the current year',
 	},
 	fn(context) {
 		if (context.knownInput?.tool_name !== 'WebSearch') {

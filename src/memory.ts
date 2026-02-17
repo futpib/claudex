@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import fsSync from 'node:fs';
 import { paths } from './paths.js';
 import { isErrnoException } from './utils.js';
+import { allRules } from './hooks/rules/index.js';
 
 const claudexMemoryDirectoryPath = path.join(paths.config, 'CLAUDE.md.d');
 
@@ -83,7 +84,7 @@ async function backupClaudeCodeMemory(): Promise<void> {
 	}
 }
 
-export async function createClaudeCodeMemory() {
+export async function createClaudeCodeMemory(resolvedHooks?: Record<string, boolean | undefined>) {
 	const filesInMemoryDirectory = await getFilesInClaudexMemoryDirectory();
 
 	if (await shouldBackupClaudeCodeMemory()) {
@@ -100,6 +101,18 @@ export async function createClaudeCodeMemory() {
 
 			yield * fsSync.createReadStream(file, 'utf8');
 			yield '\n\n';
+		}
+
+		if (resolvedHooks) {
+			const enabledDescriptions = allRules
+				.filter(r => resolvedHooks[r.meta.configKey])
+				.map(r => `- ${r.meta.description}`);
+
+			if (enabledDescriptions.length > 0) {
+				yield '# Active Hook Rules\n\n';
+				yield enabledDescriptions.join('\n');
+				yield '\n\n';
+			}
 		}
 	})());
 }

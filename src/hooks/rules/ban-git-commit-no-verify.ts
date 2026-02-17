@@ -6,6 +6,7 @@ export const banGitCommitNoVerify: Rule = {
 		configKey: 'banGitCommitNoVerify',
 		recommended: true,
 		phase: 'main',
+		description: 'Do not use git commit --no-verify; always run pre-commit hooks',
 	},
 	fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
