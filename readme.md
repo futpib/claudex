@@ -219,19 +219,19 @@ Define profiles at the root level, then reference them from any scope (global, g
 ```json
 {
   "profiles": {
-    "jira": {
-      "packages": ["jira-cli"],
-      "volumes": ["~/.config/.jira/"],
-      "env": { "JIRA_API_TOKEN": "${JIRA_API_TOKEN}" }
+    "gh": {
+      "packages": ["github-cli"],
+      "volumes": ["~/.config/gh/"]
     },
     "glab": {
       "packages": ["glab"],
       "volumes": ["~/.config/glab-cli/"]
     }
   },
+  "profiles": ["gh"],
   "groups": {
     "my-project": {
-      "profiles": ["jira", "glab"]
+      "profiles": ["gh", "glab"]
     }
   }
 }
@@ -241,15 +241,17 @@ Volumes from profiles are **excluded from `--add-dir`** — they're utility moun
 
 ```bash
 # Define a profile
-claudex config set --profile jira packages jira-cli
-claudex config add --profile jira volumes ~/.config/.jira/
-claudex config set --profile jira env.JIRA_API_TOKEN '${JIRA_API_TOKEN}'
+claudex config add --profile gh packages github-cli
+claudex config add --profile gh volumes ~/.config/gh/
+
+# Reference a profile globally
+claudex config add --global profiles gh
 
 # Reference a profile from a group
-claudex config add --group my-project profiles jira
+claudex config add --group my-project profiles glab
 
 # View a profile's config
-claudex config list --profile jira
+claudex config list --profile gh
 ```
 
 #### Profiles vs Groups
