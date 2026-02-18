@@ -19,7 +19,12 @@ import { startHostSocketServer } from './host-socket/server.js';
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
 
-function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string, profileVolumes: string[] = []): string[] {
+async function isDirectory(filePath: string): Promise<boolean> {
+	const stat = await fs.stat(filePath).catch(() => undefined);
+	return stat?.isDirectory() ?? false;
+}
+
+async function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string, profileVolumes: string[] = []): Promise<string[]> {
 	if (config.shareAdditionalDirectories === false || !config.volumes?.length) {
 		return [];
 	}
@@ -35,8 +40,10 @@ function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string
 	const additionalDirs: string[] = [];
 	for (const volume of config.volumes) {
 		const expanded = expandVolumePaths(volume);
-		if (!excludedPaths.has(expanded.container)) {
-			additionalDirs.push(expanded.container);
+		const dir = expanded.container;
+
+		if (!excludedPaths.has(dir) && await isDirectory(dir)) {
+			additionalDirs.push(dir);
 		}
 	}
 
@@ -590,7 +597,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const settingSources = config.settingSources ?? 'user,local';
 		console.error(`Setting sources: ${settingSources}`);
 
-		const addDirArgs = buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
+		const addDirArgs = await buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
 
 		if (useDockerShell) {
 			dockerArgs.push('--entrypoint', 'bash', imageName);
@@ -612,7 +619,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const currentFileUrl = import.meta.url;
 		const currentFilePath = fileURLToPath(currentFileUrl);
 		const nonDockerProjectRoot = path.resolve(path.dirname(currentFilePath), '..');
-		const addDirArgs = buildAddDirArgs(config, cwd, nonDockerProjectRoot, profileVolumes);
+		const addDirArgs = await buildAddDirArgs(config, cwd, nonDockerProjectRoot, profileVolumes);
 
 		const claudeFullArgs = [ '--setting-sources', settingSources, ...addDirArgs, ...claudeArgs ];
 
