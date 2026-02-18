@@ -1,4 +1,14 @@
+import path from 'node:path';
+import os from 'node:os';
 import type { Rule } from './index.js';
+
+function expandTilde(filePath: string): string {
+	if (filePath.startsWith('~/')) {
+		return path.join(os.homedir(), filePath.slice(2));
+	}
+
+	return filePath;
+}
 
 export const banGitC: Rule = {
 	meta: {
@@ -13,17 +23,30 @@ export const banGitC: Rule = {
 			return { type: 'pass' };
 		}
 
-		if (await context.helpers.hasGitChangeDirectoryFlag(context.command)) {
+		const gitChangeDirPath = await context.helpers.getGitChangeDirectoryPath(context.command);
+		if (gitChangeDirPath === undefined) {
+			return { type: 'pass' };
+		}
+
+		const resolvedPath = path.resolve(context.cwd, expandTilde(gitChangeDirPath));
+		if (resolvedPath === context.cwd) {
 			return {
 				type: 'violation',
 				messages: [
-					'❌ git -C is not allowed',
-					'Running git commands in a different directory is not permitted.',
-					'Please cd to the target directory and run git commands there instead.',
+					'❌ git -C is not needed here',
+					`The target directory "${gitChangeDirPath}" is already the current working directory.`,
+					'Please run the git command directly without -C.',
 				],
 			};
 		}
 
-		return { type: 'pass' };
+		return {
+			type: 'violation',
+			messages: [
+				'❌ git -C is not allowed',
+				'Running git commands in a different directory is not permitted.',
+				'Please cd to the target directory and run git commands there instead.',
+			],
+		};
 	},
 };

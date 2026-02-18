@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, hasCargoManifestPathFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashMinusCWrapper,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -335,22 +335,50 @@ test('findAbsolutePathUnderHome - does not match home as prefix of longer path',
 	t.is(await findAbsolutePathUnderHome('cat /home/futpib2/file.ts', '/home/futpib'), undefined);
 });
 
-test('hasBashMinusCWrapper - detects bash -c', async t => {
-	t.true(await hasBashMinusCWrapper('bash -c "echo hello"'));
+test('hasBashCommandFlag - detects bash -c', async t => {
+	t.true(await hasBashCommandFlag('bash -c "echo hello"'));
 });
 
-test('hasBashMinusCWrapper - detects sh -c', async t => {
-	t.true(await hasBashMinusCWrapper('sh -c "echo hello"'));
+test('hasBashCommandFlag - detects sh -c', async t => {
+	t.true(await hasBashCommandFlag('sh -c "echo hello"'));
 });
 
-test('hasBashMinusCWrapper - does not trigger on regular bash commands', async t => {
-	t.false(await hasBashMinusCWrapper('echo hello'));
+test('hasBashCommandFlag - does not trigger on regular bash commands', async t => {
+	t.false(await hasBashCommandFlag('echo hello'));
 });
 
-test('hasBashMinusCWrapper - does not trigger on bash without -c', async t => {
-	t.false(await hasBashMinusCWrapper('bash script.sh'));
+test('hasBashCommandFlag - does not trigger on bash without -c', async t => {
+	t.false(await hasBashCommandFlag('bash script.sh'));
 });
 
-test('hasBashMinusCWrapper - does not detect -c in strings', async t => {
-	t.false(await hasBashMinusCWrapper('echo "bash -c foo"'));
+test('hasBashCommandFlag - does not detect -c in strings', async t => {
+	t.false(await hasBashCommandFlag('echo "bash -c foo"'));
+});
+
+test('getGitChangeDirectoryPath - extracts path from git -C', async t => {
+	t.is(await getGitChangeDirectoryPath('git -C /some/path status'), '/some/path');
+});
+
+test('getGitChangeDirectoryPath - extracts tilde path from git -C', async t => {
+	t.is(await getGitChangeDirectoryPath('git -C ~/code/project status'), '~/code/project');
+});
+
+test('getGitChangeDirectoryPath - returns undefined for regular git commands', async t => {
+	t.is(await getGitChangeDirectoryPath('git status'), undefined);
+});
+
+test('getLeadingCdTarget - extracts cd target from chained command', async t => {
+	t.is(await getLeadingCdTarget('cd ~/code/project && git status'), '~/code/project');
+});
+
+test('getLeadingCdTarget - extracts cd target with semicolon', async t => {
+	t.is(await getLeadingCdTarget('cd /tmp; ls'), '/tmp');
+});
+
+test('getLeadingCdTarget - returns undefined for non-cd chains', async t => {
+	t.is(await getLeadingCdTarget('echo hello && echo world'), undefined);
+});
+
+test('getLeadingCdTarget - returns undefined for single commands', async t => {
+	t.is(await getLeadingCdTarget('git status'), undefined);
 });

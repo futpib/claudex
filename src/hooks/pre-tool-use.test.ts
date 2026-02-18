@@ -190,6 +190,28 @@ test('rejects git -C flag', async t => {
 	}
 });
 
+test('rejects git -C to cwd with "not needed" message', async t => {
+	const temporaryDir = await createTemporaryGitRepo();
+	const { configDir, cleanup } = await createHooksConfig({ banGitC: true });
+	try {
+		const result = await runHook(
+			createBashToolInput(`git -C ${temporaryDir} status`),
+			temporaryDir,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('not needed'));
+		t.true(result.stderr.includes('already the current working directory'));
+	} finally {
+		await rm(temporaryDir, { recursive: true });
+		await cleanup();
+	}
+});
+
 test('rejects cargo --manifest-path flag', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banCargoManifestPath: true });
 	try {
@@ -358,6 +380,28 @@ test('rejects chained commands with ;', async t => {
 		t.is(result.exitCode, 2);
 		t.true(result.stderr.includes('Chaining'));
 	} finally {
+		await cleanup();
+	}
+});
+
+test('rejects cd to cwd with "not needed" message', async t => {
+	const temporaryDir = await createTemporaryGitRepo();
+	const { configDir, cleanup } = await createHooksConfig({ banCommandChaining: true });
+	try {
+		const result = await runHook(
+			createBashToolInput(`cd ${temporaryDir} && git status`),
+			temporaryDir,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('not needed'));
+		t.true(result.stderr.includes('already the current working directory'));
+	} finally {
+		await rm(temporaryDir, { recursive: true });
 		await cleanup();
 	}
 });

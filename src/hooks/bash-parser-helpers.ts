@@ -197,6 +197,40 @@ export async function hasChainOperators(command: string): Promise<boolean> {
 }
 
 /**
+ * If the command starts with `cd <path>` followed by a chain operator,
+ * returns the cd target path. Returns undefined otherwise.
+ */
+export async function getLeadingCdTarget(command: string): Promise<string | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast || ast.entries.length < 2) {
+		return undefined;
+	}
+
+	const firstEntry = ast.entries[0];
+	const bannedOperators = new Set([ '&&', '||', ';', '\n' ]);
+	if (!firstEntry.separator || !bannedOperators.has(firstEntry.separator)) {
+		return undefined;
+	}
+
+	const pipelineCommands = firstEntry.pipeline.commands;
+	if (pipelineCommands.length !== 1) {
+		return undefined;
+	}
+
+	const unit = pipelineCommands[0];
+	if (unit.type !== 'simple') {
+		return undefined;
+	}
+
+	const name = unit.name ? getWordLiteralValue(unit.name) : undefined;
+	if (name !== 'cd' || unit.args.length !== 1) {
+		return undefined;
+	}
+
+	return getWordLiteralValue(unit.args[0]);
+}
+
+/**
  * Recursively check if any simple command in the AST matches a predicate.
  */
 function someSimpleCommand(
@@ -359,32 +393,46 @@ export async function getFindExecCommand(command: string): Promise<string | unde
 	return result;
 }
 
-export async function hasGitChangeDirectoryFlag(command: string): Promise<boolean> {
+/**
+ * Gets the path from a `git -C <path>` command.
+ * Returns the path if found, undefined otherwise.
+ */
+export async function getGitChangeDirectoryPath(command: string): Promise<string | undefined> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
-		return false;
+		return undefined;
 	}
 
-	return someSimpleCommand(ast, cmd => {
+	let result: string | undefined;
+
+	someSimpleCommand(ast, cmd => {
 		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
 		if (name !== 'git') {
 			return false;
 		}
 
 		// Check args for -C flag
-		for (const arg of cmd.args) {
-			const value = getWordLiteralValue(arg);
+		for (let i = 0; i < cmd.args.length; i++) {
+			const value = getWordLiteralValue(cmd.args[i]);
 			if (value === undefined) {
 				continue;
 			}
 
-			// Check for standalone -C flag
-			if (value === '-C') {
+			// Check for standalone -C flag followed by path
+			if (value === '-C' && i + 1 < cmd.args.length) {
+				const pathValue = getWordLiteralValue(cmd.args[i + 1]);
+				if (pathValue) {
+					result = pathValue;
+					return true;
+				}
+
+				result = '';
 				return true;
 			}
 
 			// Check for combined short flags containing C (e.g., -vC)
 			if (value.startsWith('-') && !value.startsWith('--') && value.includes('C')) {
+				result = '';
 				return true;
 			}
 
@@ -397,6 +445,12 @@ export async function hasGitChangeDirectoryFlag(command: string): Promise<boolea
 
 		return false;
 	});
+
+	return result;
+}
+
+export async function hasGitChangeDirectoryFlag(command: string): Promise<boolean> {
+	return (await getGitChangeDirectoryPath(command)) !== undefined;
 }
 
 /**
@@ -484,7 +538,7 @@ export async function findAbsolutePathUnderHome(command: string, homeDir: string
  * Checks if a command wraps execution in `bash -c` or `sh -c`.
  * Returns true if found.
  */
-export async function hasBashMinusCWrapper(command: string): Promise<boolean> {
+export async function hasBashCommandFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
 		return false;

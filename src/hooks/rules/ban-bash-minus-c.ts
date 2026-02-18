@@ -13,7 +13,7 @@ export const banBashMinusC: Rule = {
 			return { type: 'pass' };
 		}
 
-		if (await context.helpers.hasBashMinusCWrapper(context.command)) {
+		if (await context.helpers.hasBashCommandFlag(context.command)) {
 			return {
 				type: 'violation',
 				messages: [
