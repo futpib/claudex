@@ -480,6 +480,33 @@ export async function findAbsolutePathUnderHome(command: string, homeDir: string
 	return found;
 }
 
+/**
+ * Checks if a command wraps execution in `bash -c` or `sh -c`.
+ * Returns true if found.
+ */
+export async function hasBashMinusCWrapper(command: string): Promise<boolean> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return false;
+	}
+
+	return someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (name !== 'bash' && name !== 'sh') {
+			return false;
+		}
+
+		for (const arg of cmd.args) {
+			const value = getWordLiteralValue(arg);
+			if (value === '-c') {
+				return true;
+			}
+		}
+
+		return false;
+	});
+}
+
 export async function hasCargoManifestPathFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {

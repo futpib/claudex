@@ -7,6 +7,7 @@ import { banGitCommitAmend } from './ban-git-commit-amend.js';
 import { banGitCommitNoVerify } from './ban-git-commit-no-verify.js';
 import { banGitCheckoutRedundantStartPoint } from './ban-git-checkout-redundant-start-point.js';
 import { banBackgroundBash } from './ban-background-bash.js';
+import { banBashMinusC } from './ban-bash-minus-c.js';
 import { banCommandChaining } from './ban-command-chaining.js';
 import { banPipeToFilter } from './ban-pipe-to-filter.js';
 import { banFileOperationCommands } from './ban-file-operation-commands.js';
@@ -58,6 +59,7 @@ export const allRules: Rule[] = [
 	banGitCommitNoVerify,
 	banGitCheckoutRedundantStartPoint,
 	banBackgroundBash,
+	banBashMinusC,
 	banCommandChaining,
 	banPipeToFilter,
 	banFileOperationCommands,

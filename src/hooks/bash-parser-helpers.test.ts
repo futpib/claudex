@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, hasCargoManifestPathFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, hasCargoManifestPathFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashMinusCWrapper,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -333,4 +333,24 @@ EOF
 
 test('findAbsolutePathUnderHome - does not match home as prefix of longer path', async t => {
 	t.is(await findAbsolutePathUnderHome('cat /home/futpib2/file.ts', '/home/futpib'), undefined);
+});
+
+test('hasBashMinusCWrapper - detects bash -c', async t => {
+	t.true(await hasBashMinusCWrapper('bash -c "echo hello"'));
+});
+
+test('hasBashMinusCWrapper - detects sh -c', async t => {
+	t.true(await hasBashMinusCWrapper('sh -c "echo hello"'));
+});
+
+test('hasBashMinusCWrapper - does not trigger on regular bash commands', async t => {
+	t.false(await hasBashMinusCWrapper('echo hello'));
+});
+
+test('hasBashMinusCWrapper - does not trigger on bash without -c', async t => {
+	t.false(await hasBashMinusCWrapper('bash script.sh'));
+});
+
+test('hasBashMinusCWrapper - does not detect -c in strings', async t => {
+	t.false(await hasBashMinusCWrapper('echo "bash -c foo"'));
 });
