@@ -3,9 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import type { SessionFile } from './types.js';
-
 function encodeProjectPath(projectPath: string): string {
-	return projectPath.replaceAll('/', '-');
+	return projectPath.replaceAll(/[/.]/g, '-');
 }
 
 async function readLine2(filePath: string): Promise<string | undefined> {
