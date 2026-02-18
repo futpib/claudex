@@ -1212,6 +1212,41 @@ test('config group errors without paths', async t => {
 	}
 });
 
+test('config group does not create groupDefinitions when group exists in another file', async t => {
+	const { configDir, cleanup } = await createTemporaryConfigDir();
+	const projG = await mkdtemp(path.join(tmpdir(), 'claudex-group-g-'));
+	try {
+		const claudexDir = path.join(configDir, 'claudex');
+		const configJsonDirectory = path.join(claudexDir, 'config.json.d');
+		await mkdir(configJsonDirectory, { recursive: true });
+
+		// Define the group in a separate config fragment file
+		await writeFile(
+			path.join(configJsonDirectory, '01-groups.json'),
+			JSON.stringify({ groupDefinitions: { existinggroup: { settingSources: 'user' } } }),
+		);
+
+		// Now assign a project to that group via the main config.json
+		const result = await runConfigWithDir(configDir, [ 'group', 'existinggroup', projG ]);
+		t.is(result.exitCode, 0);
+
+		const config = await readJsonFile(path.join(claudexDir, 'config.json'));
+		const typed = config as {
+			groupDefinitions?: Record<string, Record<string, unknown>>;
+			projects: Record<string, { group: string }>;
+		};
+
+		// The project should be assigned to the group
+		t.is(typed.projects[projG].group, 'existinggroup');
+
+		// GroupDefinitions should NOT be created in config.json since it already exists elsewhere
+		t.is(typed.groupDefinitions, undefined);
+	} finally {
+		await rm(projG, { recursive: true });
+		await cleanup();
+	}
+});
+
 // --- Config ungroup command tests ---
 
 test('config ungroup removes group from multiple projects', async t => {

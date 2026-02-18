@@ -991,9 +991,13 @@ async function handleGroup(name: string, paths: string[], file: string | undefin
 
 	const oldContent = serializeConfig(config);
 
-	// Auto-create group if it doesn't exist
-	config.groupDefinitions ??= {};
-	config.groupDefinitions[name] ??= {};
+	// Auto-create group only if it doesn't exist in any config file
+	const allFiles = await readAllConfigFiles();
+	const groupExistsGlobally = allFiles.some(entry => entry.config.groupDefinitions?.[name] !== undefined);
+	if (!groupExistsGlobally) {
+		config.groupDefinitions ??= {};
+		config.groupDefinitions[name] ??= {};
+	}
 
 	// Resolve all paths concurrently (worktree → parent repo, then tilde-collapse)
 	config.projects ??= {};
