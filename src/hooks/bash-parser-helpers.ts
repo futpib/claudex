@@ -184,7 +184,7 @@ export async function hasChainOperators(command: string): Promise<boolean> {
 		return false;
 	}
 
-	const bannedOperators = new Set([ '&&', '||', ';' ]);
+	const bannedOperators = new Set([ '&&', '||', ';', '\n' ]);
 
 	// Check if any entry has a banned separator
 	for (const entry of ast.entries) {

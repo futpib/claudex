@@ -20,8 +20,12 @@ import { startHostSocketServer } from './host-socket/server.js';
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
 
 async function isDirectory(filePath: string): Promise<boolean> {
-	const stat = await fs.stat(filePath).catch(() => undefined);
-	return stat?.isDirectory() ?? false;
+	try {
+		const stat = await fs.stat(filePath);
+		return stat.isDirectory();
+	} catch {
+		return false;
+	}
 }
 
 async function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string, profileVolumes: string[] = []): Promise<string[]> {
@@ -37,15 +41,12 @@ async function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: 
 		...profileVolumes,
 	]);
 
-	const additionalDirs: string[] = [];
-	for (const volume of config.volumes) {
-		const expanded = expandVolumePaths(volume);
-		const dir = expanded.container;
+	const nonExcludedDirs = config.volumes
+		.map(volume => expandVolumePaths(volume).container)
+		.filter(dir => !excludedPaths.has(dir));
 
-		if (!excludedPaths.has(dir) && await isDirectory(dir)) {
-			additionalDirs.push(dir);
-		}
-	}
+	const isDirResults = await Promise.all(nonExcludedDirs.map(async dir => isDirectory(dir)));
+	const additionalDirs = nonExcludedDirs.filter((_, i) => isDirResults[i]);
 
 	return additionalDirs.flatMap(dir => [
 		'--add-dir',

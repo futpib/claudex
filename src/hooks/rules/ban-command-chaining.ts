@@ -6,7 +6,7 @@ export const banCommandChaining: Rule = {
 		configKey: 'banCommandChaining',
 		recommended: true,
 		phase: 'main',
-		description: 'Do not chain bash commands with &&, ||, or ;; run commands separately',
+		description: 'Do not chain bash commands with &&, ||, ;, or newline; run commands separately',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
@@ -17,7 +17,7 @@ export const banCommandChaining: Rule = {
 			return {
 				type: 'violation',
 				messages: [
-					'❌ Chaining bash commands with &&, ||, or ; is not allowed',
+					'❌ Chaining bash commands with &&, ||, ;, or newline is not allowed',
 					'Please run commands separately for better tracking and error handling.',
 				],
 			};

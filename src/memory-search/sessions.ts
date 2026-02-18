@@ -3,6 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import type { SessionFile } from './types.js';
+
 function encodeProjectPath(projectPath: string): string {
 	return projectPath.replaceAll(/[/.]/g, '-');
 }

@@ -141,6 +141,10 @@ test('hasChainOperators - does not detect operators in command substitution', as
 	t.false(await hasChainOperators('echo "$(cd /tmp && ls)"'));
 });
 
+test('hasChainOperators - detects newline used as separator', async t => {
+	t.true(await hasChainOperators('echo hello\necho world'));
+});
+
 test('hasChainOperators - handles simple commands', async t => {
 	t.false(await hasChainOperators('ls -la'));
 	t.false(await hasChainOperators('git status'));
