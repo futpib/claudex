@@ -1,8 +1,34 @@
 import { Buffer } from 'node:buffer';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
 import type { SessionFile } from './types.js';
+
+export async function getWorktreePaths(cwd: string): Promise<string[]> {
+	try {
+		const output = await new Promise<string>((resolve, reject) => {
+			execFile('git', ['worktree', 'list', '--porcelain'], { cwd }, (error, stdout) => {
+				if (error) {
+					reject(error);
+				} else {
+					resolve(stdout);
+				}
+			});
+		});
+
+		const paths: string[] = [];
+		for (const line of output.split('\n')) {
+			if (line.startsWith('worktree ')) {
+				paths.push(line.slice('worktree '.length));
+			}
+		}
+
+		return paths;
+	} catch {
+		return [cwd];
+	}
+}
 
 function encodeProjectPath(projectPath: string): string {
 	return projectPath.replaceAll(/[/.]/g, '-');

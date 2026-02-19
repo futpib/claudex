@@ -1,7 +1,7 @@
 import process from 'node:process';
 import { Command } from 'commander';
 import type { SearchTarget, SearchOptions } from './types.js';
-import { discoverSessions } from './sessions.js';
+import { discoverSessions, getWorktreePaths } from './sessions.js';
 import { searchSessions } from './search.js';
 import { formatMatch, formatSummary } from './output.js';
 
@@ -82,7 +82,26 @@ export async function main(): Promise<void> {
 				jsonOutput: Boolean(options.json),
 			};
 
-			const sessions = await discoverSessions(searchOptions.projectPath, searchOptions.sessionId);
+			const worktreePaths = await getWorktreePaths(searchOptions.projectPath);
+			const uniquePaths = new Set(worktreePaths);
+			if (!uniquePaths.has(searchOptions.projectPath)) {
+				uniquePaths.add(searchOptions.projectPath);
+			}
+
+			const allSessions = await Promise.all(
+				[...uniquePaths].map(p => discoverSessions(p, searchOptions.sessionId)),
+			);
+
+			const seen = new Set<string>();
+			const sessions: typeof allSessions[0] = [];
+			for (const batch of allSessions) {
+				for (const session of batch) {
+					if (!seen.has(session.filePath)) {
+						seen.add(session.filePath);
+						sessions.push(session);
+					}
+				}
+			}
 
 			if (sessions.length === 0) {
 				console.error(`No session files found for project ${searchOptions.projectPath}`);
