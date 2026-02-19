@@ -1,5 +1,15 @@
 import type { SearchMatch } from './types.js';
 
+let didTruncate = false;
+
+export function resetTruncationState(): void {
+	didTruncate = false;
+}
+
+export function getDidTruncate(): boolean {
+	return didTruncate;
+}
+
 const ansi = {
 	reset: '\u001B[0m',
 	bold: '\u001B[1m',
@@ -28,6 +38,8 @@ function truncateLine(line: string, patterns: RegExp[], maxLineWidth: number): s
 	}
 
 	const match = firstMatchPosition(line, patterns);
+	didTruncate = true;
+
 	if (!match) {
 		return line.slice(0, maxLineWidth) + '...';
 	}

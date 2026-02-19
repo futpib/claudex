@@ -3,7 +3,7 @@ import { Command } from 'commander';
 import type { SearchTarget, SearchOptions } from './types.js';
 import { discoverSessions, getWorktreePaths } from './sessions.js';
 import { searchSessions } from './search.js';
-import { formatMatch, formatSummary } from './output.js';
+import { formatMatch, formatSummary, resetTruncationState, getDidTruncate } from './output.js';
 
 const allTargets: SearchTarget[] = [ 'user', 'assistant', 'bash-command', 'bash-output', 'tool-use', 'tool-result' ];
 
@@ -124,6 +124,7 @@ export async function main(): Promise<void> {
 
 				console.log(JSON.stringify(results, null, 2));
 			} else {
+				resetTruncationState();
 				let count = 0;
 				for await (const match of searchSessions(sessions, searchOptions)) {
 					if (count > 0) {
@@ -135,6 +136,10 @@ export async function main(): Promise<void> {
 				}
 
 				console.log(formatSummary(count, searchOptions.projectPath, sessions.length));
+
+				if (getDidTruncate()) {
+					console.error('Hint: Some lines were truncated. Use --max-line-width 0 for full output, or --max-line-width <n> to adjust.');
+				}
 			}
 		});
 
