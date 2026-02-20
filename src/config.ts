@@ -47,6 +47,13 @@ const baseConfigSchema = z.object({
 	notifications: z.boolean().optional(),
 	hooksDescriptions: z.boolean().optional(), // Default true - inject active hook rule descriptions into CLAUDE.md
 	profiles: z.array(z.string()).optional(), // References to named profiles defined at root level
+	launcher: z.string().optional(), // Name of launcher to use (e.g. "ollama")
+});
+
+// Launcher definition schema - extends base config with launcher-specific fields
+const launcherDefinitionSchema = baseConfigSchema.extend({
+	command: z.array(z.string()),
+	model: z.string().optional(),
 });
 
 // Project config can reference a group
@@ -54,11 +61,12 @@ const projectConfigSchema = baseConfigSchema.extend({
 	group: z.string().optional(),
 });
 
-// Root config adds projects mapping, group definitions, and profile definitions
+// Root config adds projects mapping, group definitions, profile definitions, and launcher definitions
 const rootConfigSchema = baseConfigSchema.extend({
 	groupDefinitions: z.record(z.string(), baseConfigSchema).optional(),
 	projects: z.record(z.string(), projectConfigSchema).optional(),
 	profileDefinitions: z.record(z.string(), baseConfigSchema).optional(),
+	launcherDefinitions: z.record(z.string(), launcherDefinitionSchema).optional(),
 });
 
 export { baseConfigSchema, rootConfigSchema };
@@ -73,6 +81,18 @@ export type McpServersConfig = z.infer<typeof mcpServersConfigSchema>;
 export type BaseConfig = z.infer<typeof baseConfigSchema>;
 export type ProjectConfig = z.infer<typeof projectConfigSchema>;
 export type RootConfig = z.infer<typeof rootConfigSchema>;
+export type LauncherDefinition = z.infer<typeof launcherDefinitionSchema>;
+
+export const builtinLauncherDefinitions: Record<string, LauncherDefinition> = {
+	claude: {
+		command: [ 'claude' ],
+	},
+	ollama: {
+		command: [ 'ollama', 'launch', 'claude' ],
+		packages: [ 'ollama' ],
+		hostPorts: [ 11_434 ],
+	},
+};
 
 // Merged config is the same as base config (after merging root + project)
 export type ClaudexConfig = BaseConfig;
@@ -129,13 +149,14 @@ export function expandTilde(filePath: string): string {
 	return filePath;
 }
 
+// These match bash builtin variable names ($UID, $EUID)
 const builtinVars: Record<string, () => string> = {
-	UID: () => String(process.getuid?.() ?? ''),
-	EUID: () => String(process.geteuid?.() ?? ''),
+	UID: () => String(process.getuid?.() ?? ''), // eslint-disable-line @typescript-eslint/naming-convention
+	EUID: () => String(process.geteuid?.() ?? ''), // eslint-disable-line @typescript-eslint/naming-convention
 };
 
 export function expandEnvVars(value: string): string {
-	return value.replaceAll(/\$(\w+)|\$\{(\w+)\}/g, (_match, name1: string | undefined, name2: string | undefined) => {
+	return value.replaceAll(/\$(\w+)|\${(\w+)}/g, (_match, name1: string | undefined, name2: string | undefined) => {
 		const name = name1 ?? name2;
 		if (!name) {
 			return _match;
@@ -380,6 +401,9 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	// HooksDescriptions: overlay takes precedence if defined, otherwise use base
 	const hooksDescriptions = overlay.hooksDescriptions ?? base.hooksDescriptions;
 
+	// Launcher: overlay takes precedence if defined, otherwise use base
+	const launcher = overlay.launcher ?? base.launcher;
+
 	return {
 		profiles: profiles.length > 0 ? profiles : undefined,
 		packages: packages.length > 0 ? packages : undefined,
@@ -400,6 +424,7 @@ function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 		mcpServers,
 		notifications,
 		hooksDescriptions,
+		launcher,
 	};
 }
 
@@ -422,7 +447,7 @@ function mergeProjectConfigs(base: ProjectConfig, overlay: ProjectConfig): Proje
 }
 
 function extractBaseConfig(root: RootConfig): BaseConfig {
-	const { groupDefinitions: _, projects: _p, profileDefinitions: _pr, ...base } = root;
+	const { groupDefinitions: _, projects: _p, profileDefinitions: _pr, launcherDefinitions: _ld, ...base } = root;
 	return base;
 }
 
@@ -483,11 +508,41 @@ function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 		}
 	}
 
+	// Merge launcher definitions: combine keys, overlay wins for same launcher name
+	let launcherDefinitions: Record<string, LauncherDefinition> | undefined;
+
+	if (base.launcherDefinitions ?? overlay.launcherDefinitions) {
+		launcherDefinitions = {};
+		const allLauncherNames = new Set([
+			...Object.keys(base.launcherDefinitions ?? {}),
+			...Object.keys(overlay.launcherDefinitions ?? {}),
+		]);
+
+		for (const launcherName of allLauncherNames) {
+			const baseLauncher = base.launcherDefinitions?.[launcherName];
+			const overlayLauncher = overlay.launcherDefinitions?.[launcherName];
+
+			if (baseLauncher && overlayLauncher) {
+				const { command: _bc, model: _bm, ...baseBase } = baseLauncher;
+				const { command: _oc, model: _om, ...overlayBase } = overlayLauncher;
+				const mergedBase = mergeBaseConfigs(baseBase, overlayBase);
+				launcherDefinitions[launcherName] = {
+					...mergedBase,
+					command: overlayLauncher.command ?? baseLauncher.command,
+					model: overlayLauncher.model ?? baseLauncher.model,
+				};
+			} else {
+				launcherDefinitions[launcherName] = (overlayLauncher ?? baseLauncher)!;
+			}
+		}
+	}
+
 	return {
 		...merged,
 		profileDefinitions,
 		groupDefinitions,
 		projects,
+		launcherDefinitions,
 	};
 }
 
@@ -623,6 +678,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		mcpServers: config.mcpServers,
 		notifications: config.notifications,
 		hooksDescriptions: config.hooksDescriptions,
+		launcher: config.launcher,
 		// Profiles references are consumed during resolution and not carried to final output
 	};
 }
@@ -649,6 +705,7 @@ export type MergedConfigResult = {
 	config: ClaudexConfig;
 	configFiles: string[];
 	profileVolumes: string[];
+	launcherDefinitions: Record<string, LauncherDefinition> | undefined;
 };
 
 function resolveProfiles(
@@ -740,7 +797,12 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 	}
 
 	// Sort for consistent Docker cache
-	return { config: sortConfig(merged), configFiles, profileVolumes };
+	return {
+		config: sortConfig(merged),
+		configFiles,
+		profileVolumes,
+		launcherDefinitions: rootConfig.launcherDefinitions,
+	};
 }
 
 // Legacy function for backward compatibility - deprecated

@@ -1,21 +1,13 @@
 import { Buffer } from 'node:buffer';
-import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { execa } from 'execa';
 import type { SessionFile } from './types.js';
 
 export async function getWorktreePaths(cwd: string): Promise<string[]> {
 	try {
-		const output = await new Promise<string>((resolve, reject) => {
-			execFile('git', ['worktree', 'list', '--porcelain'], { cwd }, (error, stdout) => {
-				if (error) {
-					reject(error);
-				} else {
-					resolve(stdout);
-				}
-			});
-		});
+		const { stdout: output } = await execa('git', [ 'worktree', 'list', '--porcelain' ], { cwd });
 
 		const paths: string[] = [];
 		for (const line of output.split('\n')) {
@@ -26,7 +18,7 @@ export async function getWorktreePaths(cwd: string): Promise<string[]> {
 
 		return paths;
 	} catch {
-		return [cwd];
+		return [ cwd ];
 	}
 }
 
@@ -89,7 +81,9 @@ async function detectChainLink(filePath: string, fileSessionId: string): Promise
 				return { sessionId: fileSessionId, previousSessionId: linkedSessionId };
 			}
 		}
-	} catch {}
+	} catch {
+		// Skip unparseable JSONL lines
+	}
 
 	return { sessionId: fileSessionId };
 }

@@ -23,7 +23,10 @@ export async function buildToolUseMap(filePath: string): Promise<ToolUseMap> {
 		try {
 			const entry = JSON.parse(line) as Record<string, unknown>;
 			collectToolUseIds(entry, map);
-		} catch {}
+		} catch {
+			// Skip malformed JSONL lines
+			continue;
+		}
 	}
 
 	return map;
@@ -75,7 +78,10 @@ export async function * extractContent(
 		try {
 			const entry = JSON.parse(line) as Record<string, unknown>;
 			yield * extractFromEntry(entry, toolUseMap, targets, sessionId);
-		} catch {}
+		} catch {
+			// Skip malformed JSONL lines
+			continue;
+		}
 	}
 }
 

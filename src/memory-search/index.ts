@@ -3,7 +3,9 @@ import { Command } from 'commander';
 import type { SearchTarget, SearchOptions } from './types.js';
 import { discoverSessions, getWorktreePaths } from './sessions.js';
 import { searchSessions } from './search.js';
-import { formatMatch, formatSummary, resetTruncationState, getDidTruncate } from './output.js';
+import {
+	formatMatch, formatSummary, resetTruncationState, getDidTruncate,
+} from './output.js';
 
 const allTargets: SearchTarget[] = [ 'user', 'assistant', 'bash-command', 'bash-output', 'tool-use', 'tool-result' ];
 
@@ -69,7 +71,9 @@ export async function main(): Promise<void> {
 				if (regexPattern.source !== literalPattern.source) {
 					patterns.push(regexPattern);
 				}
-			} catch {}
+			} catch {
+				// Pattern is not valid regex — use literal match only
+			}
 
 			const searchOptions: SearchOptions = {
 				patterns,
@@ -88,9 +92,7 @@ export async function main(): Promise<void> {
 				uniquePaths.add(searchOptions.projectPath);
 			}
 
-			const allSessions = await Promise.all(
-				[...uniquePaths].map(p => discoverSessions(p, searchOptions.sessionId)),
-			);
+			const allSessions = await Promise.all([ ...uniquePaths ].map(async p => discoverSessions(p, searchOptions.sessionId)));
 
 			const seen = new Set<string>();
 			const sessions: typeof allSessions[0] = [];

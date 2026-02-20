@@ -10,7 +10,10 @@ import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
 import { paths } from './paths.js';
 import {
-	getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts, getGitWorktreeParentPath, expandPathEnv, resolveHooks, resolveMcpServers, type Volume, type ClaudexConfig,
+	getMergedConfig, expandVolumePaths, getSshKeys, getSshHosts, getFilteredKnownHosts,
+	getGitWorktreeParentPath, expandPathEnv, resolveHooks, resolveMcpServers,
+	builtinLauncherDefinitions,
+	type Volume, type ClaudexConfig, type LauncherDefinition,
 } from './config.js';
 import { shieldEnvVars } from './secrets.js';
 import { configMain } from './config-cli.js';
@@ -190,7 +193,7 @@ async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = fals
 
 async function fetchLatestVersion(url: string): Promise<string | undefined> {
 	try {
-		const { stdout } = await execa('curl', ['-sL', '--max-time', '5', url]);
+		const { stdout } = await execa('curl', [ '-sL', '--max-time', '5', url ]);
 		return stdout.trim() || undefined;
 	} catch {
 		return undefined;
@@ -203,7 +206,7 @@ async function getLatestClaudeCodeVersion(): Promise<string | undefined> {
 
 async function getLatestYayVersion(): Promise<string | undefined> {
 	try {
-		const { stdout } = await execa('curl', ['-sL', '--max-time', '5', 'https://aur.archlinux.org/rpc/v5/info?arg[]=yay']);
+		const { stdout } = await execa('curl', [ '-sL', '--max-time', '5', 'https://aur.archlinux.org/rpc/v5/info?arg[]=yay' ]);
 		const data = JSON.parse(stdout) as { results: Array<{ Version: string }> };
 		return data.results[0]?.Version;
 	} catch {
@@ -235,6 +238,7 @@ async function refreshDockerStagesInBackground(dockerfileContent: string) {
 		return; // Another refresh is already running
 	}
 
+	/* eslint-disable no-await-in-loop */
 	// Determine which targets need rebuilding
 	const targetsToRebuild: RefreshTarget[] = [];
 	for (const target of refreshTargets) {
@@ -246,8 +250,13 @@ async function refreshDockerStagesInBackground(dockerfileContent: string) {
 
 		let cachedVersion: string | undefined;
 		try {
-			cachedVersion = (await fs.readFile(versionFile, 'utf8')).trim();
-		} catch {}
+			const content = await fs.readFile(versionFile, 'utf8');
+			cachedVersion = content.trim();
+		} catch (error: unknown) {
+			if (error instanceof Error && 'code' in error && error.code !== 'ENOENT') {
+				console.error(`Warning: failed to read ${versionFile}:`, error.message);
+			}
+		}
 
 		if (cachedVersion !== latestVersion) {
 			targetsToRebuild.push(target);
@@ -255,17 +264,28 @@ async function refreshDockerStagesInBackground(dockerfileContent: string) {
 			await fs.writeFile(versionFile, latestVersion);
 		}
 	}
+	/* eslint-enable no-await-in-loop */
 
 	if (targetsToRebuild.length === 0) {
 		await lockHandle.close();
-		await fs.unlink(lockFile).catch(() => {});
+		try {
+			await fs.unlink(lockFile);
+		} catch (error: unknown) {
+			if (error instanceof Error && 'code' in error && error.code !== 'ENOENT') {
+				console.error('Warning: failed to remove lock file:', error.message);
+			}
+		}
+
 		return;
 	}
 
+	// Must not be async — execa returns a ResultPromise with .unref(), plain Promise does not
+	// eslint-disable-next-line @typescript-eslint/promise-function-async
 	const children = targetsToRebuild.map(target => execa('docker', [
 		'build',
 		'--no-cache',
-		'--target', target.dockerTarget,
+		'--target',
+		target.dockerTarget,
 		'-',
 	], {
 		input: dockerfileContent,
@@ -278,11 +298,18 @@ async function refreshDockerStagesInBackground(dockerfileContent: string) {
 		},
 	}));
 
-	// Release lock when all done
-	void Promise.allSettled(children).then(async () => {
+	// Release lock when all done — fire-and-forget (function already returned)
+	void (async () => {
+		await Promise.allSettled(children);
 		await lockHandle?.close();
-		await fs.unlink(lockFile).catch(() => {});
-	});
+		try {
+			await fs.unlink(lockFile);
+		} catch (error: unknown) {
+			if (error instanceof Error && 'code' in error && error.code !== 'ENOENT') {
+				console.error('Warning: failed to remove lock file:', error.message);
+			}
+		}
+	})();
 
 	for (const child of children) {
 		child.unref();
@@ -343,6 +370,59 @@ function parseEnvSpec(spec: string): [string, string] {
 	return [ spec.slice(0, idx), spec.slice(idx + 1) ];
 }
 
+export function resolveLauncherDefinition(
+	launcherName: string,
+	configLauncherDefinitions: Record<string, LauncherDefinition> | undefined,
+): LauncherDefinition {
+	const configDef = configLauncherDefinitions?.[launcherName];
+	const builtinDef = builtinLauncherDefinitions[launcherName];
+
+	if (configDef && builtinDef) {
+		// Config overrides built-in: merge base config fields, config command/model win
+		const { command: _bc, model: _bm, ...builtinBase } = builtinDef;
+		const { command: _cc, model: _cm, ...configBase } = configDef;
+		return {
+			...builtinBase,
+			...configBase,
+			command: configDef.command ?? builtinDef.command,
+			model: configDef.model ?? builtinDef.model,
+		};
+	}
+
+	if (configDef) {
+		return configDef;
+	}
+
+	if (builtinDef) {
+		return builtinDef;
+	}
+
+	throw new Error(`Unknown launcher: ${launcherName}`);
+}
+
+export function buildLauncherCommand(
+	def: LauncherDefinition,
+	modelOverride: string | undefined,
+	claudeArgs: string[],
+): { command: string; args: string[] } {
+	const command = def.command[0];
+	const args = def.command.slice(1);
+	const model = modelOverride ?? def.model;
+	if (model) {
+		args.push('--model', model);
+	}
+
+	// For the bare "claude" launcher, don't insert "--" separator
+	const isBareClaude = def.command.length === 1 && def.command[0] === 'claude';
+	if (isBareClaude) {
+		args.push(...claudeArgs);
+	} else {
+		args.push('--', ...claudeArgs);
+	}
+
+	return { command, args };
+}
+
 function collect(value: string, previous: string[]) {
 	return [ ...previous, value ];
 }
@@ -359,6 +439,8 @@ type MainOptions = {
 	volume: string[];
 	env: string[];
 	sshKey: string[];
+	launcher: string | undefined;
+	model: string | undefined;
 };
 
 export async function main() {
@@ -375,6 +457,8 @@ export async function main() {
 		// eslint-disable-next-line no-template-curly-in-string
 		.option('--env <spec>', 'Add env var: KEY=value or KEY for KEY=${KEY} (repeatable)', collect, [])
 		.option('--ssh-key <path>', 'Add SSH key to agent (repeatable)', collect, [])
+		.option('--launcher <name>', 'Select launcher by name (e.g. "ollama")')
+		.option('--model <name>', 'Override the launcher\'s default model')
 		.allowUnknownOption()
 		.passThroughOptions()
 		.argument('[claude-args...]')
@@ -459,6 +543,8 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		volume: cliVolumes,
 		env: cliEnv,
 		sshKey: cliSshKeys,
+		launcher: cliLauncher,
+		model: cliModel,
 	} = options;
 
 	// Read config early for hook/mcp gating
@@ -529,9 +615,52 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	let sshAgent: SshAgentInfo | undefined;
 	let hostSocket: { socketPath: string; cleanup: () => Promise<void> } | undefined;
 
+	// Resolve launcher definition
+	const launcherName = cliLauncher ?? earlyConfig.config.launcher;
+	let launcherDef: LauncherDefinition | undefined;
+	if (launcherName) {
+		launcherDef = resolveLauncherDefinition(launcherName, earlyConfig.launcherDefinitions);
+		console.error(`Launcher: ${launcherName}`);
+	}
+
 	if (useDocker) {
 		const cwdBasename = path.basename(cwd);
 		const { config, profileVolumes } = await getMergedConfig(cwd);
+
+		// Merge launcher definition's base config fields into the final config
+		if (launcherDef) {
+			const { command: _, model: _m, ...launcherBase } = launcherDef;
+			if (launcherBase.packages?.length) {
+				config.packages = [ ...(config.packages ?? []), ...launcherBase.packages ].sort((a, b) => a.localeCompare(b));
+			}
+
+			if (launcherBase.volumes?.length) {
+				config.volumes = [ ...(config.volumes ?? []), ...launcherBase.volumes ];
+			}
+
+			if (launcherBase.hostPorts?.length) {
+				config.hostPorts = [ ...new Set([ ...(config.hostPorts ?? []), ...launcherBase.hostPorts ]) ].sort((a, b) => a - b);
+			}
+
+			if (launcherBase.env) {
+				config.env = { ...config.env, ...launcherBase.env };
+			}
+
+			if (launcherBase.ssh) {
+				config.ssh ??= {};
+				if (launcherBase.ssh.keys?.length) {
+					config.ssh.keys = [ ...(config.ssh.keys ?? []), ...launcherBase.ssh.keys ];
+				}
+
+				if (launcherBase.ssh.hosts?.length) {
+					config.ssh.hosts = [ ...(config.ssh.hosts ?? []), ...launcherBase.ssh.hosts ];
+				}
+			}
+
+			if (launcherBase.extraHosts) {
+				config.extraHosts = { ...config.extraHosts, ...launcherBase.extraHosts };
+			}
+		}
 
 		// Merge CLI flags with config
 		if (cliPackages?.length) {
@@ -694,6 +823,15 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			}
 		}
 
+		// Pass launcher config into container via env vars
+		if (launcherDef) {
+			dockerArgs.push('-e', `CLAUDEX_LAUNCHER_COMMAND=${JSON.stringify(launcherDef.command)}`);
+			const launcherModel = cliModel ?? launcherDef.model;
+			if (launcherModel) {
+				dockerArgs.push('-e', `CLAUDEX_LAUNCHER_MODEL=${launcherModel}`);
+			}
+		}
+
 		dockerArgs.push('-w', cwd);
 
 		// Default to 'user,local' to ignore shared project .claude/ but allow local overrides
@@ -726,11 +864,20 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 		const claudeFullArgs = [ '--setting-sources', settingSources, ...addDirArgs, ...claudeArgs ];
 
-		claudeChildProcess = execa('claude', claudeFullArgs, {
-			stdin: process.stdin,
-			stdout: process.stdout,
-			stderr: process.stderr,
-		});
+		if (launcherDef) {
+			const { command: launcherCmd, args: launcherArgs } = buildLauncherCommand(launcherDef, cliModel, claudeFullArgs);
+			claudeChildProcess = execa(launcherCmd, launcherArgs, {
+				stdin: process.stdin,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			});
+		} else {
+			claudeChildProcess = execa('claude', claudeFullArgs, {
+				stdin: process.stdin,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			});
+		}
 	}
 
 	try {
@@ -964,15 +1111,29 @@ export async function mainInDocker() {
 	await setupKnownHosts();
 	const cleanupPortForwarding = await setupHostPortForwarding();
 
-	// Now exec claude with all arguments
-	const args = process.argv.slice(2);
+	// Now exec claude (or configured launcher) with all arguments
+	const claudeArgs = process.argv.slice(2);
+
+	const launcherCommandJson = process.env.CLAUDEX_LAUNCHER_COMMAND;
+	const launcherModel = process.env.CLAUDEX_LAUNCHER_MODEL;
 
 	try {
-		await execa('claude', args, {
-			stdin: process.stdin,
-			stdout: process.stdout,
-			stderr: process.stderr,
-		});
+		if (launcherCommandJson) {
+			const launcherCommand = JSON.parse(launcherCommandJson) as string[];
+			const def: LauncherDefinition = { command: launcherCommand, model: launcherModel };
+			const { command, args } = buildLauncherCommand(def, undefined, claudeArgs);
+			await execa(command, args, {
+				stdin: process.stdin,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			});
+		} else {
+			await execa('claude', claudeArgs, {
+				stdin: process.stdin,
+				stdout: process.stdout,
+				stderr: process.stderr,
+			});
+		}
 	} finally {
 		cleanupPortForwarding?.();
 	}
