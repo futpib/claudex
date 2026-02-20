@@ -129,6 +129,13 @@ export function expandTilde(filePath: string): string {
 	return filePath;
 }
 
+export function expandEnvVars(value: string): string {
+	return value.replaceAll(/\$(\w+)|\$\{(\w+)\}/g, (_match, name1: string | undefined, name2: string | undefined) => {
+		const name = name1 ?? name2;
+		return (name && process.env[name]) ?? _match;
+	});
+}
+
 export function expandPathEnv(value: string): string {
 	return value
 		.split(':')
@@ -200,9 +207,13 @@ export async function getFilteredKnownHosts(hosts: string[]): Promise<string> {
 	}
 }
 
+function expandPath(value: string): string {
+	return expandTilde(expandEnvVars(value));
+}
+
 export function expandVolumePaths(volume: Volume): VolumeMount {
 	if (typeof volume === 'string') {
-		const expandedPath = expandTilde(volume);
+		const expandedPath = expandPath(volume);
 		return {
 			host: expandedPath,
 			container: expandedPath,
@@ -210,8 +221,8 @@ export function expandVolumePaths(volume: Volume): VolumeMount {
 	}
 
 	return {
-		host: expandTilde(volume.host),
-		container: expandTilde(volume.container),
+		host: expandPath(volume.host),
+		container: expandPath(volume.container),
 	};
 }
 
