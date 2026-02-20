@@ -129,10 +129,19 @@ export function expandTilde(filePath: string): string {
 	return filePath;
 }
 
+const builtinVars: Record<string, () => string> = {
+	UID: () => String(process.getuid?.() ?? ''),
+	EUID: () => String(process.geteuid?.() ?? ''),
+};
+
 export function expandEnvVars(value: string): string {
 	return value.replaceAll(/\$(\w+)|\$\{(\w+)\}/g, (_match, name1: string | undefined, name2: string | undefined) => {
 		const name = name1 ?? name2;
-		return (name && process.env[name]) ?? _match;
+		if (!name) {
+			return _match;
+		}
+
+		return process.env[name] ?? builtinVars[name]?.() ?? _match;
 	});
 }
 
