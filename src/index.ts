@@ -184,8 +184,109 @@ async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = fals
 	});
 
 	return {
-		userId, username, projectRoot, imageName,
+		userId, username, projectRoot, imageName, dockerfileContent,
 	};
+}
+
+async function fetchLatestVersion(url: string): Promise<string | undefined> {
+	try {
+		const { stdout } = await execa('curl', ['-sL', '--max-time', '5', url]);
+		return stdout.trim() || undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+async function getLatestClaudeCodeVersion(): Promise<string | undefined> {
+	return fetchLatestVersion('https://storage.googleapis.com/claude-code-dist-86c565f3-f756-42ad-8dfa-d59b1c096819/claude-code-releases/latest');
+}
+
+async function getLatestYayVersion(): Promise<string | undefined> {
+	try {
+		const { stdout } = await execa('curl', ['-sL', '--max-time', '5', 'https://aur.archlinux.org/rpc/v5/info?arg[]=yay']);
+		const data = JSON.parse(stdout) as { results: Array<{ Version: string }> };
+		return data.results[0]?.Version;
+	} catch {
+		return undefined;
+	}
+}
+
+type RefreshTarget = {
+	name: string;
+	dockerTarget: string;
+	getLatestVersion: () => Promise<string | undefined>;
+};
+
+const refreshTargets: RefreshTarget[] = [
+	{ name: 'claude-code', dockerTarget: 'claude-code-installer', getLatestVersion: getLatestClaudeCodeVersion },
+	{ name: 'yay', dockerTarget: 'yay-builder', getLatestVersion: getLatestYayVersion },
+];
+
+async function refreshDockerStagesInBackground(dockerfileContent: string) {
+	const cacheDir = paths.cache;
+	await fs.mkdir(cacheDir, { recursive: true });
+	const lockFile = path.join(cacheDir, 'docker-refresh.lock');
+
+	// Acquire lock (O_EXCL fails if file exists)
+	let lockHandle: Awaited<ReturnType<typeof fs.open>> | undefined;
+	try {
+		lockHandle = await fs.open(lockFile, 'wx');
+	} catch {
+		return; // Another refresh is already running
+	}
+
+	// Determine which targets need rebuilding
+	const targetsToRebuild: RefreshTarget[] = [];
+	for (const target of refreshTargets) {
+		const versionFile = path.join(cacheDir, `${target.name}-version`);
+		const latestVersion = await target.getLatestVersion();
+		if (!latestVersion) {
+			continue;
+		}
+
+		let cachedVersion: string | undefined;
+		try {
+			cachedVersion = (await fs.readFile(versionFile, 'utf8')).trim();
+		} catch {}
+
+		if (cachedVersion !== latestVersion) {
+			targetsToRebuild.push(target);
+			// Write new version immediately so concurrent launches skip this target
+			await fs.writeFile(versionFile, latestVersion);
+		}
+	}
+
+	if (targetsToRebuild.length === 0) {
+		await lockHandle.close();
+		await fs.unlink(lockFile).catch(() => {});
+		return;
+	}
+
+	const children = targetsToRebuild.map(target => execa('docker', [
+		'build',
+		'--no-cache',
+		'--target', target.dockerTarget,
+		'-',
+	], {
+		input: dockerfileContent,
+		stdout: 'ignore',
+		stderr: 'ignore',
+		env: {
+			...process.env,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			DOCKER_BUILDKIT: '1',
+		},
+	}));
+
+	// Release lock when all done
+	void Promise.allSettled(children).then(async () => {
+		await lockHandle?.close();
+		await fs.unlink(lockFile).catch(() => {});
+	});
+
+	for (const child of children) {
+		child.unref();
+	}
 }
 
 async function isUnsafeDirectory(dir: string): Promise<{ unsafe: boolean; reason: string }> {
@@ -463,7 +564,8 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			}
 		}
 
-		const { username, projectRoot, imageName } = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
+		const { username, projectRoot, imageName, dockerfileContent } = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
+		void refreshDockerStagesInBackground(dockerfileContent);
 		const randomSuffix = Math.random().toString(36).slice(2, 8);
 		const containerName = `claudex-${cwdBasename}-${randomSuffix}`;
 		const homeDir = os.homedir();
