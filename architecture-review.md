@@ -6,51 +6,10 @@ higher-effort improvements.
 
 ---
 
-## 1. Split the God-File `src/index.ts` (~1,250 lines)
+## 1. ~~Split the God-File `src/index.ts`~~ ✅ Done
 
-**Impact: high | Effort: low-medium**
-
-`index.ts` currently owns every concern of the host-side entry point:
-
-| Responsibility | Lines (approx.) |
-|---|---|
-| CLI flag parsing & `main()` | 447–532 |
-| `runMain()` orchestrator | 534–917 |
-| Docker image building | 137–193 |
-| Docker container running | 628–854 |
-| SSH agent lifecycle | 69–112 |
-| Host-port proxy lifecycle | 1,070–1,124 |
-| Port-readiness polling | 1,126–1,148 |
-| In-container port forwarding | 1,151–1,212 |
-| `mainInDocker()` entry point | 1,214–1,247 |
-| Hook symlink setup | 948–1,029 |
-| Known-hosts injection | 1,031–1,057 |
-| Launcher resolution & building | 374–425 |
-| Background Docker stage refresh | 229–318 |
-| Directory-safety check | 320–353 |
-| Volume / env / SSH spec parsers | 355–373 |
-| MCP server config writer | 114–135 |
-
-**Suggested split:**
-
-```
-src/
-  docker/
-    build.ts          # ensureDockerImage, refreshDockerStagesInBackground
-    run.ts            # docker run arg assembly, container execution
-  ssh/
-    agent.ts          # startSshAgent
-    known-hosts.ts    # getFilteredKnownHosts → move from config.ts, setupKnownHosts
-  port-proxy/
-    host.ts           # startHostPortProxies, waitForPort, getDockerBridgeGateway
-    container.ts      # setupHostPortForwarding (the in-container side)
-  launcher.ts         # resolveLauncherDefinition, buildLauncherCommand (already exported)
-  in-docker.ts        # mainInDocker + setupHookSymlinks
-  safety.ts           # isUnsafeDirectory
-  index.ts            # main(), runMain() wiring only
-```
-
-Each new file is cohesive, independently testable, and under ~150 lines.
+Split into `docker/build.ts`, `docker/run.ts`, `ssh/agent.ts`, `ssh/known-hosts.ts`,
+`port-proxy/host.ts`, `port-proxy/container.ts`, `launcher.ts`, `in-docker.ts`, `safety.ts`.
 
 ---
 
@@ -67,19 +26,11 @@ Updated the README to match.
 
 ---
 
-## 4. Replace the Custom Argument Parser in `config-cli.ts`
+## 4. ~~Replace the Custom Argument Parser in `config-cli.ts`~~ ✅ Done
 
-**Impact: medium | Effort: low**
-
-`src/config-cli.ts` ships its own `parseArgs()` loop (~100 lines) that
-hand-rolls `--global`, `--project`, `--group`, `--profile`, `--file`, and
-`--members` detection. Commander is already a declared dependency and is used
-in `index.ts`. Rewriting `configMain` to be a proper Commander sub-command tree
-(or extending the existing `configCommand` in `index.ts`) would:
-
-* remove duplicated flag-parsing logic
-* provide automatic `--help` for each sub-command
-* make it consistent with the rest of the CLI surface
+Commander subcommands in `index.ts` now construct `ParsedArgs` directly and pass
+to `configMain`. The raw-args reconstruction hack is eliminated. `parseArgs` is
+kept as a private helper behind `configMainFromArgv` for internal callers.
 
 ---
 

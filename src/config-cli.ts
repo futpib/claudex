@@ -28,15 +28,15 @@ import {
 import { allConfigKeys } from './hooks/rules/index.js';
 import { collapseHomedir } from './utils.js';
 
-type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'group' | 'ungroup';
+export type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'group' | 'ungroup';
 
-type Scope =
+export type Scope =
 	| { type: 'project'; path: string; fromCwd?: boolean }
 	| { type: 'global' }
 	| { type: 'group'; name: string }
 	| { type: 'profile'; name: string };
 
-type ParsedArgs = {
+export type ParsedArgs = {
 	action: Action;
 	scope: Scope;
 	file?: string;
@@ -1080,9 +1080,11 @@ async function handleUngroup(paths: string[], file: string | undefined): Promise
 	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
-export async function configMain(argv: string[]): Promise<void> {
-	const parsed = parseArgs(argv);
+export async function configMainFromArgv(argv: string[]): Promise<void> {
+	return configMain(parseArgs(argv));
+}
 
+export async function configMain(parsed: ParsedArgs): Promise<void> {
 	// Resolve implicit cwd scope: worktree → parent repo, absolute → tilde
 	if (parsed.scope.type === 'project' && parsed.scope.fromCwd) {
 		const worktreeParent = await getGitWorktreeParentPath(parsed.scope.path);

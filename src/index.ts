@@ -12,7 +12,9 @@ import {
 	resolveHooks, type ClaudexConfig,
 	type LauncherDefinition,
 } from './config.js';
-import { configMain } from './config-cli.js';
+import {
+	configMain, configMainFromArgv, type Scope, type ParsedArgs,
+} from './config-cli.js';
 import { isUnsafeDirectory } from './safety.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, runDockerContainer } from './docker/run.js';
@@ -84,6 +86,44 @@ export async function main() {
 			await runMain(claudeArgs, options);
 		});
 
+	type ScopeOptions = {
+		global?: boolean;
+		project?: string;
+		group?: string;
+		profile?: string;
+		file?: string;
+		members?: boolean;
+	};
+
+	function resolveScope(options: ScopeOptions): Scope {
+		if (options.project) {
+			return { type: 'project', path: options.project };
+		}
+
+		if (options.group) {
+			return { type: 'group', name: options.group };
+		}
+
+		if (options.profile) {
+			return { type: 'profile', name: options.profile };
+		}
+
+		if (options.global) {
+			return { type: 'global' };
+		}
+
+		return { type: 'project', path: process.cwd(), fromCwd: true };
+	}
+
+	async function runConfigAction(parsed: ParsedArgs) {
+		try {
+			await configMain(parsed);
+		} catch (error) {
+			console.error(error instanceof Error ? error.message : String(error));
+			process.exitCode = 1;
+		}
+	}
+
 	const configCommand = program
 		.command('config')
 		.description('Manage claudex configuration')
@@ -97,53 +137,77 @@ export async function main() {
 		.option('--file <path>', 'Write to a specific file in config.json.d')
 		.passThroughOptions();
 
-	const configAction = async (...actionArgs: unknown[]) => {
-		// Commander passes parsed args then options then the Command object.
-		// Reconstruct the raw argv that configMain expects from the Command.
-		const cmd = actionArgs.at(-1) as Command;
-		const rawArgs = cmd.parent!.args;
-		try {
-			await configMain(rawArgs);
-		} catch (error) {
-			console.error(error instanceof Error ? error.message : String(error));
-			process.exitCode = 1;
-		}
-	};
-
 	scopeOptions(configCommand.command('list').description('List merged configuration as JSON'))
 		.option('--members', 'List project paths belonging to the group (requires --group)')
-		.action(configAction);
+		.action(async (options: ScopeOptions) => {
+			await runConfigAction({
+				action: 'list', scope: resolveScope(options), file: options.file, members: options.members,
+			});
+		});
 
 	scopeOptions(configCommand.command('get').description('Get a configuration value').argument('<key>'))
-		.action(configAction);
+		.action(async (key: string, options: ScopeOptions) => {
+			await runConfigAction({
+				action: 'get', scope: resolveScope(options), file: options.file, key,
+			});
+		});
 
 	scopeOptions(configCommand.command('set').description('Set a configuration value').argument('<key>').argument('<value>'))
-		.action(configAction);
+		.action(async (key: string, value: string, options: ScopeOptions) => {
+			await runConfigAction({
+				action: 'set', scope: resolveScope(options), file: options.file, key, value,
+			});
+		});
 
 	scopeOptions(configCommand.command('add').description('Append value(s) to an array field').argument('<key>').argument('<values...>'))
-		.action(configAction);
+		.action(async (key: string, values: string[], options: ScopeOptions) => {
+			await runConfigAction({
+				action: 'add', scope: resolveScope(options), file: options.file, key, extraValues: values,
+			});
+		});
 
 	scopeOptions(configCommand.command('remove').description('Remove a value from an array or record field').argument('<key>').argument('[value]'))
-		.action(configAction);
+		.action(async (key: string, value: string | undefined, options: ScopeOptions) => {
+			await runConfigAction({
+				action: 'remove', scope: resolveScope(options), file: options.file, key, value,
+			});
+		});
 
 	scopeOptions(configCommand.command('unset').description('Remove a key or a specific value from an array').argument('<key>').argument('[value]'))
-		.action(configAction);
+		.action(async (key: string, value: string | undefined, options: ScopeOptions) => {
+			await runConfigAction({
+				action: 'unset', scope: resolveScope(options), file: options.file, key, value,
+			});
+		});
 
 	configCommand.command('keys').description('List available configuration keys and their types')
-		.action(configAction);
+		.action(async () => {
+			await runConfigAction({ action: 'keys', scope: { type: 'global' } });
+		});
 
 	configCommand.command('group').description('Assign projects to a group')
 		.argument('<name>', 'Group name')
 		.argument('<paths...>', 'Project paths to assign')
 		.option('--file <path>', 'Write to a specific file in config.json.d')
 		.passThroughOptions()
-		.action(configAction);
+		.action(async (name: string, paths: string[], options: { file?: string }) => {
+			await runConfigAction({
+				action: 'group', scope: { type: 'global' }, file: options.file, key: name, extraValues: paths,
+			});
+		});
 
 	configCommand.command('ungroup').description('Remove group assignment from projects')
 		.argument('<paths...>', 'Project paths to ungroup')
 		.option('--file <path>', 'Write to a specific file in config.json.d')
 		.passThroughOptions()
-		.action(configAction);
+		.action(async (paths: string[], options: { file?: string }) => {
+			await runConfigAction({
+				action: 'ungroup',
+				scope: { type: 'project', path: process.cwd(), fromCwd: true },
+				file: options.file,
+				extraValues: paths,
+			});
+		});
 
 	program
 		.command('install')
@@ -225,7 +289,7 @@ async function runInstall(packages: string[], options: { save: boolean; containe
 	// Persist to config unless --no-save
 	if (options.save) {
 		try {
-			await configMain([ 'add', '--project', cwd, 'packages', ...packages ]);
+			await configMainFromArgv([ 'add', '--project', cwd, 'packages', ...packages ]);
 			console.error(`Saved packages to project config: ${packages.join(' ')}`);
 		} catch (error) {
 			console.error('Warning: failed to save packages to config:', error instanceof Error ? error.message : String(error));
