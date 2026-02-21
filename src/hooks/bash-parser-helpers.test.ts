@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, hasYarnCwdFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -197,6 +197,24 @@ test('hasCargoManifestPathFlag - does not trigger on regular cargo commands', as
 	t.false(await hasCargoManifestPathFlag('cargo build'));
 	t.false(await hasCargoManifestPathFlag('cargo test'));
 	t.false(await hasCargoManifestPathFlag('cargo run'));
+});
+
+test('hasYarnCwdFlag - detects yarn --cwd', async t => {
+	t.true(await hasYarnCwdFlag('yarn --cwd /some/path install'));
+});
+
+test('hasYarnCwdFlag - detects yarn --cwd=<path>', async t => {
+	t.true(await hasYarnCwdFlag('yarn --cwd=/some/path install'));
+});
+
+test('hasYarnCwdFlag - does not detect --cwd in strings', async t => {
+	t.false(await hasYarnCwdFlag('echo "yarn --cwd /path"'));
+});
+
+test('hasYarnCwdFlag - does not trigger on regular yarn commands', async t => {
+	t.false(await hasYarnCwdFlag('yarn install'));
+	t.false(await hasYarnCwdFlag('yarn build'));
+	t.false(await hasYarnCwdFlag('yarn test'));
 });
 
 test('getPipedFilterCommand - detects pipe to grep', async t => {

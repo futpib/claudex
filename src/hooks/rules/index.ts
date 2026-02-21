@@ -2,6 +2,7 @@ import type { KnownToolInput, PreToolUseHookInput } from '../schemas.js';
 import type * as bashParserHelpers from '../bash-parser-helpers.js';
 import { banGitC } from './ban-git-c.js';
 import { banCargoManifestPath } from './ban-cargo-manifest-path.js';
+import { banYarnCwd } from './ban-yarn-cwd.js';
 import { banGitAddAll } from './ban-git-add-all.js';
 import { banGitCommitAmend } from './ban-git-commit-amend.js';
 import { banGitCommitNoVerify } from './ban-git-commit-no-verify.js';
@@ -54,6 +55,7 @@ export type Rule = {
 export const allRules: Rule[] = [
 	banGitC,
 	banCargoManifestPath,
+	banYarnCwd,
 	banGitAddAll,
 	banGitCommitAmend,
 	banGitCommitNoVerify,

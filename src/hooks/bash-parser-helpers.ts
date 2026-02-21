@@ -594,3 +594,37 @@ export async function hasCargoManifestPathFlag(command: string): Promise<boolean
 		return false;
 	});
 }
+
+export async function hasYarnCwdFlag(command: string): Promise<boolean> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return false;
+	}
+
+	return someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (name !== 'yarn') {
+			return false;
+		}
+
+		// Check args for --cwd flag
+		for (const arg of cmd.args) {
+			const value = getWordLiteralValue(arg);
+			if (value === undefined) {
+				continue;
+			}
+
+			// Check for standalone --cwd flag
+			if (value === '--cwd') {
+				return true;
+			}
+
+			// Check for --cwd=<path> format
+			if (value.startsWith('--cwd=')) {
+				return true;
+			}
+		}
+
+		return false;
+	});
+}
