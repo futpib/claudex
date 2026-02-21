@@ -6,35 +6,18 @@ import fs from 'node:fs/promises';
 import { execa } from 'execa';
 import { z } from 'zod';
 import { type LauncherDefinition } from './config/index.js';
+import { hookGroupSchema } from './hooks.js';
 import { buildLauncherCommand } from './launcher.js';
 import { setupKnownHosts } from './ssh/known-hosts.js';
 import { setupHostPortForwarding } from './port-proxy/container.js';
 import { parseJsonWithSchema } from './hooks/shared.js';
 import { isErrnoException } from './utils.js';
 
-type HookConfig = {
-	type: string;
-	command: string;
-};
-
-type HookMatcher = {
-	matcher: string;
-	hooks: HookConfig[];
-};
-
-type Settings = {
-	hooks?: Record<string, HookMatcher[]>;
-};
-
 const settingsSchema = z.object({
-	hooks: z.record(z.string(), z.array(z.object({
-		matcher: z.string(),
-		hooks: z.array(z.object({
-			type: z.string(),
-			command: z.string(),
-		})),
-	}))).optional(),
+	hooks: z.record(z.string(), z.array(hookGroupSchema)).optional(),
 });
+
+type Settings = z.infer<typeof settingsSchema>;
 
 async function setupHookSymlinks() {
 	const homeDir = os.homedir();

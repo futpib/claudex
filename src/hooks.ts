@@ -7,17 +7,17 @@ import { execa } from 'execa';
 import invariant from 'invariant';
 import { isErrnoException, parseJson } from './utils.js';
 
-const hookEntrySchema = z.object({
+export const hookEntrySchema = z.object({
 	type: z.string(),
 	command: z.string(),
 });
 
-const hookGroupSchema = z.object({
+export const hookGroupSchema = z.object({
 	matcher: z.string(),
 	hooks: z.array(hookEntrySchema),
 });
 
-const claudeSettingsSchema = z.object({
+export const claudeSettingsSchema = z.object({
 	includeCoAuthoredBy: z.boolean().optional(),
 	hooks: z.object({
 		PreToolUse: z.array(hookGroupSchema).optional(),
