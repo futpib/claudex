@@ -2,6 +2,63 @@ import process from 'node:process';
 import path from 'node:path';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import { expandTilde } from '../utils.js';
+import type { ClaudexConfig } from '../config/schema.js';
+
+export function getSshKeys(config: ClaudexConfig): string[] {
+	if (!config.ssh?.keys) {
+		return [];
+	}
+
+	return config.ssh.keys.map(key => expandTilde(key));
+}
+
+export function getSshHosts(config: ClaudexConfig): string[] {
+	return config.ssh?.hosts ?? [];
+}
+
+export async function getFilteredKnownHosts(hosts: string[]): Promise<string> {
+	if (hosts.length === 0) {
+		return '';
+	}
+
+	const knownHostsPath = path.join(os.homedir(), '.ssh', 'known_hosts');
+
+	try {
+		const content = await fs.readFile(knownHostsPath, 'utf8');
+		const lines = content.split('\n');
+		const filtered: string[] = [];
+
+		for (const line of lines) {
+			const trimmed = line.trim();
+			if (!trimmed || trimmed.startsWith('#')) {
+				continue;
+			}
+
+			// Known_hosts format: hostname[,hostname...] keytype key [comment]
+			const firstSpace = trimmed.indexOf(' ');
+			if (firstSpace === -1) {
+				continue;
+			}
+
+			const hostPart = trimmed.slice(0, Math.max(0, firstSpace));
+			const hostnames = hostPart.split(',');
+
+			// Check if any of the hostnames match our configured hosts
+			for (const hostname of hostnames) {
+				if (hosts.includes(hostname)) {
+					filtered.push(line);
+					break;
+				}
+			}
+		}
+
+		return filtered.join('\n') + (filtered.length > 0 ? '\n' : '');
+	} catch {
+		// Known_hosts doesn't exist or can't be read
+		return '';
+	}
+}
 
 export async function setupKnownHosts(): Promise<void> {
 	const knownHostsContent = process.env.CLAUDEX_KNOWN_HOSTS_CONTENT;

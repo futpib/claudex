@@ -1,253 +1,15 @@
-import fs from 'node:fs/promises';
-import path from 'node:path';
-import os from 'node:os';
 import process from 'node:process';
-import { z } from 'zod';
-import { execa } from 'execa';
-import { paths } from './paths.js';
-import { allRules, allConfigKeys, extraConfigEntries } from './hooks/rules/index.js';
-import { expandTilde } from './utils.js';
-
-// Volume can be a simple string (same path for host and container)
-// or an object with different paths
-const volumeMountSchema = z.object({
-	host: z.string(),
-	container: z.string(),
-});
-
-const volumeSchema = z.union([ z.string(), volumeMountSchema ]);
-
-const sshConfigSchema = z.object({
-	keys: z.array(z.string()).optional(),
-	hosts: z.array(z.string()).optional(),
-});
-
-const hooksDetailConfigSchema = z.object(Object.fromEntries(allConfigKeys.map(key => [ key, z.boolean().optional() ]))) as z.ZodObject<Record<string, z.ZodOptional<z.ZodBoolean>>>;
-
-const hooksConfigSchema = z.union([ z.literal(true), hooksDetailConfigSchema ]);
-
-const mcpServersDetailConfigSchema = z.object({
-	claudex: z.boolean().optional(),
-});
-
-const mcpServersConfigSchema = z.union([ z.literal(true), mcpServersDetailConfigSchema ]);
-
-// Base config schema - can appear at both root and project level
-const baseConfigSchema = z.object({
-	packages: z.array(z.string()).optional(),
-	volumes: z.array(volumeSchema).optional(),
-	env: z.record(z.string(), z.string()).optional(),
-	ssh: sshConfigSchema.optional(),
-	hostPorts: z.array(z.number().int().positive()).optional(),
-	extraHosts: z.record(z.string(), z.string()).optional(),
-	shareVolumes: z.boolean().optional(), // Default true - auto-share volumes between group members
-	shareAdditionalDirectories: z.boolean().optional(), // Default true - auto-pass --add-dir for configured volumes
-	settingSources: z.string().optional(), // Default "user,local" - controls --setting-sources flag for Claude Code
-	hooks: hooksConfigSchema.optional(),
-	mcpServers: mcpServersConfigSchema.optional(),
-	notifications: z.boolean().optional(),
-	hooksDescriptions: z.boolean().optional(), // Default true - inject active hook rule descriptions into CLAUDE.md
-	profiles: z.array(z.string()).optional(), // References to named profiles defined at root level
-	launcher: z.string().optional(), // Name of launcher to use (e.g. "ollama")
-});
-
-// Launcher definition schema - extends base config with launcher-specific fields
-const launcherDefinitionSchema = baseConfigSchema.extend({
-	command: z.array(z.string()),
-	model: z.string().optional(),
-});
-
-// Project config can reference a group
-const projectConfigSchema = baseConfigSchema.extend({
-	group: z.string().optional(),
-});
-
-// Root config adds projects mapping, group definitions, profile definitions, and launcher definitions
-const rootConfigSchema = baseConfigSchema.extend({
-	groupDefinitions: z.record(z.string(), baseConfigSchema).optional(),
-	projects: z.record(z.string(), projectConfigSchema).optional(),
-	profileDefinitions: z.record(z.string(), baseConfigSchema).optional(),
-	launcherDefinitions: z.record(z.string(), launcherDefinitionSchema).optional(),
-});
-
-export { baseConfigSchema, rootConfigSchema };
-
-export type VolumeMount = z.infer<typeof volumeMountSchema>;
-export type Volume = z.infer<typeof volumeSchema>;
-export type SshConfig = z.infer<typeof sshConfigSchema>;
-export type HooksDetail = z.infer<typeof hooksDetailConfigSchema>;
-export type HooksConfig = z.infer<typeof hooksConfigSchema>;
-export type McpServersDetail = z.infer<typeof mcpServersDetailConfigSchema>;
-export type McpServersConfig = z.infer<typeof mcpServersConfigSchema>;
-export type BaseConfig = z.infer<typeof baseConfigSchema>;
-export type ProjectConfig = z.infer<typeof projectConfigSchema>;
-export type RootConfig = z.infer<typeof rootConfigSchema>;
-export type LauncherDefinition = z.infer<typeof launcherDefinitionSchema>;
-
-export const builtinLauncherDefinitions: Record<string, LauncherDefinition> = {
-	claude: {
-		command: [ 'claude' ],
-	},
-	ollama: {
-		command: [ 'ollama', 'launch', 'claude' ],
-		packages: [ 'ollama' ],
-		hostPorts: [ 11_434 ],
-	},
-};
-
-// Merged config is the same as base config (after merging root + project)
-export type ClaudexConfig = BaseConfig;
-
-export const allMcpServerFlags: Array<keyof McpServersDetail> = [
-	'claudex',
-];
-
-export const validTopLevelKeys = new Set(Object.keys(baseConfigSchema.shape));
-
-export const fixedSubKeyFields: Record<string, Set<string>> = {
-	hooks: new Set(allConfigKeys),
-	mcpServers: new Set(allMcpServerFlags),
-	ssh: new Set([ 'keys', 'hosts' ]),
-};
-
-export const recordFields = new Set([ 'env', 'extraHosts' ]);
-
-export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
-	if (hooks === true) {
-		return Object.fromEntries([
-			...allRules.map(r => [ r.meta.configKey, r.meta.recommended ]),
-			...extraConfigEntries.map(entry => [ entry.configKey, entry.recommended ]),
-		]) as Required<HooksDetail>;
-	}
-
-	if (!hooks) {
-		return Object.fromEntries([
-			...allRules.map(r => [ r.meta.configKey, r.meta.recommended ]),
-			...extraConfigEntries.map(entry => [ entry.configKey, entry.recommended ]),
-		]) as Required<HooksDetail>;
-	}
-
-	return Object.fromEntries(allConfigKeys.map(k => [ k, hooks[k] ?? false ])) as Required<HooksDetail>;
-}
-
-export function resolveMcpServers(mcpServers: McpServersConfig | undefined): Required<McpServersDetail> {
-	if (mcpServers === true) {
-		return Object.fromEntries(allMcpServerFlags.map(k => [ k, true ])) as Required<McpServersDetail>;
-	}
-
-	if (!mcpServers) {
-		return Object.fromEntries(allMcpServerFlags.map(k => [ k, false ])) as Required<McpServersDetail>;
-	}
-
-	return Object.fromEntries(allMcpServerFlags.map(k => [ k, mcpServers[k] ?? false ])) as Required<McpServersDetail>;
-}
-
-// These match bash builtin variable names ($UID, $EUID)
-const builtinVars: Record<string, () => string> = {
-	UID: () => String(process.getuid?.() ?? ''), // eslint-disable-line @typescript-eslint/naming-convention
-	EUID: () => String(process.geteuid?.() ?? ''), // eslint-disable-line @typescript-eslint/naming-convention
-};
-
-export function expandEnvVars(value: string): string {
-	return value.replaceAll(/\$(\w+)|\${(\w+)}/g, (_match, name1: string | undefined, name2: string | undefined) => {
-		const name = name1 ?? name2;
-		if (!name) {
-			return _match;
-		}
-
-		return process.env[name] ?? builtinVars[name]?.() ?? _match;
-	});
-}
-
-export function expandPathEnv(value: string): string {
-	return value
-		.split(':')
-		.map(p => expandTilde(p))
-		.join(':');
-}
-
-export function expandEnvValues(env: Record<string, string>): Record<string, string> {
-	const result: Record<string, string> = {};
-	for (const [ key, value ] of Object.entries(env)) {
-		result[key] = key === 'PATH' ? expandPathEnv(value) : value;
-	}
-
-	return result;
-}
-
-export function getSshKeys(config: ClaudexConfig): string[] {
-	if (!config.ssh?.keys) {
-		return [];
-	}
-
-	return config.ssh.keys.map(key => expandTilde(key));
-}
-
-export function getSshHosts(config: ClaudexConfig): string[] {
-	return config.ssh?.hosts ?? [];
-}
-
-export async function getFilteredKnownHosts(hosts: string[]): Promise<string> {
-	if (hosts.length === 0) {
-		return '';
-	}
-
-	const knownHostsPath = path.join(os.homedir(), '.ssh', 'known_hosts');
-
-	try {
-		const content = await fs.readFile(knownHostsPath, 'utf8');
-		const lines = content.split('\n');
-		const filtered: string[] = [];
-
-		for (const line of lines) {
-			const trimmed = line.trim();
-			if (!trimmed || trimmed.startsWith('#')) {
-				continue;
-			}
-
-			// Known_hosts format: hostname[,hostname...] keytype key [comment]
-			const firstSpace = trimmed.indexOf(' ');
-			if (firstSpace === -1) {
-				continue;
-			}
-
-			const hostPart = trimmed.slice(0, Math.max(0, firstSpace));
-			const hostnames = hostPart.split(',');
-
-			// Check if any of the hostnames match our configured hosts
-			for (const hostname of hostnames) {
-				if (hosts.includes(hostname)) {
-					filtered.push(line);
-					break;
-				}
-			}
-		}
-
-		return filtered.join('\n') + (filtered.length > 0 ? '\n' : '');
-	} catch {
-		// Known_hosts doesn't exist or can't be read
-		return '';
-	}
-}
-
-function expandPath(value: string): string {
-	return expandTilde(expandEnvVars(value));
-}
-
-export function expandVolumePaths(volume: Volume): VolumeMount {
-	if (typeof volume === 'string') {
-		const expandedPath = expandPath(volume);
-		return {
-			host: expandedPath,
-			container: expandedPath,
-		};
-	}
-
-	return {
-		host: expandPath(volume.host),
-		container: expandPath(volume.container),
-	};
-}
+import { expandTilde } from '../utils.js';
+import { getGitRoot, getGitWorktreeParentPath } from '../git.js';
+import { allConfigKeys } from '../hooks/rules/index.js';
+import { expandVolumePaths } from './expand.js';
+import { readRootConfig } from './io.js';
+import {
+	resolveHooks, resolveMcpServers, allMcpServerFlags,
+	type BaseConfig, type ClaudexConfig, type HooksConfig, type HooksDetail,
+	type LauncherDefinition, type McpServersConfig, type McpServersDetail,
+	type ProjectConfig, type RootConfig, type Volume,
+} from './schema.js';
 
 function sortVolumes(volumes: Volume[]): Volume[] {
 	return [ ...volumes ].sort((a, b) => {
@@ -333,7 +95,7 @@ function mergeMcpServersConfigs(base: McpServersConfig | undefined, overlay: Mcp
 	return merged as McpServersDetail;
 }
 
-function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
+export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseConfig {
 	const profiles = dedupeStrings([
 		...(base.profiles ?? []),
 		...(overlay.profiles ?? []),
@@ -444,7 +206,7 @@ function extractBaseConfig(root: RootConfig): BaseConfig {
 	return base;
 }
 
-function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
+export function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootConfig {
 	const merged = mergeBaseConfigs(extractBaseConfig(base), extractBaseConfig(overlay));
 
 	// Merge profile definitions: combine keys, merge configs for same profile name
@@ -579,84 +341,6 @@ function getGroupSiblingPaths(
 	return siblings;
 }
 
-type ReadRootConfigResult = {
-	config: RootConfig;
-	configFiles: string[];
-};
-
-async function readRootConfig(): Promise<ReadRootConfigResult> {
-	const configDir = paths.config;
-	const configPath = path.join(configDir, 'config.json');
-	const configJsonDirectoryPath = path.join(configDir, 'config.json.d');
-
-	let merged: RootConfig = {};
-	const configFiles: string[] = [];
-
-	// Read main config.json
-	try {
-		const content = await fs.readFile(configPath, 'utf8');
-		merged = rootConfigSchema.parse(JSON.parse(content));
-		configFiles.push(configPath);
-	} catch {
-		// Doesn't exist or invalid
-	}
-
-	// Read all .json files from config.json.d/
-	try {
-		const files = await fs.readdir(configJsonDirectoryPath);
-		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
-
-		for (const file of jsonFiles) {
-			const filePath = path.join(configJsonDirectoryPath, file);
-			try {
-				// eslint-disable-next-line no-await-in-loop
-				const content = await fs.readFile(filePath, 'utf8');
-				const parsed = rootConfigSchema.parse(JSON.parse(content));
-				merged = mergeRootConfigs(merged, parsed);
-				configFiles.push(filePath);
-			} catch {
-				// Skip invalid files
-			}
-		}
-	} catch {
-		// Directory doesn't exist
-	}
-
-	return { config: merged, configFiles };
-}
-
-async function getGitRoot(cwd: string): Promise<string | undefined> {
-	try {
-		const { stdout } = await execa('git', [ 'rev-parse', '--show-toplevel' ], { cwd });
-		return stdout.trim();
-	} catch {
-		// Not a git repo
-		return undefined;
-	}
-}
-
-export async function getGitWorktreeParentPath(cwd: string): Promise<string | undefined> {
-	try {
-		const { stdout: gitCommonDir } = await execa('git', [ 'rev-parse', '--git-common-dir' ], { cwd });
-		const { stdout: gitDir } = await execa('git', [ 'rev-parse', '--git-dir' ], { cwd });
-
-		// Resolve to absolute paths before comparing, since git may return
-		// different relative paths for each (e.g., "../.git" vs ".git")
-		const absoluteCommonDir = path.resolve(cwd, gitCommonDir);
-		const absoluteGitDir = path.resolve(cwd, gitDir);
-
-		// If they differ, we're in a worktree
-		if (absoluteCommonDir !== absoluteGitDir) {
-			// GitCommonDir is like /path/to/main/.git, we need /path/to/main
-			return path.dirname(absoluteCommonDir);
-		}
-	} catch {
-		// Not a git repo
-	}
-
-	return undefined;
-}
-
 function sortConfig(config: ClaudexConfig): ClaudexConfig {
 	// Note: shareVolumes is excluded from final output (only used during resolution)
 	return {
@@ -693,13 +377,6 @@ function mergeProjectConfig(
 	const { group: _, ...projectBaseConfig } = projectConfig;
 	return mergeConfigs(merged, projectBaseConfig);
 }
-
-export type MergedConfigResult = {
-	config: ClaudexConfig;
-	configFiles: string[];
-	profileVolumes: string[];
-	launcherDefinitions: Record<string, LauncherDefinition> | undefined;
-};
 
 function resolveProfiles(
 	rootConfig: RootConfig,
@@ -739,6 +416,18 @@ function resolveProfiles(
 	const result = mergeBaseConfigs(profilesMerged, mergedWithoutProfiles);
 
 	return { config: result, profileVolumes };
+}
+
+export type MergedConfigResult = {
+	config: ClaudexConfig;
+	configFiles: string[];
+	profileVolumes: string[];
+	launcherDefinitions: Record<string, LauncherDefinition> | undefined;
+};
+
+// Legacy function for backward compatibility - deprecated
+export async function readConfig(): Promise<MergedConfigResult> {
+	return getMergedConfig(process.cwd());
 }
 
 export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> {
@@ -796,116 +485,4 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 		profileVolumes,
 		launcherDefinitions: rootConfig.launcherDefinitions,
 	};
-}
-
-// Legacy function for backward compatibility - deprecated
-export async function readConfig(): Promise<MergedConfigResult> {
-	return getMergedConfig(process.cwd());
-}
-
-export function getConfigDir(): string {
-	return paths.config;
-}
-
-export async function readSingleConfigFile(filePath: string): Promise<RootConfig> {
-	const content = await fs.readFile(filePath, 'utf8');
-	return rootConfigSchema.parse(JSON.parse(content));
-}
-
-export async function writeSingleConfigFile(filePath: string, config: RootConfig): Promise<void> {
-	await fs.mkdir(path.dirname(filePath), { recursive: true });
-	await fs.writeFile(filePath, JSON.stringify(config, null, 2) + '\n');
-}
-
-export type ConfigFileEntry = {
-	path: string;
-	config: RootConfig;
-};
-
-export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
-	const configDir = paths.config;
-	const configPath = path.join(configDir, 'config.json');
-	const configJsonDirectoryPath = path.join(configDir, 'config.json.d');
-	const entries: ConfigFileEntry[] = [];
-
-	try {
-		const content = await fs.readFile(configPath, 'utf8');
-		entries.push({ path: configPath, config: rootConfigSchema.parse(JSON.parse(content)) });
-	} catch {
-		// Doesn't exist or invalid
-	}
-
-	try {
-		const files = await fs.readdir(configJsonDirectoryPath);
-		const jsonFiles = files.filter(f => f.endsWith('.json')).sort();
-
-		for (const file of jsonFiles) {
-			const filePath = path.join(configJsonDirectoryPath, file);
-			try {
-				// eslint-disable-next-line no-await-in-loop
-				const content = await fs.readFile(filePath, 'utf8');
-				entries.push({ path: filePath, config: rootConfigSchema.parse(JSON.parse(content)) });
-			} catch {
-				// Skip invalid files
-			}
-		}
-	} catch {
-		// Directory doesn't exist
-	}
-
-	return entries;
-}
-
-export type FindConfigFileResult = ConfigFileEntry | 'ambiguous' | 'none';
-
-export async function findConfigFileForProject(projectPath: string): Promise<FindConfigFileResult> {
-	const entries = await readAllConfigFiles();
-	const expandedProjectPath = expandTilde(projectPath);
-	const matches = entries.filter(entry => {
-		if (!entry.config.projects) {
-			return false;
-		}
-
-		return Object.keys(entry.config.projects).some(key => expandTilde(key) === expandedProjectPath);
-	});
-
-	if (matches.length === 1) {
-		return matches[0];
-	}
-
-	if (matches.length > 1) {
-		return 'ambiguous';
-	}
-
-	return 'none';
-}
-
-export async function findConfigFileForGroup(groupName: string): Promise<FindConfigFileResult> {
-	const entries = await readAllConfigFiles();
-	const matches = entries.filter(entry => entry.config.groupDefinitions?.[groupName] !== undefined);
-
-	if (matches.length === 1) {
-		return matches[0];
-	}
-
-	if (matches.length > 1) {
-		return 'ambiguous';
-	}
-
-	return 'none';
-}
-
-export async function findConfigFileForProfile(profileName: string): Promise<FindConfigFileResult> {
-	const entries = await readAllConfigFiles();
-	const matches = entries.filter(entry => entry.config.profileDefinitions?.[profileName] !== undefined);
-
-	if (matches.length === 1) {
-		return matches[0];
-	}
-
-	if (matches.length > 1) {
-		return 'ambiguous';
-	}
-
-	return 'none';
 }

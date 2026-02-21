@@ -4,10 +4,11 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa, type ResultPromise } from 'execa';
 import {
-	expandVolumePaths, expandPathEnv, getSshKeys, getSshHosts, getFilteredKnownHosts,
-	getGitWorktreeParentPath,
+	expandVolumePaths, expandPathEnv,
 	type Volume, type ClaudexConfig, type LauncherDefinition,
-} from '../config.js';
+} from '../config/index.js';
+import { getGitWorktreeParentPath } from '../git.js';
+import { getSshKeys, getSshHosts, getFilteredKnownHosts } from '../ssh/known-hosts.js';
 import { shieldEnvVars } from '../secrets.js';
 import { paths } from '../paths.js';
 import { startHostSocketServer } from '../host-socket/server.js';

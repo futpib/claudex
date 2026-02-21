@@ -5,7 +5,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa } from 'execa';
 import { paths } from '../paths.js';
-import type { ClaudexConfig } from '../config.js';
+import type { ClaudexConfig } from '../config/index.js';
 
 async function fetchLatestVersion(url: string): Promise<string | undefined> {
 	try {

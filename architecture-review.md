@@ -34,23 +34,11 @@ kept as a private helper behind `configMainFromArgv` for internal callers.
 
 ---
 
-## 5. Split `src/config.ts` by Concern (~920 lines)
+## 5. ~~Split `src/config.ts` by Concern~~ ✅ Done
 
-**Impact: medium | Effort: low-medium**
-
-`config.ts` mixes four distinct concerns:
-
-| Concern | Suggested file |
-|---|---|
-| Zod schemas + TypeScript types | `src/config/schema.ts` |
-| Config merge helpers | `src/config/merge.ts` |
-| Config file I/O (read, write, find) | `src/config/io.ts` |
-| Path / env expansion utilities | `src/config/expand.ts` |
-| SSH utilities (getSshKeys, getSshHosts, getFilteredKnownHosts) | `src/ssh/known-hosts.ts` |
-| Git utilities (getGitRoot, getGitWorktreeParentPath) | `src/git.ts` |
-
-A re-export barrel `src/config/index.ts` keeps all existing import paths
-working while the internals become navigable.
+Split into `config/schema.ts`, `config/merge.ts`, `config/io.ts`, `config/expand.ts`,
+`ssh/known-hosts.ts` (SSH helpers), `git.ts` (git utilities).
+Barrel re-export at `config/index.ts`.
 
 ---
 

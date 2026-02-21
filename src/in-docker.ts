@@ -5,7 +5,7 @@ import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa } from 'execa';
 import { z } from 'zod';
-import { type LauncherDefinition } from './config.js';
+import { type LauncherDefinition } from './config/index.js';
 import { buildLauncherCommand } from './launcher.js';
 import { setupKnownHosts } from './ssh/known-hosts.js';
 import { setupHostPortForwarding } from './port-proxy/container.js';

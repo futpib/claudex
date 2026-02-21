@@ -11,7 +11,6 @@ import {
 	findConfigFileForGroup,
 	findConfigFileForProfile,
 	readAllConfigFiles,
-	getGitWorktreeParentPath,
 	resolveHooks,
 	resolveMcpServers,
 	baseConfigSchema,
@@ -22,7 +21,8 @@ import {
 	type RootConfig,
 	type BaseConfig,
 	type ProjectConfig,
-} from './config.js';
+} from './config/index.js';
+import { getGitWorktreeParentPath } from './git.js';
 import { allConfigKeys } from './hooks/rules/index.js';
 import { collapseHomedir, expandTilde } from './utils.js';
 
@@ -495,7 +495,7 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 		section = config;
 	} else if (scope.type === 'profile') {
 		// For profile, read root and get profile section
-		const configModule = await import('./config.js');
+		const configModule = await import('./config/index.js');
 		const allFiles = await configModule.readAllConfigFiles();
 		let merged: RootConfig = {};
 		for (const entry of allFiles) {
@@ -505,7 +505,7 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 		section = merged.profileDefinitions?.[scope.name];
 	} else {
 		// For group, read root and get group section
-		const configModule = await import('./config.js');
+		const configModule = await import('./config/index.js');
 		const allFiles = await configModule.readAllConfigFiles();
 		let merged: RootConfig = {};
 		for (const entry of allFiles) {

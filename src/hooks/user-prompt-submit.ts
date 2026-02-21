@@ -3,7 +3,7 @@
 
 import process from 'node:process';
 import { z } from 'zod';
-import { getMergedConfig, resolveHooks } from '../config.js';
+import { getMergedConfig, resolveHooks } from '../config/index.js';
 import {
 	readStdin, formatTranscriptInfo, logMessage, parseJsonWithSchema,
 } from './shared.js';

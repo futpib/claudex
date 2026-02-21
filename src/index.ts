@@ -11,7 +11,7 @@ import {
 	getMergedConfig, resolveMcpServers,
 	resolveHooks, type ClaudexConfig,
 	type LauncherDefinition,
-} from './config.js';
+} from './config/index.js';
 import {
 	configMain, configMainFromArgv, type Scope, type ParsedArgs,
 } from './config-cli.js';

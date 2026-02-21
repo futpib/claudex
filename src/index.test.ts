@@ -2,7 +2,7 @@ import path from 'node:path';
 import process from 'node:process';
 import test from 'ava';
 import { execa } from 'execa';
-import { builtinLauncherDefinitions, type LauncherDefinition } from './config.js';
+import { builtinLauncherDefinitions, type LauncherDefinition } from './config/index.js';
 import { buildLauncherCommand, resolveLauncherDefinition } from './launcher.js';
 import { findRunningContainer } from './index.js';
 

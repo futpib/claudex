@@ -1,4 +1,4 @@
-import { builtinLauncherDefinitions, type LauncherDefinition } from './config.js';
+import { builtinLauncherDefinitions, type LauncherDefinition } from './config/index.js';
 
 export function resolveLauncherDefinition(
 	launcherName: string,

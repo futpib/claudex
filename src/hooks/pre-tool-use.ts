@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 
 import process from 'node:process';
-import { getMergedConfig, resolveHooks } from '../config.js';
+import { getMergedConfig, resolveHooks } from '../config/index.js';
 import {
 	readStdin, parseJsonWithSchema,
 } from './shared.js';
