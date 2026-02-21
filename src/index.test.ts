@@ -3,7 +3,7 @@ import process from 'node:process';
 import test from 'ava';
 import { execa } from 'execa';
 import { builtinLauncherDefinitions, type LauncherDefinition } from './config.js';
-import { buildLauncherCommand, resolveLauncherDefinition } from './index.js';
+import { buildLauncherCommand, resolveLauncherDefinition } from './launcher.js';
 
 const cliPath = path.join(import.meta.dirname, '../build/cli.js');
 
