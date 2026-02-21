@@ -10,6 +10,7 @@ import { buildLauncherCommand } from './launcher.js';
 import { setupKnownHosts } from './ssh/known-hosts.js';
 import { setupHostPortForwarding } from './port-proxy/container.js';
 import { parseJsonWithSchema } from './hooks/shared.js';
+import { isErrnoException } from './utils.js';
 
 type HookConfig = {
 	type: string;
@@ -111,10 +112,13 @@ async function setupHookSymlinks() {
 			}
 		}
 	} catch (error) {
-		// If we can't set up hooks, continue anyway
-		if (error instanceof Error) {
-			console.warn(`Warning: Could not set up hook symlinks: ${error.message}`);
+		if (isErrnoException(error) && error.code === 'ENOENT') {
+			// Settings file doesn't exist yet — nothing to set up
+			return;
 		}
+
+		// Unexpected error — warn but continue
+		console.warn(`Warning: Could not set up hook symlinks: ${error instanceof Error ? error.message : String(error)}`);
 	}
 }
 
