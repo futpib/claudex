@@ -19,6 +19,7 @@ import {
 import { shieldEnvVars } from './secrets.js';
 import { configMain } from './config-cli.js';
 import { startHostSocketServer } from './host-socket/server.js';
+import { parseJsonWithSchema } from './hooks/shared.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
@@ -1000,11 +1001,6 @@ const settingsSchema = z.object({
 		})),
 	}))).optional(),
 });
-
-function parseJsonWithSchema<T>(content: string, schema: z.ZodType<T>): T {
-	const parsed: unknown = JSON.parse(content);
-	return schema.parse(parsed);
-}
 
 async function setupHookSymlinks() {
 	const homeDir = os.homedir();
