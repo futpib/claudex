@@ -231,6 +231,25 @@ test('rejects cargo --manifest-path flag', async t => {
 	}
 });
 
+test('rejects yarn --cwd flag', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banYarnCwd: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('yarn --cwd /some/path install'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('yarn --cwd is not allowed'));
+	} finally {
+		await cleanup();
+	}
+});
+
 test('rejects git add -A', async t => {
 	const { configDir, cleanup } = await createHooksConfig({ banGitAddAll: true });
 	try {

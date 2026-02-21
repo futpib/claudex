@@ -145,7 +145,92 @@ export async function main() {
 		.passThroughOptions()
 		.action(configAction);
 
+	program
+		.command('install')
+		.description('Install packages into a running claudex container')
+		.argument('<packages...>', 'Package names to install')
+		.option('--no-save', 'Skip persisting packages to config')
+		.option('--container <name>', 'Target a specific container')
+		.action(async (packages: string[], options: { save: boolean; container?: string }) => {
+			await runInstall(packages, options);
+		});
+
 	await program.parseAsync(process.argv);
+}
+
+export async function findRunningContainer(cwd: string, specificName?: string): Promise<string> {
+	if (specificName) {
+		// Verify the specific container is running
+		const result = await execa('docker', [ 'ps', '--filter', `name=^${specificName}$`, '--format', '{{.Names}}' ]);
+		const containers = result.stdout.split('\n').filter(Boolean);
+		if (containers.length === 0) {
+			throw new Error(`Container '${specificName}' is not running.`);
+		}
+
+		return containers[0];
+	}
+
+	const cwdBasename = path.basename(cwd);
+	const containerPrefix = `claudex-${cwdBasename}-`;
+
+	const result = await execa('docker', [ 'ps', '--filter', `name=${containerPrefix}`, '--format', '{{.Names}}' ]);
+	const containers = result.stdout.split('\n').filter(Boolean);
+
+	if (containers.length === 0) {
+		throw new Error(`No running claudex containers found for ${cwdBasename}. Start one with: claudex`);
+	}
+
+	if (containers.length > 1) {
+		const list = containers.map(c => `  ${c}`).join('\n');
+		throw new Error(`Multiple running claudex containers found for ${cwdBasename}:\n${list}\n\nSpecify one with --container <name>`);
+	}
+
+	return containers[0];
+}
+
+async function runInstall(packages: string[], options: { save: boolean; container?: string }) {
+	const cwd = process.cwd();
+
+	let containerName: string;
+	try {
+		containerName = await findRunningContainer(cwd, options.container);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	// Try pacman first
+	try {
+		await execa('docker', [ 'exec', '--user', 'root', containerName, 'pacman', '-S', '--noconfirm', '--needed', ...packages ], {
+			stdout: process.stdout,
+			stderr: process.stderr,
+		});
+	} catch {
+		// Fallback to yay for AUR packages — yay must run as non-root
+		console.error('pacman failed, trying yay...');
+		const { stdout: username } = await execa('docker', [ 'exec', containerName, 'whoami' ]);
+		try {
+			await execa('docker', [ 'exec', '--user', 'root', containerName, 'su', '-', username.trim(), '-c', `yay -S --noconfirm --needed ${packages.join(' ')}` ], {
+				stdout: process.stdout,
+				stderr: process.stderr,
+			});
+		} catch {
+			console.error('Package installation failed.');
+			// eslint-disable-next-line unicorn/no-process-exit
+			process.exit(1);
+		}
+	}
+
+	// Persist to config unless --no-save
+	if (options.save) {
+		try {
+			await configMain([ 'add', '--project', cwd, 'packages', ...packages ]);
+			console.error(`Saved packages to project config: ${packages.join(' ')}`);
+		} catch (error) {
+			console.error('Warning: failed to save packages to config:', error instanceof Error ? error.message : String(error));
+		}
+	}
 }
 
 async function runMain(claudeArgs: string[], options: MainOptions) {
@@ -196,31 +281,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	// Handle --docker-exec: exec into a running container for current directory
 	if (useDockerExec) {
-		const cwdBasename = path.basename(cwd);
-		const containerPrefix = `claudex-${cwdBasename}-`;
-
-		const result = await execa('docker', [ 'ps', '--filter', `name=${containerPrefix}`, '--format', '{{.Names}}' ]);
-		const containers = result.stdout.split('\n').filter(Boolean);
-
-		if (containers.length === 0) {
-			console.error(`No running claudex containers found for ${cwdBasename}.`);
-			// eslint-disable-next-line unicorn/no-process-exit
-			process.exit(1);
-		}
-
-		if (containers.length > 1) {
-			console.error(`Multiple running claudex containers found for ${cwdBasename}:`);
-			for (const container of containers) {
-				console.error(`  ${container}`);
-			}
-
-			console.error('\nPlease stop all but one container, or exec manually with:');
-			console.error('  docker exec -it <container-name> bash');
-			// eslint-disable-next-line unicorn/no-process-exit
-			process.exit(1);
-		}
-
-		const containerName = containers[0];
+		const containerName = await findRunningContainer(cwd);
 		await execa('docker', [ 'exec', '-it', containerName, 'bash' ], {
 			stdin: process.stdin,
 			stdout: process.stdout,

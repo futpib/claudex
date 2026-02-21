@@ -54,18 +54,9 @@ Each new file is cohesive, independently testable, and under ~150 lines.
 
 ---
 
-## 2. Remove the Duplicate `parseJsonWithSchema`
+## 2. ~~Remove the Duplicate `parseJsonWithSchema`~~ ✅ Done
 
-**Impact: medium | Effort: very low**
-
-An identical helper exists in two places:
-
-* `src/hooks/shared.ts` — wraps errors with `ParseJsonWithSchemaError`
-* `src/index.ts` line 943 — private, plain, no error wrapping
-
-The private copy in `index.ts` is used only by `setupHookSymlinks`.
-Delete it and import from `hooks/shared.ts`, or move the shared version to
-`src/utils.ts` and import from both callers.
+Removed the private copy from `src/index.ts` and imported from `hooks/shared.ts`.
 
 ---
 
