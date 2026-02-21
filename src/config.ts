@@ -6,6 +6,7 @@ import { z } from 'zod';
 import { execa } from 'execa';
 import { paths } from './paths.js';
 import { allRules, allConfigKeys, extraConfigEntries } from './hooks/rules/index.js';
+import { expandTilde } from './utils.js';
 
 // Volume can be a simple string (same path for host and container)
 // or an object with different paths
@@ -139,14 +140,6 @@ export function resolveMcpServers(mcpServers: McpServersConfig | undefined): Req
 	}
 
 	return Object.fromEntries(allMcpServerFlags.map(k => [ k, mcpServers[k] ?? false ])) as Required<McpServersDetail>;
-}
-
-export function expandTilde(filePath: string): string {
-	if (filePath.startsWith('~/')) {
-		return path.join(os.homedir(), filePath.slice(2));
-	}
-
-	return filePath;
 }
 
 // These match bash builtin variable names ($UID, $EUID)
