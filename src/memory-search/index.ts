@@ -25,7 +25,9 @@ export async function main(): Promise<void> {
 		.option('-r, --tool-result', 'Search tool results (non-Bash)')
 		.option('--project <path>', 'Project path', process.cwd())
 		.option('--session <id>', 'Search only a specific session')
-		.option('--context <n>', 'Context lines around matches', '0')
+		.option('-C, --context <n>', 'Context lines around matches')
+		.option('-B, --before-context <n>', 'Context lines before matches')
+		.option('-A, --after-context <n>', 'Context lines after matches')
 		.option('--max-results <n>', 'Max results', '50')
 		.option('--max-line-width <n>', 'Max output line width (0 for unlimited)', '200')
 		.option('--json', 'JSON output')
@@ -75,12 +77,17 @@ export async function main(): Promise<void> {
 				// Pattern is not valid regex — use literal match only
 			}
 
+			const contextSymmetric = options.context ? Number.parseInt(options.context as string, 10) : 0;
+			const contextBefore = options.beforeContext ? Number.parseInt(options.beforeContext as string, 10) : contextSymmetric;
+			const contextAfter = options.afterContext ? Number.parseInt(options.afterContext as string, 10) : contextSymmetric;
+
 			const searchOptions: SearchOptions = {
 				patterns,
 				targets,
 				projectPath: options.project as string,
 				sessionId: options.session as string | undefined,
-				contextLines: Number.parseInt(options.context as string, 10),
+				contextBefore,
+				contextAfter,
 				maxResults: Number.parseInt(options.maxResults as string, 10),
 				maxLineWidth: Number.parseInt(options.maxLineWidth as string, 10),
 				jsonOutput: Boolean(options.json),

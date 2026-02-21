@@ -5,7 +5,8 @@ export type SearchOptions = {
 	targets: Set<SearchTarget>;
 	projectPath: string;
 	sessionId?: string;
-	contextLines: number;
+	contextBefore: number;
+	contextAfter: number;
 	maxResults: number;
 	maxLineWidth: number;
 	jsonOutput: boolean;

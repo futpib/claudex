@@ -14,7 +14,7 @@ function testAny(patterns: RegExp[], text: string): boolean {
 	return false;
 }
 
-function findMatches(text: string, patterns: RegExp[], contextLines: number): MatchedLine[] | undefined {
+function findMatches(text: string, patterns: RegExp[], contextBefore: number, contextAfter: number): MatchedLine[] | undefined {
 	const lines = text.split('\n');
 	const matchingLineNumbers = new Set<number>();
 
@@ -28,7 +28,7 @@ function findMatches(text: string, patterns: RegExp[], contextLines: number): Ma
 		return undefined;
 	}
 
-	if (contextLines === 0) {
+	if (contextBefore === 0 && contextAfter === 0) {
 		return [ ...matchingLineNumbers ].map(n => ({
 			lineNumber: n,
 			line: lines[n],
@@ -38,7 +38,7 @@ function findMatches(text: string, patterns: RegExp[], contextLines: number): Ma
 
 	const visibleLines = new Set<number>();
 	for (const n of matchingLineNumbers) {
-		for (let i = Math.max(0, n - contextLines); i <= Math.min(lines.length - 1, n + contextLines); i++) {
+		for (let i = Math.max(0, n - contextBefore); i <= Math.min(lines.length - 1, n + contextAfter); i++) {
 			visibleLines.add(i);
 		}
 	}
@@ -69,7 +69,7 @@ export async function * searchSessions(
 				break;
 			}
 
-			const matched = findMatches(content.text, options.patterns, options.contextLines);
+			const matched = findMatches(content.text, options.patterns, options.contextBefore, options.contextAfter);
 			if (matched) {
 				matchNumber++;
 				yield {
