@@ -48,6 +48,7 @@
   "packageManager": "yarn@4.9.2",
   "dependencies": {
     "@futpib/parser": "^1.0.7",
+    "@inquirer/prompts": "^8.2.1",
     "@modelcontextprotocol/sdk": "^1.25.1",
     "commander": "^14.0.3",
     "diff": "^8.0.3",

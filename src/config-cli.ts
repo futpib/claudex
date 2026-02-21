@@ -390,7 +390,7 @@ function getValue(section: BaseConfig | ProjectConfig | undefined, keyInfo: KeyI
 	return fieldValue;
 }
 
-function formatValue(value: unknown): string {
+export function formatValue(value: unknown): string {
 	if (value === undefined) {
 		return '';
 	}
@@ -893,9 +893,9 @@ async function handleRemove(scope: Scope, key: string, value: string | undefined
 	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
-type KeyEntry = { key: string; type: string };
+export type KeyEntry = { key: string; type: string };
 
-function getKeyEntries(): KeyEntry[] {
+export function getKeyEntries(): KeyEntry[] {
 	const entries: KeyEntry[] = [];
 
 	const fieldTypes: Record<string, string> = {

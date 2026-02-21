@@ -220,6 +220,14 @@ export async function main() {
 		});
 
 	program
+		.command('config-interactive')
+		.description('Interactive TUI for browsing and editing claudex configuration')
+		.action(async () => {
+			const { configTuiMain } = await import('./config-tui.js');
+			await configTuiMain();
+		});
+
+	program
 		.command('install')
 		.description('Install packages into a running claudex container')
 		.argument('<packages...>', 'Package names to install')
