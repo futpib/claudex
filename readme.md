@@ -301,7 +301,7 @@ claudex config list --group mygroup --members
 
 ### Hooks and MCP Servers
 
-Pre-tool-use hook checks and MCP server registration are **off by default**. Enable them in your claudex config:
+Pre-tool-use hook checks are **on by default** with recommended settings. MCP server registration is **off by default**. You can customize them in your claudex config:
 
 ```bash
 # Enable all hook checks and MCP servers
@@ -357,7 +357,7 @@ Or in `config.json`:
 |---|---|
 | `claudex` | Register the claudex MCP server in `~/.claude.json` |
 
-Setting `hooks: true` enables all checks and registers hooks in `~/.claude/settings.json`. Setting `hooks: { ... }` enables only listed checks; any truthy value triggers hook registration. When `hooks` is not set (default), no checks fire and no hooks are registered.
+Setting `hooks: true` enables all recommended checks and registers hooks in `~/.claude/settings.json`. Setting `hooks: { ... }` enables only listed checks; any truthy value triggers hook registration. When `hooks` is not set (default), all recommended checks are enabled.
 
 ### Hook Registration
 

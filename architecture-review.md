@@ -60,37 +60,10 @@ Removed the private copy from `src/index.ts` and imported from `hooks/shared.ts`
 
 ---
 
-## 3. Fix the Semantic Inconsistency in `resolveHooks(undefined)`
+## 3. ~~Fix the Semantic Inconsistency in `resolveHooks(undefined)`~~ ✅ Done
 
-**Impact: medium | Effort: very low**
-
-```ts
-// src/config.ts  lines 114-130
-export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
-    if (hooks === true) {
-        // returns recommended values ✓
-    }
-    if (!hooks) {
-        // also returns recommended values — but docs say "off by default" ✗
-    }
-    // explicit object: returns per-key values ✓
-}
-```
-
-When `hooks` is `undefined` (the user has not configured anything) every rule
-with `recommended: true` silently fires. The README says hooks are *off by
-default*, which contradicts this behaviour.
-
-**Fix:** when `hooks === undefined` return all-`false`:
-
-```ts
-if (!hooks) {
-    return Object.fromEntries(allConfigKeys.map(k => [k, false])) as Required<HooksDetail>;
-}
-```
-
-This also eliminates the dead-code duplication between the `true` and `!hooks`
-branches.
+The code behavior (hooks on by default with recommended settings) was correct.
+Updated the README to match.
 
 ---
 
