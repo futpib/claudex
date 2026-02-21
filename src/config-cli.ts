@@ -1,5 +1,4 @@
 import fs from 'node:fs';
-import os from 'node:os';
 import path from 'node:path';
 import process from 'node:process';
 import { createPatch } from 'diff';
@@ -13,7 +12,6 @@ import {
 	findConfigFileForProfile,
 	readAllConfigFiles,
 	getGitWorktreeParentPath,
-	expandTilde,
 	resolveHooks,
 	resolveMcpServers,
 	baseConfigSchema,
@@ -26,7 +24,7 @@ import {
 	type ProjectConfig,
 } from './config.js';
 import { allConfigKeys } from './hooks/rules/index.js';
-import { collapseHomedir } from './utils.js';
+import { collapseHomedir, expandTilde } from './utils.js';
 
 export type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'group' | 'ungroup';
 
@@ -160,16 +158,6 @@ function parseArgs(argv: string[]): ParsedArgs {
 	};
 }
 
-function collapseTilde(filePath: string): string {
-	const homedir = fs.realpathSync(os.homedir());
-	const realPath = fs.realpathSync(filePath);
-	if (realPath === homedir || realPath.startsWith(homedir + '/')) {
-		return '~' + realPath.slice(homedir.length);
-	}
-
-	return filePath;
-}
-
 function serializeConfig(config: RootConfig): string {
 	return JSON.stringify(config, null, 2) + '\n';
 }
@@ -179,7 +167,7 @@ function printDiff(filePath: string, oldContent: string, newContent: string): vo
 		return;
 	}
 
-	const patch = createPatch(collapseTilde(filePath), oldContent, newContent);
+	const patch = createPatch(collapseHomedir(fs.realpathSync(filePath)), oldContent, newContent);
 	process.stderr.write(patch);
 }
 
@@ -1008,7 +996,7 @@ async function handleGroup(name: string, paths: string[], file: string | undefin
 			resolvedPath = worktreeParent;
 		}
 
-		return collapseTilde(resolvedPath);
+		return collapseHomedir(fs.realpathSync(resolvedPath));
 	}));
 
 	// Assign each project to the group
@@ -1050,7 +1038,7 @@ async function handleUngroup(paths: string[], file: string | undefined): Promise
 			resolvedPath = worktreeParent;
 		}
 
-		return collapseTilde(resolvedPath);
+		return collapseHomedir(fs.realpathSync(resolvedPath));
 	}));
 
 	// Remove group from each project
@@ -1092,7 +1080,7 @@ export async function configMain(parsed: ParsedArgs): Promise<void> {
 			parsed.scope.path = worktreeParent;
 		}
 
-		parsed.scope.path = collapseTilde(parsed.scope.path);
+		parsed.scope.path = collapseHomedir(fs.realpathSync(parsed.scope.path));
 	}
 
 	switch (parsed.action) {
