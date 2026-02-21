@@ -16,6 +16,7 @@ import {
 	configMain, configMainFromArgv, type Scope, type ParsedArgs,
 } from './config-cli.js';
 import { isUnsafeDirectory } from './safety.js';
+import { isErrnoException } from './utils.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, runDockerContainer } from './docker/run.js';
 import { resolveLauncherDefinition, buildLauncherCommand } from './launcher.js';
@@ -26,9 +27,18 @@ async function ensureMcpServerConfig(projectRoot: string) {
 
 	try {
 		const content = await fs.readFile(claudeJsonPath, 'utf8');
-		config = JSON.parse(content) as Record<string, unknown>;
-	} catch {
-		// File doesn't exist or invalid JSON
+		try {
+			config = JSON.parse(content) as Record<string, unknown>;
+		} catch {
+			// Invalid JSON — warn and start fresh
+			console.warn(`Warning: ${claudeJsonPath} contains invalid JSON; overwriting.`);
+		}
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
+
+		// File doesn't exist yet — start with empty config
 	}
 
 	const mcpServers = (config.mcpServers ?? {}) as Record<string, unknown>;
