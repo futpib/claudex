@@ -13,7 +13,7 @@ import {
 	type LauncherDefinition,
 } from './config/index.js';
 import {
-	configMain, type Scope, type ParsedArgs,
+	configMain, configMainFromArgv, type Scope, type ParsedArgs,
 } from './config-cli.js';
 import { isUnsafeDirectory } from './safety.js';
 import { isErrnoException } from './utils.js';
@@ -229,6 +229,16 @@ export async function main() {
 			await configTuiMain();
 		});
 
+	program
+		.command('install')
+		.description('Install packages into a running claudex container')
+		.argument('<packages...>', 'Package names to install')
+		.option('--no-save', 'Skip persisting packages to config')
+		.option('--container <name>', 'Target a specific container')
+		.action(async (packages: string[], options: { save: boolean; container?: string }) => {
+			await runInstall(packages, options);
+		});
+
 	await program.parseAsync(process.argv);
 }
 
@@ -260,6 +270,55 @@ export async function findRunningContainer(cwd: string, specificName?: string): 
 	}
 
 	return containers[0];
+}
+
+async function runInstall(packages: string[], options: { save: boolean; container?: string }) {
+	const cwd = process.cwd();
+
+	let containerName: string;
+	try {
+		containerName = await findRunningContainer(cwd, options.container);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	// Sync package database as privileged root (pacman -Sy needs CAP_CHOWN for temp dirs)
+	const syncArgs = [ 'exec', '--privileged', '--user', 'root', containerName, 'pacman', '-Sy' ];
+	console.error(`+ docker ${syncArgs.join(' ')}`);
+	try {
+		await execa('docker', syncArgs, {
+			stdout: process.stdout,
+			stderr: process.stderr,
+		});
+	} catch {
+		console.error('Warning: failed to sync package database.');
+	}
+
+	// Install packages as privileged root (needs CAP_CHOWN etc.)
+	const installArgs = [ 'exec', '--privileged', '--user', 'root', containerName, 'pacman', '-S', '--noconfirm', '--needed', ...packages ];
+	console.error(`+ docker ${installArgs.join(' ')}`);
+	try {
+		await execa('docker', installArgs, {
+			stdout: process.stdout,
+			stderr: process.stderr,
+		});
+	} catch {
+		console.error('Package installation failed.');
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	// Persist to config unless --no-save
+	if (options.save) {
+		try {
+			await configMainFromArgv([ 'add', '--project', cwd, 'packages', ...packages ]);
+			console.error(`Saved packages to project config: ${packages.join(' ')}`);
+		} catch (error) {
+			console.error('Warning: failed to save packages to config:', error instanceof Error ? error.message : String(error));
+		}
+	}
 }
 
 async function runMain(claudeArgs: string[], options: MainOptions) {
