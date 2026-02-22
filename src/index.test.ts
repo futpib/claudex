@@ -4,7 +4,6 @@ import test from 'ava';
 import { execa } from 'execa';
 import { builtinLauncherDefinitions, type LauncherDefinition } from './config/index.js';
 import { buildLauncherCommand, resolveLauncherDefinition } from './launcher.js';
-import { findRunningContainer } from './index.js';
 
 const cliPath = path.join(import.meta.dirname, '../build/cli.js');
 
@@ -42,18 +41,9 @@ test('--help exits 0 and lists all options', async t => {
 	}
 });
 
-test('--help lists config and install subcommands', async t => {
+test('--help lists config subcommand', async t => {
 	const { stdout } = await runCli([ '--help' ]);
 	t.regex(stdout, /config\b/);
-	t.regex(stdout, /install\b/);
-});
-
-test('install --help exits 0 and lists options', async t => {
-	const { exitCode, stdout } = await runCli([ 'install', '--help' ]);
-	t.is(exitCode, 0);
-	t.true(stdout.includes('--no-save'), 'install help should mention --no-save');
-	t.true(stdout.includes('--container'), 'install help should mention --container');
-	t.true(stdout.includes('packages'), 'install help should mention packages argument');
 });
 
 test('config --help exits 0 and lists all actions as subcommands', async t => {

@@ -13,7 +13,7 @@ import {
 	type LauncherDefinition,
 } from './config/index.js';
 import {
-	configMain, configMainFromArgv, type Scope, type ParsedArgs,
+	configMain, type Scope, type ParsedArgs,
 } from './config-cli.js';
 import { isUnsafeDirectory } from './safety.js';
 import { isErrnoException } from './utils.js';
@@ -227,16 +227,6 @@ export async function main() {
 			await configTuiMain();
 		});
 
-	program
-		.command('install')
-		.description('Install packages into a running claudex container')
-		.argument('<packages...>', 'Package names to install')
-		.option('--no-save', 'Skip persisting packages to config')
-		.option('--container <name>', 'Target a specific container')
-		.action(async (packages: string[], options: { save: boolean; container?: string }) => {
-			await runInstall(packages, options);
-		});
-
 	await program.parseAsync(process.argv);
 }
 
@@ -268,51 +258,6 @@ export async function findRunningContainer(cwd: string, specificName?: string): 
 	}
 
 	return containers[0];
-}
-
-async function runInstall(packages: string[], options: { save: boolean; container?: string }) {
-	const cwd = process.cwd();
-
-	let containerName: string;
-	try {
-		containerName = await findRunningContainer(cwd, options.container);
-	} catch (error) {
-		console.error(error instanceof Error ? error.message : String(error));
-		// eslint-disable-next-line unicorn/no-process-exit
-		process.exit(1);
-	}
-
-	// Try pacman first
-	try {
-		await execa('docker', [ 'exec', '--user', 'root', containerName, 'pacman', '-S', '--noconfirm', '--needed', ...packages ], {
-			stdout: process.stdout,
-			stderr: process.stderr,
-		});
-	} catch {
-		// Fallback to yay for AUR packages — yay must run as non-root
-		console.error('pacman failed, trying yay...');
-		const { stdout: username } = await execa('docker', [ 'exec', containerName, 'whoami' ]);
-		try {
-			await execa('docker', [ 'exec', '--user', 'root', containerName, 'su', '-', username.trim(), '-c', `yay -S --noconfirm --needed ${packages.join(' ')}` ], {
-				stdout: process.stdout,
-				stderr: process.stderr,
-			});
-		} catch {
-			console.error('Package installation failed.');
-			// eslint-disable-next-line unicorn/no-process-exit
-			process.exit(1);
-		}
-	}
-
-	// Persist to config unless --no-save
-	if (options.save) {
-		try {
-			await configMainFromArgv([ 'add', '--project', cwd, 'packages', ...packages ]);
-			console.error(`Saved packages to project config: ${packages.join(' ')}`);
-		} catch (error) {
-			console.error('Warning: failed to save packages to config:', error instanceof Error ? error.message : String(error));
-		}
-	}
 }
 
 async function runMain(claudeArgs: string[], options: MainOptions) {
