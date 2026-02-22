@@ -61,6 +61,7 @@ type MainOptions = {
 	docker: boolean;
 	dockerShell: boolean;
 	dockerExec: boolean;
+	dockerExecRoot: boolean;
 	dockerPull: boolean;
 	dockerNoCache: boolean;
 	dockerSudo: boolean;
@@ -78,6 +79,7 @@ export async function main() {
 		.option('--no-docker', 'Run Claude Code directly on the host instead of in Docker')
 		.option('--docker-shell', 'Launch a bash shell inside the Docker container')
 		.option('--docker-exec', 'Exec into a running claudex container for current directory')
+		.option('--docker-exec-root', 'Exec into a running claudex container as root with full privileges')
 		.option('--docker-pull', 'Pull the latest base image when building')
 		.option('--docker-no-cache', 'Build the Docker image without cache')
 		.option('--docker-sudo', 'Allow sudo inside the container (less secure)')
@@ -265,6 +267,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		docker: useDocker,
 		dockerShell: useDockerShell,
 		dockerExec: useDockerExec,
+		dockerExecRoot: useDockerExecRoot,
 		dockerPull,
 		dockerNoCache,
 		dockerSudo,
@@ -306,10 +309,13 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		}
 	}
 
-	// Handle --docker-exec: exec into a running container for current directory
-	if (useDockerExec) {
+	// Handle --docker-exec / --docker-exec-root: exec into a running container
+	if (useDockerExec || useDockerExecRoot) {
 		const containerName = await findRunningContainer(cwd);
-		await execa('docker', [ 'exec', '-it', containerName, 'bash' ], {
+		const execArgs = useDockerExecRoot
+			? [ 'exec', '-it', '--privileged', '--user', 'root', containerName, 'bash' ]
+			: [ 'exec', '-it', containerName, 'bash' ];
+		await execa('docker', execArgs, {
 			stdin: process.stdin,
 			stdout: process.stdout,
 			stderr: process.stderr,
