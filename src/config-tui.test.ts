@@ -32,11 +32,11 @@ async function sendKeys(
 	}
 }
 
-async function createTemporaryConfigDir(): Promise<{ configDir: string; cleanup: () => Promise<void> }> {
+async function createTemporaryConfigDir() {
 	const configDir = await mkdtemp(path.join(tmpdir(), 'claudex-tui-test-'));
 	return {
 		configDir,
-		async cleanup() {
+		async [Symbol.asyncDispose]() {
 			await rm(configDir, { recursive: true });
 		},
 	};
@@ -48,78 +48,71 @@ async function readJsonFile(filePath: string): Promise<unknown> {
 }
 
 test.serial('add a package via config-interactive', async t => {
-	const { configDir, cleanup } = await createTemporaryConfigDir();
-	try {
-		const proc = execa('node', [ cliPath, 'config-interactive' ], {
-			stdin: 'pipe',
-			stdout: 'pipe',
-			stderr: 'pipe',
-			reject: false,
-			env: {
-				...process.env,
-				// eslint-disable-next-line @typescript-eslint/naming-convention
-				XDG_CONFIG_HOME: configDir,
-			},
-		});
+	await using handle = await createTemporaryConfigDir();
 
-		await sendKeys(proc, [
-			keys.enter, // Select "packages"
-			keys.enter, // Select "Add value"
-			'vim\r', // Type value and confirm
-			keys.down, // Skip "Project" → "Global"
-			keys.enter, // Select "Global" placement
-		]);
+	const proc = execa('node', [ cliPath, 'config-interactive' ], {
+		stdin: 'pipe',
+		stdout: 'pipe',
+		stderr: 'pipe',
+		reject: false,
+		env: {
+			...process.env,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: handle.configDir,
+		},
+	});
 
-		const result = await proc;
-		t.is(result.exitCode, 0);
+	await sendKeys(proc, [
+		keys.enter, // Select "packages"
+		keys.enter, // Select "Add value"
+		'vim\r', // Type value and confirm
+		keys.down, // Skip "Project" → "Global"
+		keys.enter, // Select "Global" placement
+	]);
 
-		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
-		t.deepEqual((config as { packages: string[] }).packages, [ 'vim' ]);
-	} finally {
-		await cleanup();
-	}
+	const result = await proc;
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	t.deepEqual((config as { packages: string[] }).packages, [ 'vim' ]);
 });
 
 test.serial('set a boolean via config-interactive', async t => {
-	const { configDir, cleanup } = await createTemporaryConfigDir();
+	await using handle = await createTemporaryConfigDir();
 
 	// Pre-create the config dir so getMergedConfig finds it
-	await mkdir(path.join(configDir, 'claudex'), { recursive: true });
+	await mkdir(path.join(handle.configDir, 'claudex'), { recursive: true });
 
-	try {
-		const proc = execa('node', [ cliPath, 'config-interactive' ], {
-			stdin: 'pipe',
-			stdout: 'pipe',
-			stderr: 'pipe',
-			reject: false,
-			env: {
-				...process.env,
-				// eslint-disable-next-line @typescript-eslint/naming-convention
-				XDG_CONFIG_HOME: configDir,
-			},
-		});
+	const proc = execa('node', [ cliPath, 'config-interactive' ], {
+		stdin: 'pipe',
+		stdout: 'pipe',
+		stderr: 'pipe',
+		reject: false,
+		env: {
+			...process.env,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: handle.configDir,
+		},
+	});
 
-		// Menu order: packages(0), volumes(1), env(2), ssh(3), hostPorts(4),
-		// extraHosts(5), shareVolumes(6)
-		await sendKeys(proc, [
-			keys.down,
-			keys.down,
-			keys.down,
-			keys.down,
-			keys.down,
-			keys.down,
-			keys.enter, // Select "shareVolumes"
-			keys.enter, // Select "Set to true"
-			keys.down, // Skip "Project" → "Global"
-			keys.enter, // Select "Global" placement
-		]);
+	// Menu order: packages(0), volumes(1), env(2), ssh(3), hostPorts(4),
+	// extraHosts(5), shareVolumes(6)
+	await sendKeys(proc, [
+		keys.down,
+		keys.down,
+		keys.down,
+		keys.down,
+		keys.down,
+		keys.down,
+		keys.enter, // Select "shareVolumes"
+		keys.enter, // Select "Set to true"
+		keys.down, // Skip "Project" → "Global"
+		keys.enter, // Select "Global" placement
+	]);
 
-		const result = await proc;
-		t.is(result.exitCode, 0);
+	const result = await proc;
+	t.is(result.exitCode, 0);
 
-		const config = await readJsonFile(path.join(configDir, 'claudex', 'config.json'));
-		t.is((config as { shareVolumes: boolean }).shareVolumes, true);
-	} finally {
-		await cleanup();
-	}
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	t.is((config as { shareVolumes: boolean }).shareVolumes, true);
 });
