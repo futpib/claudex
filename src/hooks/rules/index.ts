@@ -12,6 +12,7 @@ import { banBashMinusC } from './ban-bash-minus-c.js';
 import { banCommandChaining } from './ban-command-chaining.js';
 import { banPipeToFilter } from './ban-pipe-to-filter.js';
 import { banFileOperationCommands } from './ban-file-operation-commands.js';
+import { banFindCommand } from './ban-find-command.js';
 import { banFindExec } from './ban-find-exec.js';
 import { banGrepCommand } from './ban-grep-command.js';
 import { banOutdatedYearInSearch } from './ban-outdated-year-in-search.js';
@@ -66,6 +67,7 @@ export const allRules: Rule[] = [
 	banCommandChaining,
 	banPipeToFilter,
 	banFileOperationCommands,
+	banFindCommand,
 	banFindExec,
 	banGrepCommand,
 	banOutdatedYearInSearch,

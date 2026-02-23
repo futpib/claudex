@@ -394,6 +394,33 @@ export async function getFindExecCommand(command: string): Promise<string | unde
 }
 
 /**
+ * If the command is a `find` invocation, returns its arguments.
+ * Returns undefined if the command is not a find invocation.
+ */
+export async function getFindCommandArgs(command: string): Promise<string[] | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	let result: string[] | undefined;
+
+	someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (name !== 'find') {
+			return false;
+		}
+
+		result = cmd.args
+			.map(arg => getWordLiteralValue(arg))
+			.filter((arg): arg is string => arg !== undefined);
+		return true;
+	});
+
+	return result;
+}
+
+/**
  * Gets the path from a `git -C <path>` command.
  * Returns the path if found, undefined otherwise.
  */

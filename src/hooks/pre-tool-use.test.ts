@@ -1052,6 +1052,81 @@ test('allows find -exec when hooks not configured', async t => {
 	}
 });
 
+// --- ban-find-command ---
+
+test('rejects find with -name only', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFindCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('find src/ -name "*.ts"'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('Glob'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows find with -type flag', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFindCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('find ~/.venv -type d -name "ib_async"'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.not(result.exitCode, 2);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows find with -delete flag', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banFindCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('find /tmp -name "*.tmp" -delete'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.not(result.exitCode, 2);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows find when hooks not configured', async t => {
+	const { configDir, cleanup } = await createHooksConfig({});
+	try {
+		const result = await runHook(
+			createBashToolInput('find src/ -name "*.ts"'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
 // --- ban-grep-command ---
 
 test('rejects grep command', async t => {
