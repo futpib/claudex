@@ -595,6 +595,36 @@ export async function hasCargoManifestPathFlag(command: string): Promise<boolean
 	});
 }
 
+/**
+ * If the command is a grep or rg invocation (not as part of a pipe — that's handled by ban-pipe-to-filter),
+ * returns the command name and its arguments. Returns undefined otherwise.
+ */
+export async function getGrepCommandArgs(command: string): Promise<{ command: string; args: string[] } | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	const grepCommands = new Set([ 'grep', 'rg' ]);
+	let result: { command: string; args: string[] } | undefined;
+
+	someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (!name || !grepCommands.has(name)) {
+			return false;
+		}
+
+		const args = cmd.args
+			.map(arg => getWordLiteralValue(arg))
+			.filter((arg): arg is string => arg !== undefined);
+
+		result = { command: name, args };
+		return true;
+	});
+
+	return result;
+}
+
 export async function hasYarnCwdFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {

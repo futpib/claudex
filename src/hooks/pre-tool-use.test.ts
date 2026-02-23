@@ -1052,6 +1052,100 @@ test('allows find -exec when hooks not configured', async t => {
 	}
 });
 
+// --- ban-grep-command ---
+
+test('rejects grep command', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banGrepCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('grep -r "TODO" src/'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('grep'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('rejects rg command', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banGrepCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('rg "pattern" --type ts'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('rg'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows grep with unsupported flags like -v', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banGrepCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('grep -v "pattern" file.txt'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.not(result.exitCode, 2);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows rg with unsupported flags like --replace', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banGrepCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('rg "foo" --replace "bar"'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.not(result.exitCode, 2);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows grep when hooks not configured', async t => {
+	const { configDir, cleanup } = await createHooksConfig({});
+	try {
+		const result = await runHook(
+			createBashToolInput('grep -r "TODO" src/'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
 test('accepts unknown tool names not in any schema', async t => {
 	const { configDir, cleanup } = await createHooksConfig({});
 	try {
