@@ -2,12 +2,7 @@ import path from 'node:path';
 import process from 'node:process';
 import test from 'ava';
 import { execa } from 'execa';
-import {
-	builtinLauncherDefinitions,
-	mergeBaseConfigs,
-	type BaseConfig,
-	type LauncherDefinition,
-} from './config/index.js';
+import { builtinLauncherDefinitions, type LauncherDefinition } from './config/index.js';
 import { buildLauncherCommand, resolveLauncherDefinition } from './launcher.js';
 
 const cliPath = path.join(import.meta.dirname, '../build/cli.js');
@@ -175,36 +170,4 @@ test('resolveLauncherDefinition config command overrides built-in command', t =>
 	t.deepEqual(def.command, [ 'custom-ollama', 'launch' ]);
 	// Built-in base config fields still apply
 	t.deepEqual(def.packages, [ 'ollama' ]);
-});
-
-// --- mergeBaseConfigs: dockerDangerouslySkipPermissions ---
-
-test('mergeBaseConfigs inherits dockerDangerouslySkipPermissions from base', t => {
-	const base: BaseConfig = { dockerDangerouslySkipPermissions: true };
-	const overlay: BaseConfig = {};
-	const merged = mergeBaseConfigs(base, overlay);
-	t.is(merged.dockerDangerouslySkipPermissions, true);
-});
-
-test('mergeBaseConfigs overlay overrides dockerDangerouslySkipPermissions', t => {
-	const base: BaseConfig = { dockerDangerouslySkipPermissions: true };
-	const overlay: BaseConfig = { dockerDangerouslySkipPermissions: false };
-	const merged = mergeBaseConfigs(base, overlay);
-	t.is(merged.dockerDangerouslySkipPermissions, false);
-});
-
-// --- mergeBaseConfigs: dockerAllowDangerouslySkipPermissions ---
-
-test('mergeBaseConfigs inherits dockerAllowDangerouslySkipPermissions from base', t => {
-	const base: BaseConfig = { dockerAllowDangerouslySkipPermissions: true };
-	const overlay: BaseConfig = {};
-	const merged = mergeBaseConfigs(base, overlay);
-	t.is(merged.dockerAllowDangerouslySkipPermissions, true);
-});
-
-test('mergeBaseConfigs overlay overrides dockerAllowDangerouslySkipPermissions', t => {
-	const base: BaseConfig = { dockerAllowDangerouslySkipPermissions: true };
-	const overlay: BaseConfig = { dockerAllowDangerouslySkipPermissions: false };
-	const merged = mergeBaseConfigs(base, overlay);
-	t.is(merged.dockerAllowDangerouslySkipPermissions, false);
 });
