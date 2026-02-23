@@ -210,7 +210,7 @@ function ensureSection(config: RootConfig, scope: Scope): BaseConfig | ProjectCo
 		case 'project': {
 			config.projects ??= {};
 			const existingKey = findProjectKey(config.projects, scope.path);
-			const key = existingKey ?? scope.path;
+			const key = existingKey ?? collapseHomedir(scope.path);
 			config.projects[key] ??= {};
 			return config.projects[key];
 		}
