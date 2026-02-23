@@ -13,6 +13,7 @@ import { banCommandChaining } from './ban-command-chaining.js';
 import { banPipeToFilter } from './ban-pipe-to-filter.js';
 import { banFileOperationCommands } from './ban-file-operation-commands.js';
 import { banFindCommand } from './ban-find-command.js';
+import { banFindDelete } from './ban-find-delete.js';
 import { banFindExec } from './ban-find-exec.js';
 import { banGrepCommand } from './ban-grep-command.js';
 import { banOutdatedYearInSearch } from './ban-outdated-year-in-search.js';
@@ -68,6 +69,7 @@ export const allRules: Rule[] = [
 	banPipeToFilter,
 	banFileOperationCommands,
 	banFindCommand,
+	banFindDelete,
 	banFindExec,
 	banGrepCommand,
 	banOutdatedYearInSearch,
