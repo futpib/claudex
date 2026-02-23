@@ -652,6 +652,33 @@ export async function getGrepCommandArgs(command: string): Promise<{ command: st
 	return result;
 }
 
+/**
+ * If the command is an `ls` invocation, returns its arguments.
+ * Returns undefined if the command is not an ls invocation.
+ */
+export async function getLsCommandArgs(command: string): Promise<string[] | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	let result: string[] | undefined;
+
+	someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (name !== 'ls') {
+			return false;
+		}
+
+		result = cmd.args
+			.map(arg => getWordLiteralValue(arg))
+			.filter((arg): arg is string => arg !== undefined);
+		return true;
+	});
+
+	return result;
+}
+
 export async function hasYarnCwdFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {

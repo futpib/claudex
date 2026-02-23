@@ -16,6 +16,7 @@ import { banFindCommand } from './ban-find-command.js';
 import { banFindDelete } from './ban-find-delete.js';
 import { banFindExec } from './ban-find-exec.js';
 import { banGrepCommand } from './ban-grep-command.js';
+import { banLsCommand } from './ban-ls-command.js';
 import { banOutdatedYearInSearch } from './ban-outdated-year-in-search.js';
 import { banWrongPackageManager } from './ban-wrong-package-manager.js';
 import { banAbsolutePaths } from './ban-absolute-paths.js';
@@ -72,6 +73,7 @@ export const allRules: Rule[] = [
 	banFindDelete,
 	banFindExec,
 	banGrepCommand,
+	banLsCommand,
 	banOutdatedYearInSearch,
 	banAbsolutePaths,
 	banHomeDirAbsolutePaths,

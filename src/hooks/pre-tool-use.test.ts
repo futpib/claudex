@@ -1184,6 +1184,82 @@ test('allows find -delete when hooks not configured', async t => {
 	}
 });
 
+// --- ban-ls-command ---
+
+test('rejects plain ls', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banLsCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('ls'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('Glob'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('rejects ls with path only', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banLsCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('ls src/'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('Glob'));
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows ls with -la flags', async t => {
+	const { configDir, cleanup } = await createHooksConfig({ banLsCommand: true });
+	try {
+		const result = await runHook(
+			createBashToolInput('ls -la ~/.venv/lib/'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.not(result.exitCode, 2);
+	} finally {
+		await cleanup();
+	}
+});
+
+test('allows ls when hooks not configured', async t => {
+	const { configDir, cleanup } = await createHooksConfig({});
+	try {
+		const result = await runHook(
+			createBashToolInput('ls src/'),
+			undefined,
+			{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: configDir,
+			},
+		);
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await cleanup();
+	}
+});
+
 // --- ban-grep-command ---
 
 test('rejects grep command', async t => {
