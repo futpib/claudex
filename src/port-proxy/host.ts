@@ -51,7 +51,26 @@ export async function startHostPortProxies(ports: number[]): Promise<(() => void
 	const children: ResultPromise[] = [];
 	let stopped = false;
 
-	for (const port of ports) {
+	// Check all ports in parallel to find which are already reachable on the gateway
+	const reachabilityResults = await Promise.all(ports.map(async port => {
+		try {
+			await waitForPort(port, gateway, 50);
+			return { port, reachable: true };
+		} catch {
+			return { port, reachable: false };
+		}
+	}));
+
+	const portsNeedingProxy: number[] = [];
+	for (const { port, reachable } of reachabilityResults) {
+		if (reachable) {
+			console.error(`Host proxy: skipping port ${port} (already reachable on ${gateway})`);
+		} else {
+			portsNeedingProxy.push(port);
+		}
+	}
+
+	for (const port of portsNeedingProxy) {
 		// Listen on the Docker bridge gateway IP and forward to localhost
 		// This allows containers to reach host-only services via host.docker.internal
 		const child = execa('socat', [
@@ -76,7 +95,7 @@ export async function startHostPortProxies(ports: number[]): Promise<(() => void
 	}
 
 	// Wait for proxies to be ready
-	await Promise.all(ports.map(async port => {
+	await Promise.all(portsNeedingProxy.map(async port => {
 		try {
 			await waitForPort(port, gateway);
 			console.error(`Host proxy: ${gateway}:${port} → 127.0.0.1:${port}`);
