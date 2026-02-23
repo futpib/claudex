@@ -42,6 +42,8 @@ export const baseConfigSchema = z.object({
 	hooksDescriptions: z.boolean().optional(), // Default true - inject active hook rule descriptions into CLAUDE.md
 	profiles: z.array(z.string()).optional(), // References to named profiles defined at root level
 	launcher: z.string().optional(), // Name of launcher to use (e.g. "ollama")
+	dockerDangerouslySkipPermissions: z.boolean().optional(),
+	dockerAllowDangerouslySkipPermissions: z.boolean().optional(),
 });
 
 // Launcher definition schema - extends base config with launcher-specific fields

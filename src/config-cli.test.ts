@@ -178,6 +178,22 @@ test('set boolean field (shareVolumes)', async t => {
 	t.is((config as { shareVolumes: boolean }).shareVolumes, false);
 });
 
+test('set boolean field (dockerDangerouslySkipPermissions)', async t => {
+	await using handle = await createTemporaryConfigDir();
+
+	await runConfigWithDir(handle.configDir, [ 'set', '--global', 'dockerDangerouslySkipPermissions', 'true' ]);
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	t.is((config as { dockerDangerouslySkipPermissions: boolean }).dockerDangerouslySkipPermissions, true);
+});
+
+test('set boolean field (dockerAllowDangerouslySkipPermissions)', async t => {
+	await using handle = await createTemporaryConfigDir();
+
+	await runConfigWithDir(handle.configDir, [ 'set', '--global', 'dockerAllowDangerouslySkipPermissions', 'true' ]);
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	t.is((config as { dockerAllowDangerouslySkipPermissions: boolean }).dockerAllowDangerouslySkipPermissions, true);
+});
+
 test('set record field (env.KEY)', async t => {
 	await using handle = await createTemporaryConfigDir();
 

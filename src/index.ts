@@ -399,6 +399,12 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const { config, profileVolumes } = await getMergedConfig(cwd);
 		const cliInDockerPath = path.join(projectRoot, 'build', 'cli-in-docker.js');
 
+		const dockerClaudeArgs = [
+			...(config.dockerDangerouslySkipPermissions ? [ '--dangerously-skip-permissions' ] : []),
+			...(config.dockerAllowDangerouslySkipPermissions ? [ '--allow-dangerously-skip-permissions' ] : []),
+			...claudeArgs,
+		];
+
 		({
 			childProcess: claudeChildProcess,
 			sshAgent,
@@ -418,7 +424,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			useDockerShell,
 			dockerPull,
 			dockerNoCache,
-			claudeArgs,
+			claudeArgs: dockerClaudeArgs,
 			cliInDockerPath,
 		}));
 	} else {
@@ -429,7 +435,12 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 		const addDirArgs = await buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
 
-		const claudeFullArgs = [ '--setting-sources', settingSources, ...addDirArgs, ...claudeArgs ];
+		const claudeFullArgs = [
+			'--setting-sources',
+			settingSources,
+			...addDirArgs,
+			...claudeArgs,
+		];
 
 		if (launcherDef) {
 			const { command: launcherCmd, args: launcherArgs } = buildLauncherCommand(launcherDef, cliModel, claudeFullArgs);
