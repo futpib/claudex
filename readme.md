@@ -377,6 +377,50 @@ Create modular memory files in `~/.config/claudex/CLAUDE.md.d/` using numeric pr
 - Remember how to do things, not what was done
 ```
 
+## Memory Search
+
+Search across Claude Code conversation transcripts for past sessions:
+
+```bash
+claudex-memory-search <pattern>
+```
+
+Searches all sessions for the current project by default. Supports both literal string and regex matching.
+
+### Options
+
+| Flag | Description |
+|---|---|
+| `-u, --user` | Search user messages |
+| `-a, --assistant` | Search assistant text responses |
+| `-c, --bash-command` | Search bash commands |
+| `-o, --bash-output` | Search bash output/results |
+| `-t, --tool-use` | Search tool use (any tool name + input) |
+| `-r, --tool-result` | Search tool results (non-Bash) |
+| `--project <path>` | Project path (defaults to cwd) |
+| `--session <id>` | Search only a specific session |
+| `-C, --context <n>` | Context lines around matches |
+| `-B, --before-context <n>` | Context lines before matches |
+| `-A, --after-context <n>` | Context lines after matches |
+| `--max-results <n>` | Max results (default: 50) |
+| `--max-line-width <n>` | Max output line width, 0 for unlimited (default: 200) |
+| `--json` | JSON output |
+| `-i, --ignore-case` | Case-insensitive search |
+
+```bash
+# Search all message types for a pattern
+claudex-memory-search 'fix the tests'
+
+# Search only bash commands, case-insensitive
+claudex-memory-search -c -i 'yarn test'
+
+# Show 2 lines of context around each match
+claudex-memory-search -C 2 'TypeError'
+
+# JSON output for scripting
+claudex-memory-search --json 'pattern'
+```
+
 ## Development
 
 ### Requirements
@@ -426,6 +470,7 @@ npx xo
 - `claudex` - Main CLI wrapper
 - `claudex-in-docker` - Docker container entry point
 - `claudex-mcp` - MCP server for requirements tracking
+- `claudex-memory-search` - Search Claude Code conversation transcripts
 - `claudex-hook-pre-tool-use` - Pre-tool-use hook handler
 - `claudex-hook-user-prompt-submit` - User prompt event handler
 - `claudex-hook-notification` - Notification event handler (desktop notifications)
