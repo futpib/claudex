@@ -394,6 +394,94 @@ test('get group for project returns group name', async t => {
 	t.is(result.stdout.trim(), 'devgroup');
 });
 
+test('list for project includes group name when config is in config.json.d', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using proj = await createTemporaryDir('claudex-list-group-d-');
+
+	const configJsonDirectory = path.join(handle.configDir, 'claudex', 'config.json.d');
+	await mkdir(configJsonDirectory, { recursive: true });
+
+	await runConfigWithDir(handle.configDir, [ 'group', '--file', 'config.json.d/groups.json', 'mygroup', proj.dir ]);
+	const result = await runConfigWithDir(handle.configDir, [ 'list', '--project', proj.dir ]);
+	t.is(result.exitCode, 0);
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+	const parsed = JSON.parse(result.stdout);
+	t.is(parsed.group, 'mygroup');
+});
+
+test('list for project in git repo includes group name', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using proj = await createTemporaryDir('claudex-list-group-git-');
+
+	// Initialize a git repo in the project dir
+	await execa('git', [ 'init' ], { cwd: proj.dir });
+
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', proj.dir ]);
+	const result = await runConfigWithDir(handle.configDir, [ 'list' ], proj.dir);
+	t.is(result.exitCode, 0);
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+	const parsed = JSON.parse(result.stdout);
+	t.is(parsed.group, 'mygroup');
+});
+
+test('list from cwd under home dir includes group name with tilde project path', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using proj = await createTemporaryHomeDir('claudex-list-group-tilde-');
+
+	const claudexDir = path.join(handle.configDir, 'claudex');
+	await mkdir(claudexDir, { recursive: true });
+
+	// Initialize a git repo
+	await execa('git', [ 'init' ], { cwd: proj.dir });
+
+	// Write config with tilde path
+	const tildeProjectPath = proj.dir.replace(homedir(), '~');
+	await writeFile(
+		path.join(claudexDir, 'config.json'),
+		JSON.stringify({
+			groupDefinitions: { mygroup: {} },
+			projects: { [tildeProjectPath]: { group: 'mygroup' } },
+		}),
+	);
+
+	// Run list from the project cwd (implicit scope)
+	const result = await runConfigWithDir(handle.configDir, [ 'list' ], proj.dir);
+	t.is(result.exitCode, 0);
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+	const parsed = JSON.parse(result.stdout);
+	t.is(parsed.group, 'mygroup');
+});
+
+test('list for project includes group when project is in config.json and globals in config.json.d', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using proj = await createTemporaryDir('claudex-list-group-split-');
+
+	const claudexDir = path.join(handle.configDir, 'claudex');
+	const configJsonDirectory = path.join(claudexDir, 'config.json.d');
+	await mkdir(configJsonDirectory, { recursive: true });
+
+	// Write global settings to config.json.d
+	await writeFile(
+		path.join(configJsonDirectory, '50-public.json'),
+		JSON.stringify({ packages: [ 'nodejs' ], hooks: true }),
+	);
+
+	// Write project with group to config.json
+	await writeFile(
+		path.join(claudexDir, 'config.json'),
+		JSON.stringify({
+			groupDefinitions: { mygroup: {} },
+			projects: { [proj.dir]: { group: 'mygroup' } },
+		}),
+	);
+
+	const result = await runConfigWithDir(handle.configDir, [ 'list', '--project', proj.dir ]);
+	t.is(result.exitCode, 0);
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+	const parsed = JSON.parse(result.stdout);
+	t.is(parsed.group, 'mygroup');
+});
+
 test('set group field with --group', async t => {
 	await using handle = await createTemporaryConfigDir();
 

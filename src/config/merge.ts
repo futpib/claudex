@@ -444,12 +444,15 @@ export async function readConfig(): Promise<MergedConfigResult> {
 export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> {
 	const { config: rootConfig, configFiles } = await readRootConfig();
 
+	// Expand tilde in cwd so that git operations and path comparisons work correctly
+	const expandedCwd = expandTilde(cwd);
+
 	// Get git-aware paths
-	const gitRoot = await getGitRoot(cwd);
-	const worktreeParent = await getGitWorktreeParentPath(cwd);
+	const gitRoot = await getGitRoot(expandedCwd);
+	const worktreeParent = await getGitWorktreeParentPath(expandedCwd);
 
 	// Determine resolution path (git root or cwd if not in git)
-	const resolutionPath = gitRoot ?? cwd;
+	const resolutionPath = gitRoot ?? expandedCwd;
 
 	// Build merge chain: root → group → worktree parent → project
 	let merged: ClaudexConfig = extractBaseConfig(rootConfig);
