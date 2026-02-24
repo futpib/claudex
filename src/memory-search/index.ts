@@ -7,7 +7,7 @@ import {
 	formatMatch, formatSummary, resetTruncationState, getDidTruncate,
 } from './output.js';
 
-const allTargets: SearchTarget[] = [ 'user', 'assistant', 'bash-command', 'bash-output', 'tool-use', 'tool-result', 'subagent-prompt' ];
+const allTargets: SearchTarget[] = [ 'user', 'assistant', 'bash-command', 'bash-output', 'tool-use', 'tool-result', 'subagent-prompt', 'compact-summary' ];
 
 export async function main(): Promise<void> {
 	const program = new Command();
@@ -24,6 +24,7 @@ export async function main(): Promise<void> {
 		.option('-t, --tool-use', 'Search tool use (any tool name + input)')
 		.option('-r, --tool-result', 'Search tool results (non-Bash)')
 		.option('-s, --subagent-prompt', 'Search subagent prompts')
+		.option('--compact-summary', 'Search compact/continuation summaries')
 		.option('--project <path>', 'Project path', process.cwd())
 		.option('--session <id>', 'Search only a specific session')
 		.option('-C, --context <n>', 'Context lines around matches')
@@ -61,6 +62,10 @@ export async function main(): Promise<void> {
 
 			if (options.subagentPrompt) {
 				targets.add('subagent-prompt');
+			}
+
+			if (options.compactSummary) {
+				targets.add('compact-summary');
 			}
 
 			if (targets.size === 0) {

@@ -1,4 +1,4 @@
-export type SearchTarget = 'user' | 'assistant' | 'bash-command' | 'bash-output' | 'tool-use' | 'tool-result' | 'subagent-prompt';
+export type SearchTarget = 'user' | 'assistant' | 'bash-command' | 'bash-output' | 'tool-use' | 'tool-result' | 'subagent-prompt' | 'compact-summary';
 
 export type SearchOptions = {
 	patterns: RegExp[];

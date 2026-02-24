@@ -143,9 +143,14 @@ function * extractFromUserEntry(
 
 	const { content } = message;
 
-	const userTarget: SearchTarget | undefined = context.isSubagent
-		? (targets.has('subagent-prompt') ? 'subagent-prompt' : undefined)
-		: (targets.has('user') ? 'user' : undefined);
+	let userTarget: SearchTarget | undefined;
+	if (entry.isCompactSummary === true) {
+		userTarget = targets.has('compact-summary') ? 'compact-summary' : undefined;
+	} else if (context.isSubagent) {
+		userTarget = targets.has('subagent-prompt') ? 'subagent-prompt' : undefined;
+	} else {
+		userTarget = targets.has('user') ? 'user' : undefined;
+	}
 
 	if (userTarget) {
 		if (typeof content === 'string') {
