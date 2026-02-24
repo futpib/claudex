@@ -372,6 +372,28 @@ test('list outputs config as JSON', async t => {
 	t.deepEqual(parsed.packages, [ 'vim' ]);
 });
 
+test('list for project includes group name', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using proj = await createTemporaryDir('claudex-list-group-');
+
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', proj.dir ]);
+	const result = await runConfigWithDir(handle.configDir, [ 'list', '--project', proj.dir ]);
+	t.is(result.exitCode, 0);
+	// eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
+	const parsed = JSON.parse(result.stdout);
+	t.is(parsed.group, 'mygroup');
+});
+
+test('get group for project returns group name', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using proj = await createTemporaryDir('claudex-get-group-');
+
+	await runConfigWithDir(handle.configDir, [ 'group', 'devgroup', proj.dir ]);
+	const result = await runConfigWithDir(handle.configDir, [ 'get', '--project', proj.dir, 'group' ]);
+	t.is(result.exitCode, 0);
+	t.is(result.stdout.trim(), 'devgroup');
+});
+
 test('set group field with --group', async t => {
 	await using handle = await createTemporaryConfigDir();
 

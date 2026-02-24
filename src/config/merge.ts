@@ -433,6 +433,7 @@ export type MergedConfigResult = {
 	configFiles: string[];
 	profileVolumes: string[];
 	launcherDefinitions: Record<string, LauncherDefinition> | undefined;
+	group: string | undefined;
 };
 
 // Legacy function for backward compatibility - deprecated
@@ -494,5 +495,6 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 		configFiles,
 		profileVolumes,
 		launcherDefinitions: rootConfig.launcherDefinitions,
+		group: projectConfig?.group,
 	};
 }

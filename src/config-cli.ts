@@ -426,8 +426,9 @@ async function handleList(scope: Scope, members?: boolean): Promise<void> {
 	}
 
 	if (scope.type === 'project') {
-		const { config } = await getMergedConfig(scope.path);
-		console.log(JSON.stringify(config, null, 2));
+		const { config, group } = await getMergedConfig(scope.path);
+		const output = group ? { ...config, group } : config;
+		console.log(JSON.stringify(output, null, 2));
 		return;
 	}
 
@@ -477,8 +478,9 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 	const keyInfo = parseKey(key);
 
 	if (scope.type === 'project') {
-		const { config } = await getMergedConfig(scope.path);
-		const value = getValue(config, keyInfo);
+		const { config, group } = await getMergedConfig(scope.path);
+		const source = group ? { ...config, group } : config;
+		const value = getValue(source, keyInfo);
 		const formatted = formatValue(value);
 		if (formatted) {
 			console.log(formatted);
