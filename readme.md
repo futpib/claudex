@@ -46,6 +46,9 @@ claudex --docker-shell
 
 # Exec into a running container for the current directory
 claudex --docker-exec
+
+# Exec into a running container as root
+claudex --docker-exec-root
 ```
 
 ### CLI Flags
@@ -55,14 +58,17 @@ claudex --docker-exec
 | `--no-docker` | Run Claude Code directly on the host |
 | `--docker-shell` | Launch bash inside the container |
 | `--docker-exec` | Exec into a running container |
+| `--docker-exec-root` | Exec into a running container as root with full privileges |
 | `--docker-pull` | Pull the latest base image when building |
 | `--docker-no-cache` | Build image without Docker cache |
 | `--docker-sudo` | Allow sudo inside the container |
 | `--allow-unsafe-directory` | Skip directory safety checks |
-| `--package <name>` | Install apt package in Docker (repeatable) |
+| `--package <name>` | Install pacman package in Docker (repeatable) |
 | `--volume <spec>` | Mount volume: `path` or `host:container` (repeatable) |
 | `--env <spec>` | Set env var: `KEY=value` or `KEY` for passthrough (repeatable) |
 | `--ssh-key <path>` | Add SSH key to agent (repeatable) |
+| `--launcher <name>` | Select launcher by name (e.g. `ollama`) |
+| `--model <name>` | Override the launcher's default model |
 
 ### Docker Safety
 
@@ -297,6 +303,31 @@ claudex config ungroup ~/code/foo
 claudex config list --group mygroup --members
 ```
 
+## Config Interactive TUI
+
+For a visual way to browse and edit configuration, use the interactive TUI:
+
+```bash
+claudex config-interactive
+```
+
+## Package Installation
+
+Install packages into a running claudex container on-the-fly with `claudex install`:
+
+```bash
+# Install packages and save to project config
+claudex install ripgrep fd
+
+# Install without saving to config
+claudex install --no-save jq
+
+# Target a specific container
+claudex install --container claudex-myproject-abc123 nodejs
+```
+
+Packages are installed with pacman and persisted to the project config by default (use `--no-save` to skip).
+
 ## Configuration
 
 ### Hooks and MCP Servers
@@ -335,15 +366,21 @@ Or in `config.json`:
 |---|---|
 | `banGitC` | Ban `git -C` (running git in a different directory) |
 | `banCargoManifestPath` | Ban `cargo --manifest-path` (running cargo with a different manifest) |
+| `banYarnCwd` | Ban `yarn --cwd` (running yarn with a different working directory) |
 | `banGitAddAll` | Ban `git add -A` / `--all` / `--no-ignore-removal` |
 | `banGitCommitAmend` | Ban `git commit --amend` |
 | `banGitCommitNoVerify` | Ban `git commit --no-verify` |
 | `banGitCheckoutRedundantStartPoint` | Ban redundant start-point in `git checkout -b` on detached HEAD |
 | `banBackgroundBash` | Ban `run_in_background` bash commands |
+| `banBashMinusC` | Ban `bash -c` or `sh -c` (run the command directly) |
 | `banCommandChaining` | Ban `&&`, `\|\|`, `;` command chaining |
 | `banPipeToFilter` | Ban piping to filter commands (grep, head, tail, etc.) |
 | `banFileOperationCommands` | Ban cat, sed, head, tail, awk (use dedicated tools) |
+| `banFindCommand` | Ban `find` for file searching (use the builtin Glob tool) |
+| `banFindDelete` | Ban `find -delete` (use Glob to find files then remove explicitly) |
 | `banFindExec` | Ban `find -exec` / `-execdir` (use dedicated tools) |
+| `banGrepCommand` | Ban `grep`/`rg` to search file contents (use the builtin Grep tool) |
+| `banLsCommand` | Ban `ls` to list files (use the builtin Glob tool) |
 | `banOutdatedYearInSearch` | Ban web searches containing recent but outdated years (2020+ but before current) |
 | `banAbsolutePaths` | Ban absolute paths under cwd in Bash commands (use relative paths) |
 | `banHomeDirAbsolutePaths` | Ban absolute paths under home directory in Bash commands (use `~/...`) |
@@ -425,7 +462,7 @@ claudex-memory-search --json 'pattern'
 
 ### Requirements
 
-- Node.js 18, 20, or 22
+- Node.js 22, 23, 24, or 25
 - Yarn 4.x
 
 ### Setup
