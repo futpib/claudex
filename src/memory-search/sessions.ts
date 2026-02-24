@@ -96,7 +96,9 @@ async function findSubagentFiles(projectDir: string, sessionId: string): Promise
 		const files = await Promise.all(agentFiles.map(async entry => {
 			const filePath = path.join(subagentDir, entry);
 			const stat = await fs.stat(filePath);
-			return { sessionId, filePath, mtime: stat.mtime };
+			return {
+				sessionId, filePath, mtime: stat.mtime, isSubagent: true,
+			};
 		}));
 		return files;
 	} catch {

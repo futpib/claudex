@@ -62,11 +62,16 @@ function collectToolUseIds(entry: Record<string, unknown>, map: ToolUseMap): voi
 	}
 }
 
+type ExtractOptions = {
+	targets: Set<SearchTarget>;
+	sessionId: string;
+	isSubagent?: boolean;
+};
+
 export async function * extractContent(
 	filePath: string,
 	toolUseMap: ToolUseMap,
-	targets: Set<SearchTarget>,
-	sessionId: string,
+	options: ExtractOptions,
 ): AsyncGenerator<ExtractedContent> {
 	const rl = createReadlineInterface(filePath);
 
@@ -77,7 +82,7 @@ export async function * extractContent(
 
 		try {
 			const entry = JSON.parse(line) as Record<string, unknown>;
-			yield * extractFromEntry(entry, toolUseMap, targets, sessionId);
+			yield * extractFromEntry(entry, toolUseMap, options);
 		} catch {
 			// Skip malformed JSONL lines
 			continue;
@@ -90,18 +95,18 @@ type ExtractContext = {
 	targets: Set<SearchTarget>;
 	sessionId: string;
 	timestamp: string;
+	isSubagent?: boolean;
 };
 
 function * extractFromEntry(
 	entry: Record<string, unknown>,
 	toolUseMap: ToolUseMap,
-	targets: Set<SearchTarget>,
-	sessionId: string,
+	options: ExtractOptions,
 ): Generator<ExtractedContent> {
 	const timestamp = (typeof entry.timestamp === 'string' ? entry.timestamp : '');
-	const entrySessionId = (typeof entry.sessionId === 'string' ? entry.sessionId : sessionId);
+	const entrySessionId = (typeof entry.sessionId === 'string' ? entry.sessionId : options.sessionId);
 	const context: ExtractContext = {
-		toolUseMap, targets, sessionId: entrySessionId, timestamp,
+		toolUseMap, targets: options.targets, sessionId: entrySessionId, timestamp, isSubagent: options.isSubagent,
 	};
 
 	switch (entry.type) {
@@ -138,16 +143,20 @@ function * extractFromUserEntry(
 
 	const { content } = message;
 
-	if (targets.has('user')) {
+	const userTarget: SearchTarget | undefined = context.isSubagent
+		? (targets.has('subagent-prompt') ? 'subagent-prompt' : undefined)
+		: (targets.has('user') ? 'user' : undefined);
+
+	if (userTarget) {
 		if (typeof content === 'string') {
 			yield {
-				target: 'user', text: content, sessionId, timestamp,
+				target: userTarget, text: content, sessionId, timestamp,
 			};
 		} else if (Array.isArray(content)) {
 			for (const block of content as Array<Record<string, unknown>>) {
 				if (block.type === 'text' && typeof block.text === 'string') {
 					yield {
-						target: 'user', text: block.text, sessionId, timestamp,
+						target: userTarget, text: block.text, sessionId, timestamp,
 					};
 				}
 			}
@@ -276,5 +285,7 @@ function * extractFromProgressEntry(
 		sessionId: context.sessionId,
 	};
 
-	yield * extractFromEntry(syntheticEntry, context.toolUseMap, context.targets, context.sessionId);
+	yield * extractFromEntry(syntheticEntry, context.toolUseMap, {
+		targets: context.targets, sessionId: context.sessionId, isSubagent: context.isSubagent,
+	});
 }

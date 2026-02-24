@@ -64,7 +64,7 @@ export async function * searchSessions(
 
 		const toolUseMap = await buildToolUseMap(session.filePath); // eslint-disable-line no-await-in-loop
 
-		for await (const content of extractContent(session.filePath, toolUseMap, options.targets, session.sessionId)) { // eslint-disable-line no-await-in-loop
+		for await (const content of extractContent(session.filePath, toolUseMap, { targets: options.targets, sessionId: session.sessionId, isSubagent: session.isSubagent })) { // eslint-disable-line no-await-in-loop
 			if (matchNumber >= options.maxResults) {
 				break;
 			}

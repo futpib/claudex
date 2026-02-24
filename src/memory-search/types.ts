@@ -1,4 +1,4 @@
-export type SearchTarget = 'user' | 'assistant' | 'bash-command' | 'bash-output' | 'tool-use' | 'tool-result';
+export type SearchTarget = 'user' | 'assistant' | 'bash-command' | 'bash-output' | 'tool-use' | 'tool-result' | 'subagent-prompt';
 
 export type SearchOptions = {
 	patterns: RegExp[];
@@ -32,6 +32,7 @@ export type SessionFile = {
 	sessionId: string;
 	filePath: string;
 	mtime: Date;
+	isSubagent?: boolean;
 };
 
 export type ExtractedContent = {
