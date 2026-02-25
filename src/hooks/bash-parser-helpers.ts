@@ -1,4 +1,7 @@
 import { runParser, stringParserInputCompanion } from '@futpib/parser';
+import { runUnparser } from '@futpib/parser/build/unparser.js';
+import { stringUnparserOutputCompanion } from '@futpib/parser/build/unparserOutputCompanion.js';
+import { bashScriptUnparser } from '@futpib/parser/build/bashUnparser.js';
 import { bashScriptParser } from '@futpib/parser/build/bashParser.js';
 import type {
 	BashCommand,
@@ -194,6 +197,37 @@ export async function hasChainOperators(command: string): Promise<boolean> {
 	}
 
 	return false;
+}
+
+async function collectString(asyncIterable: AsyncIterable<string>): Promise<string> {
+	let result = '';
+	for await (const chunk of asyncIterable) {
+		result += chunk;
+	}
+
+	return result;
+}
+
+/**
+ * Splits a chained command into individual command strings using the bash unparser.
+ * Returns undefined if the command has no chain operators or parsing fails.
+ */
+export async function getChainedCommandStrings(command: string): Promise<string[] | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast || ast.entries.length < 2) {
+		return undefined;
+	}
+
+	const commands = await Promise.all(ast.entries.map(async entry => {
+		const singleCommand: BashCommand = {
+			type: 'list',
+			entries: [ { pipeline: entry.pipeline } ],
+		};
+		const text = await collectString(runUnparser(bashScriptUnparser, singleCommand, stringUnparserOutputCompanion));
+		return text.trim();
+	}));
+
+	return commands;
 }
 
 /**

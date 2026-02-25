@@ -42,12 +42,20 @@ export const banCommandChaining: Rule = {
 			}
 		}
 
+		const individualCommands = await context.helpers.getChainedCommandStrings(context.command);
+		const messages = [
+			'❌ Chaining bash commands with &&, ||, ;, or newline is not allowed',
+			'Please run commands separately for better tracking and error handling.',
+		];
+		if (individualCommands) {
+			for (const cmd of individualCommands) {
+				messages.push(`  Bash(${cmd})`);
+			}
+		}
+
 		return {
 			type: 'violation',
-			messages: [
-				'❌ Chaining bash commands with &&, ||, ;, or newline is not allowed',
-				'Please run commands separately for better tracking and error handling.',
-			],
+			messages,
 		};
 	},
 };

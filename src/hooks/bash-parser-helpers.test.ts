@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, hasYarnCwdFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, hasYarnCwdFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget, getChainedCommandStrings,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -399,4 +399,33 @@ test('getLeadingCdTarget - returns undefined for non-cd chains', async t => {
 
 test('getLeadingCdTarget - returns undefined for single commands', async t => {
 	t.is(await getLeadingCdTarget('git status'), undefined);
+});
+
+test('getChainedCommandStrings - splits && chained commands', async t => {
+	const result = await getChainedCommandStrings('git add . && git commit -m "message"');
+	t.truthy(result);
+	t.is(result!.length, 2);
+	t.is(result![0], 'git add .');
+	t.is(result![1], 'git commit -m "message"');
+});
+
+test('getChainedCommandStrings - splits semicolon chained commands', async t => {
+	const result = await getChainedCommandStrings('echo hello; echo world');
+	t.truthy(result);
+	t.is(result!.length, 2);
+	t.is(result![0], 'echo hello');
+	t.is(result![1], 'echo world');
+});
+
+test('getChainedCommandStrings - returns undefined for single command', async t => {
+	t.is(await getChainedCommandStrings('git status'), undefined);
+});
+
+test('getChainedCommandStrings - splits three chained commands', async t => {
+	const result = await getChainedCommandStrings('mkdir foo && cd foo && git init');
+	t.truthy(result);
+	t.is(result!.length, 3);
+	t.is(result![0], 'mkdir foo');
+	t.is(result![1], 'cd foo');
+	t.is(result![2], 'git init');
 });
