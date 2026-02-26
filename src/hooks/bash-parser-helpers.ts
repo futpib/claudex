@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { runParser, stringParserInputCompanion } from '@futpib/parser';
 import { runUnparser } from '@futpib/parser/build/unparser.js';
 import { stringUnparserOutputCompanion } from '@futpib/parser/build/unparserOutputCompanion.js';
@@ -515,6 +516,53 @@ export async function hasGitChangeDirectoryFlag(command: string): Promise<boolea
 }
 
 /**
+ * Returns the git command string with -C <path> removed.
+ * Returns undefined if parsing fails or if -C is not found.
+ */
+export async function getGitCommandWithoutC(command: string): Promise<string | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	let modified = false;
+
+	for (const entry of ast.entries) {
+		for (const unit of entry.pipeline.commands) {
+			if (unit.type !== 'simple' || !unit.name) {
+				continue;
+			}
+
+			const name = getWordLiteralValue(unit.name);
+			if (name !== 'git') {
+				continue;
+			}
+
+			const newArgs: BashWord[] = [];
+			for (let i = 0; i < unit.args.length; i++) {
+				const value = getWordLiteralValue(unit.args[i]);
+				if (value === '-C' && i + 1 < unit.args.length) {
+					i++; // Skip -C and its path argument
+					modified = true;
+					continue;
+				}
+
+				newArgs.push(unit.args[i]);
+			}
+
+			unit.args = newArgs;
+		}
+	}
+
+	if (!modified) {
+		return undefined;
+	}
+
+	const text = await collectString(runUnparser(bashScriptUnparser, ast, stringUnparserOutputCompanion));
+	return text.trim();
+}
+
+/**
  * Checks if a cargo command uses the --manifest-path flag.
  */
 /**
@@ -654,6 +702,111 @@ export async function hasCargoManifestPathFlag(command: string): Promise<boolean
 
 		return false;
 	});
+}
+
+/**
+ * Extracts the --manifest-path value and returns the cargo command without it.
+ * Returns undefined if parsing fails or --manifest-path is not found.
+ */
+export async function getCargoManifestPathInfo(command: string): Promise<{ path: string; commandWithout: string } | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	let manifestPath: string | undefined;
+
+	for (const entry of ast.entries) {
+		for (const unit of entry.pipeline.commands) {
+			if (unit.type !== 'simple' || !unit.name) {
+				continue;
+			}
+
+			const name = getWordLiteralValue(unit.name);
+			if (name !== 'cargo') {
+				continue;
+			}
+
+			const newArgs: BashWord[] = [];
+			for (let i = 0; i < unit.args.length; i++) {
+				const value = getWordLiteralValue(unit.args[i]);
+				if (value === '--manifest-path' && i + 1 < unit.args.length) {
+					manifestPath = getWordLiteralValue(unit.args[i + 1]);
+					i++;
+					continue;
+				}
+
+				if (value?.startsWith('--manifest-path=')) {
+					manifestPath = value.slice('--manifest-path='.length);
+					continue;
+				}
+
+				newArgs.push(unit.args[i]);
+			}
+
+			unit.args = newArgs;
+		}
+	}
+
+	if (!manifestPath) {
+		return undefined;
+	}
+
+	const text = await collectString(runUnparser(bashScriptUnparser, ast, stringUnparserOutputCompanion));
+	const dir = manifestPath.endsWith('/Cargo.toml') ? manifestPath.slice(0, -'/Cargo.toml'.length) : path.dirname(manifestPath);
+	return { path: dir, commandWithout: text.trim() };
+}
+
+/**
+ * Extracts the --cwd value and returns the yarn command without it.
+ * Returns undefined if parsing fails or --cwd is not found.
+ */
+export async function getYarnCwdInfo(command: string): Promise<{ path: string; commandWithout: string } | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	let cwdPath: string | undefined;
+
+	for (const entry of ast.entries) {
+		for (const unit of entry.pipeline.commands) {
+			if (unit.type !== 'simple' || !unit.name) {
+				continue;
+			}
+
+			const name = getWordLiteralValue(unit.name);
+			if (name !== 'yarn') {
+				continue;
+			}
+
+			const newArgs: BashWord[] = [];
+			for (let i = 0; i < unit.args.length; i++) {
+				const value = getWordLiteralValue(unit.args[i]);
+				if (value === '--cwd' && i + 1 < unit.args.length) {
+					cwdPath = getWordLiteralValue(unit.args[i + 1]);
+					i++;
+					continue;
+				}
+
+				if (value?.startsWith('--cwd=')) {
+					cwdPath = value.slice('--cwd='.length);
+					continue;
+				}
+
+				newArgs.push(unit.args[i]);
+			}
+
+			unit.args = newArgs;
+		}
+	}
+
+	if (!cwdPath) {
+		return undefined;
+	}
+
+	const text = await collectString(runUnparser(bashScriptUnparser, ast, stringUnparserOutputCompanion));
+	return { path: cwdPath, commandWithout: text.trim() };
 }
 
 /**

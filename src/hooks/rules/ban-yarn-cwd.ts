@@ -13,13 +13,26 @@ export const banYarnCwd: Rule = {
 			return { type: 'pass' };
 		}
 
+		const yarnInfo = await context.helpers.getYarnCwdInfo(context.command);
+		if (yarnInfo) {
+			return {
+				type: 'violation',
+				messages: [
+					'❌ yarn --cwd is not allowed',
+					'Running yarn commands with a different working directory is not permitted.',
+					'Please change directory first, then run the yarn command:',
+					`  Bash(cd ${yarnInfo.path})`,
+					`  Bash(${yarnInfo.commandWithout})`,
+				],
+			};
+		}
+
 		if (await context.helpers.hasYarnCwdFlag(context.command)) {
 			return {
 				type: 'violation',
 				messages: [
 					'❌ yarn --cwd is not allowed',
 					'Running yarn commands with a different working directory is not permitted.',
-					'Please cd to the target directory and run yarn commands there instead.',
 				],
 			};
 		}

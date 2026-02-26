@@ -1,6 +1,6 @@
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, hasYarnCwdFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget, getChainedCommandStrings,
+	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, hasYarnCwdFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget, getChainedCommandStrings, getGitCommandWithoutC, getCargoManifestPathInfo, getYarnCwdInfo,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -428,4 +428,49 @@ test('getChainedCommandStrings - splits three chained commands', async t => {
 	t.is(result![0], 'mkdir foo');
 	t.is(result![1], 'cd foo');
 	t.is(result![2], 'git init');
+});
+
+test('getGitCommandWithoutC - removes -C flag and path', async t => {
+	const result = await getGitCommandWithoutC('git -C ~/code/iroh-ssh log --oneline -5 flutter');
+	t.is(result, 'git log --oneline -5 flutter');
+});
+
+test('getGitCommandWithoutC - returns undefined for command without -C', async t => {
+	t.is(await getGitCommandWithoutC('git status'), undefined);
+});
+
+test('getCargoManifestPathInfo - extracts path and command without --manifest-path', async t => {
+	const result = await getCargoManifestPathInfo('cargo build --manifest-path ~/code/myproject/Cargo.toml --release');
+	t.truthy(result);
+	t.is(result!.path, '~/code/myproject');
+	t.is(result!.commandWithout, 'cargo build --release');
+});
+
+test('getCargoManifestPathInfo - handles --manifest-path=value format', async t => {
+	const result = await getCargoManifestPathInfo('cargo test --manifest-path=foo/Cargo.toml');
+	t.truthy(result);
+	t.is(result!.path, 'foo');
+	t.is(result!.commandWithout, 'cargo test');
+});
+
+test('getCargoManifestPathInfo - returns undefined without --manifest-path', async t => {
+	t.is(await getCargoManifestPathInfo('cargo build --release'), undefined);
+});
+
+test('getYarnCwdInfo - extracts path and command without --cwd', async t => {
+	const result = await getYarnCwdInfo('yarn --cwd ~/code/myproject install');
+	t.truthy(result);
+	t.is(result!.path, '~/code/myproject');
+	t.is(result!.commandWithout, 'yarn install');
+});
+
+test('getYarnCwdInfo - handles --cwd=value format', async t => {
+	const result = await getYarnCwdInfo('yarn --cwd=foo/bar build');
+	t.truthy(result);
+	t.is(result!.path, 'foo/bar');
+	t.is(result!.commandWithout, 'yarn build');
+});
+
+test('getYarnCwdInfo - returns undefined without --cwd', async t => {
+	t.is(await getYarnCwdInfo('yarn install'), undefined);
 });

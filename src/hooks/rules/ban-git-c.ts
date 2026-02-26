@@ -40,12 +40,15 @@ export const banGitC: Rule = {
 			};
 		}
 
+		const gitCommand = await context.helpers.getGitCommandWithoutC(context.command);
 		return {
 			type: 'violation',
 			messages: [
 				'❌ git -C is not allowed',
 				'Running git commands in a different directory is not permitted.',
-				'Please cd to the target directory and run git commands there instead.',
+				'Please change directory first, then run the git command:',
+				`  Bash(cd ${gitChangeDirPath})`,
+				...(gitCommand ? [ `  Bash(${gitCommand})` ] : []),
 			],
 		};
 	},
