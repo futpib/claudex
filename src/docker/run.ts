@@ -19,6 +19,22 @@ import { ensureDockerImage, refreshDockerStagesInBackground } from './build.js';
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
 
+const defaultPidsLimit = 32_768 / 16;
+
+async function getDockerPidsLimit(): Promise<number> {
+	try {
+		const content = await fs.readFile('/proc/sys/kernel/pid_max', 'utf8');
+		const pidMax = Number.parseInt(content.trim(), 10);
+		if (Number.isFinite(pidMax) && pidMax > 0) {
+			return Math.max(64, Math.floor(pidMax / 16));
+		}
+	} catch {
+		// Fall back to default
+	}
+
+	return defaultPidsLimit;
+}
+
 async function isDirectory(filePath: string): Promise<boolean> {
 	try {
 		const stat = await fs.stat(filePath);
@@ -189,6 +205,8 @@ export async function runDockerContainer(parameters: {
 		'--rm',
 		'-it',
 		...(dockerSudo ? [] : [ '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges' ]),
+		...(config.dockerIpcPrivate === false ? [] : [ '--ipc=private' ]),
+		...(config.dockerPidsLimit === false ? [] : [ '--pids-limit', String(await getDockerPidsLimit()) ]),
 		'--name',
 		containerName,
 		'-v',

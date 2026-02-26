@@ -165,6 +165,10 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 	// DockerAllowDangerouslySkipPermissions: overlay takes precedence if defined, otherwise use base
 	const dockerAllowDangerouslySkipPermissions = overlay.dockerAllowDangerouslySkipPermissions ?? base.dockerAllowDangerouslySkipPermissions;
 
+	const dockerIpcPrivate = overlay.dockerIpcPrivate ?? base.dockerIpcPrivate;
+
+	const dockerPidsLimit = overlay.dockerPidsLimit ?? base.dockerPidsLimit;
+
 	return {
 		profiles: profiles.length > 0 ? profiles : undefined,
 		packages: packages.length > 0 ? packages : undefined,
@@ -188,6 +192,8 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		launcher,
 		dockerDangerouslySkipPermissions,
 		dockerAllowDangerouslySkipPermissions,
+		dockerIpcPrivate,
+		dockerPidsLimit,
 	};
 }
 
@@ -366,6 +372,8 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		launcher: config.launcher,
 		dockerDangerouslySkipPermissions: config.dockerDangerouslySkipPermissions,
 		dockerAllowDangerouslySkipPermissions: config.dockerAllowDangerouslySkipPermissions,
+		dockerIpcPrivate: config.dockerIpcPrivate,
+		dockerPidsLimit: config.dockerPidsLimit,
 		// Profiles references are consumed during resolution and not carried to final output
 	};
 }

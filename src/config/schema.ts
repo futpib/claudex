@@ -44,6 +44,8 @@ export const baseConfigSchema = z.object({
 	launcher: z.string().optional(), // Name of launcher to use (e.g. "ollama")
 	dockerDangerouslySkipPermissions: z.boolean().optional(),
 	dockerAllowDangerouslySkipPermissions: z.boolean().optional(),
+	dockerIpcPrivate: z.boolean().optional(), // Default true - use --ipc=private for IPC namespace isolation
+	dockerPidsLimit: z.boolean().optional(), // Default true - limit container PIDs to host pid_max / 16
 });
 
 // Launcher definition schema - extends base config with launcher-specific fields
