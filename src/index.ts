@@ -18,7 +18,7 @@ import {
 import { isUnsafeDirectory } from './safety.js';
 import { isErrnoException } from './utils.js';
 import { type SshAgentInfo } from './ssh/agent.js';
-import { buildAddDirArgs, runDockerContainer } from './docker/run.js';
+import { buildAddDirArgs, getContainerPrefix, runDockerContainer } from './docker/run.js';
 import { resolveLauncherDefinition, buildLauncherCommand } from './launcher.js';
 
 async function ensureMcpServerConfig(projectRoot: string) {
@@ -242,10 +242,12 @@ export async function main() {
 	await program.parseAsync(process.argv);
 }
 
-export async function findRunningContainer(cwd: string, specificName?: string): Promise<string> {
+export type ExecaFn = (command: string, args: string[]) => Promise<{ stdout: string }>;
+
+export async function findRunningContainer(cwd: string, specificName?: string, execaFn: ExecaFn = execa): Promise<string> {
 	if (specificName) {
 		// Verify the specific container is running
-		const result = await execa('docker', [ 'ps', '--filter', `name=^${specificName}$`, '--format', '{{.Names}}' ]);
+		const result = await execaFn('docker', [ 'ps', '--filter', `name=^${specificName}$`, '--format', '{{.Names}}' ]);
 		const containers = result.stdout.split('\n').filter(Boolean);
 		if (containers.length === 0) {
 			throw new Error(`Container '${specificName}' is not running.`);
@@ -254,10 +256,10 @@ export async function findRunningContainer(cwd: string, specificName?: string): 
 		return containers[0];
 	}
 
+	const containerPrefix = getContainerPrefix(cwd);
 	const cwdBasename = path.basename(cwd);
-	const containerPrefix = `claudex-${cwdBasename}-`;
 
-	const result = await execa('docker', [ 'ps', '--filter', `name=${containerPrefix}`, '--format', '{{.Names}}' ]);
+	const result = await execaFn('docker', [ 'ps', '--filter', `name=^${containerPrefix}`, '--format', '{{.Names}}' ]);
 	const containers = result.stdout.split('\n').filter(Boolean);
 
 	if (containers.length === 0) {

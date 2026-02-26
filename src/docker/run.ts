@@ -28,6 +28,11 @@ async function isDirectory(filePath: string): Promise<boolean> {
 	}
 }
 
+export function getContainerPrefix(cwd: string): string {
+	const cwdBasename = path.basename(cwd);
+	return `claudex-${cwdBasename}-`;
+}
+
 export async function buildAddDirArgs(config: ClaudexConfig, cwd: string, projectRoot: string, profileVolumes: string[] = []): Promise<string[]> {
 	if (config.shareAdditionalDirectories === false || !config.volumes?.length) {
 		return [];
@@ -174,8 +179,7 @@ export async function runDockerContainer(parameters: {
 	const { username, projectRoot, imageName, dockerfileContent } = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
 	void refreshDockerStagesInBackground(dockerfileContent);
 	const randomSuffix = Math.random().toString(36).slice(2, 8);
-	const cwdBasename = path.basename(cwd);
-	const containerName = `claudex-${cwdBasename}-${randomSuffix}`;
+	const containerName = `${getContainerPrefix(cwd)}${randomSuffix}`;
 	const homeDir = os.homedir();
 	const claudeConfigDir = path.join(homeDir, '.claude');
 	const claudeConfigFile = path.join(homeDir, '.claude.json');
