@@ -16,7 +16,7 @@ import {
 	configMain, configMainFromArgv, type Scope, type ParsedArgs,
 } from './config-cli.js';
 import { isUnsafeDirectory } from './safety.js';
-import { isErrnoException } from './utils.js';
+import { isErrnoException, collapseHomedir } from './utils.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, getContainerPrefix, runDockerContainer } from './docker/run.js';
 import { resolveLauncherDefinition, buildLauncherCommand } from './launcher.js';
@@ -424,7 +424,20 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	}
 
 	if (useDocker) {
-		const { config, profileVolumes } = await getMergedConfig(cwd);
+		const { config, profileVolumes, group, profiles, project } = await getMergedConfig(cwd);
+
+		if (project) {
+			console.error(`Project: ${collapseHomedir(project)}`);
+		}
+
+		if (group) {
+			console.error(`Group: ${group}`);
+		}
+
+		if (profiles && profiles.length > 0) {
+			console.error(`Profiles: ${profiles.join(', ')}`);
+		}
+
 		const cliInDockerPath = path.join(projectRoot, 'build', 'cli-in-docker.js');
 
 		const dockerClaudeArgs = [

@@ -315,7 +315,7 @@ export function mergeRootConfigs(base: RootConfig, overlay: RootConfig): RootCon
 	};
 }
 
-function findMatchingProject(rootConfig: RootConfig, cwd: string): ProjectConfig | undefined {
+function findMatchingProject(rootConfig: RootConfig, cwd: string): { path: string; config: ProjectConfig } | undefined {
 	if (!rootConfig.projects) {
 		return undefined;
 	}
@@ -330,7 +330,7 @@ function findMatchingProject(rootConfig: RootConfig, cwd: string): ProjectConfig
 		}
 	}
 
-	return bestMatch?.config;
+	return bestMatch;
 }
 
 function resolveGroup(rootConfig: RootConfig, groupName: string): BaseConfig | undefined {
@@ -442,6 +442,8 @@ export type MergedConfigResult = {
 	profileVolumes: string[];
 	launcherDefinitions: Record<string, LauncherDefinition> | undefined;
 	group: string | undefined;
+	profiles: string[] | undefined;
+	project: string | undefined;
 };
 
 // Legacy function for backward compatibility - deprecated
@@ -466,24 +468,27 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 	let merged: ClaudexConfig = extractBaseConfig(rootConfig);
 
 	if (worktreeParent) {
-		const parentProjectConfig = findMatchingProject(rootConfig, worktreeParent);
-		if (parentProjectConfig) {
-			merged = mergeProjectConfig(rootConfig, merged, parentProjectConfig);
+		const parentProjectMatch = findMatchingProject(rootConfig, worktreeParent);
+		if (parentProjectMatch) {
+			merged = mergeProjectConfig(rootConfig, merged, parentProjectMatch.config);
 		}
 	}
 
-	const projectConfig = findMatchingProject(rootConfig, resolutionPath);
-	if (projectConfig) {
-		merged = mergeProjectConfig(rootConfig, merged, projectConfig);
+	const projectMatch = findMatchingProject(rootConfig, resolutionPath);
+	if (projectMatch) {
+		merged = mergeProjectConfig(rootConfig, merged, projectMatch.config);
 	}
+
+	// Capture profile names before resolveProfiles strips them
+	const { profiles } = merged;
 
 	// Resolve profile references into the merged config
 	const { config: resolvedConfig, profileVolumes } = resolveProfiles(rootConfig, merged);
 	merged = resolvedConfig;
 
 	// Auto-share volumes between group members (shareVolumes defaults to true)
-	if (merged.shareVolumes !== false && projectConfig?.group) {
-		const siblingPaths = getGroupSiblingPaths(rootConfig, projectConfig.group, resolutionPath);
+	if (merged.shareVolumes !== false && projectMatch?.config.group) {
+		const siblingPaths = getGroupSiblingPaths(rootConfig, projectMatch.config.group, resolutionPath);
 		if (siblingPaths.length > 0) {
 			const siblingVolumes: Volume[] = siblingPaths;
 			merged = {
@@ -506,6 +511,8 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 		configFiles,
 		profileVolumes,
 		launcherDefinitions: rootConfig.launcherDefinitions,
-		group: projectConfig?.group,
+		group: projectMatch?.config.group,
+		profiles: profiles && profiles.length > 0 ? profiles : undefined,
+		project: projectMatch?.path,
 	};
 }
