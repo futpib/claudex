@@ -26,7 +26,7 @@ import { getGitWorktreeParentPath } from './git.js';
 import { allConfigKeys } from './hooks/rules/index.js';
 import { collapseHomedir, expandTilde } from './utils.js';
 
-export type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'group' | 'ungroup';
+export type Action = 'list' | 'get' | 'set' | 'add' | 'remove' | 'unset' | 'keys' | 'group' | 'ungroup' | 'profile' | 'unprofile';
 
 export type Scope =
 	| { type: 'project'; path: string; fromCwd?: boolean }
@@ -125,7 +125,23 @@ function parseArgs(argv: string[]): ParsedArgs {
 	const action = positionals[0] as Action;
 	const key = positionals[1];
 	const value = positionals[2];
-	const extraValues = (action === 'add' || action === 'group') ? positionals.slice(2) : undefined;
+	const extraValues = (action === 'add' || action === 'group' || action === 'profile') ? positionals.slice(2) : undefined;
+
+	if (action === 'unprofile') {
+		if (isGlobal) {
+			if (scope) {
+				throw new Error('--global cannot be combined with --project or --group');
+			}
+
+			scope = { type: 'global' };
+		}
+
+		scope ??= { type: 'project', path: process.cwd(), fromCwd: true };
+
+		return {
+			action, scope, file, key: undefined, value: undefined, extraValues: positionals.slice(1), members,
+		};
+	}
 
 	if (action === 'ungroup') {
 		if (isGlobal) {
@@ -1070,6 +1086,119 @@ async function handleUngroup(paths: string[], file: string | undefined): Promise
 	printDiff(filePath, oldContent, serializeConfig(config));
 }
 
+async function handleProfile(name: string, paths: string[], file: string | undefined): Promise<void> {
+	const scope: Scope = { type: 'global' };
+	const filePath = await resolveWriteFile(scope, file);
+
+	let config: RootConfig;
+	try {
+		config = await readSingleConfigFile(filePath);
+	} catch {
+		config = {};
+	}
+
+	const oldContent = serializeConfig(config);
+
+	// Auto-create profile only if it doesn't exist in any config file
+	const allFiles = await readAllConfigFiles();
+	const profileExistsGlobally = allFiles.some(entry => entry.config.profileDefinitions?.[name] !== undefined);
+	if (!profileExistsGlobally) {
+		config.profileDefinitions ??= {};
+		config.profileDefinitions[name] ??= {};
+	}
+
+	// Resolve all paths concurrently (worktree → parent repo, then tilde-collapse)
+	config.projects ??= {};
+	const resolvedPaths = await Promise.all(paths.map(async projectPath => {
+		let resolvedPath = path.resolve(projectPath);
+		const worktreeParent = await getGitWorktreeParentPath(resolvedPath);
+		if (worktreeParent) {
+			resolvedPath = worktreeParent;
+		}
+
+		return collapseHomedir(fs.realpathSync(resolvedPath));
+	}));
+
+	// Assign each project the profile
+	for (const resolvedPath of resolvedPaths) {
+		const existingKey = findProjectKey(config.projects, resolvedPath);
+		const key = existingKey ?? resolvedPath;
+		config.projects[key] ??= {};
+		const project = config.projects[key] as Record<string, unknown>;
+		const profiles = (project.profiles ?? []) as string[];
+		if (!profiles.includes(name)) {
+			profiles.push(name);
+		}
+
+		project.profiles = profiles;
+	}
+
+	await writeSingleConfigFile(filePath, config);
+	printDiff(filePath, oldContent, serializeConfig(config));
+}
+
+async function handleUnprofile(name: string, paths: string[], file: string | undefined): Promise<void> {
+	const scope: Scope = { type: 'global' };
+	const filePath = await resolveWriteFile(scope, file);
+
+	let config: RootConfig;
+	try {
+		config = await readSingleConfigFile(filePath);
+	} catch {
+		config = {};
+	}
+
+	const oldContent = serializeConfig(config);
+
+	if (!config.projects) {
+		await writeSingleConfigFile(filePath, config);
+		printDiff(filePath, oldContent, serializeConfig(config));
+		return;
+	}
+
+	// Resolve all paths concurrently (worktree → parent repo, then tilde-collapse)
+	const resolvedPaths = await Promise.all(paths.map(async projectPath => {
+		let resolvedPath = path.resolve(projectPath);
+		const worktreeParent = await getGitWorktreeParentPath(resolvedPath);
+		if (worktreeParent) {
+			resolvedPath = worktreeParent;
+		}
+
+		return collapseHomedir(fs.realpathSync(resolvedPath));
+	}));
+
+	// Remove profile from each project
+	for (const resolvedPath of resolvedPaths) {
+		const existingKey = findProjectKey(config.projects, resolvedPath);
+		if (!existingKey) {
+			continue;
+		}
+
+		const project = config.projects[existingKey] as Record<string, unknown>;
+		const profiles = project.profiles as string[] | undefined;
+		if (profiles) {
+			project.profiles = profiles.filter(p => p !== name);
+			if ((project.profiles as string[]).length === 0) {
+				delete project.profiles;
+			}
+		}
+
+		// Clean up empty project entries
+		if (Object.keys(project).length === 0) {
+			// eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+			delete config.projects[existingKey];
+		}
+	}
+
+	// Clean up empty projects object
+	if (Object.keys(config.projects).length === 0) {
+		delete config.projects;
+	}
+
+	await writeSingleConfigFile(filePath, config);
+	printDiff(filePath, oldContent, serializeConfig(config));
+}
+
 export async function configMainFromArgv(argv: string[]): Promise<void> {
 	return configMain(parseArgs(argv));
 }
@@ -1168,6 +1297,29 @@ export async function configMain(parsed: ParsedArgs): Promise<void> {
 			}
 
 			await handleUngroup(parsed.extraValues, parsed.file);
+			break;
+		}
+
+		case 'profile': {
+			if (!parsed.key) {
+				throw new Error('profile requires a name argument');
+			}
+
+			if (!parsed.extraValues || parsed.extraValues.length === 0) {
+				throw new Error('profile requires at least one project path');
+			}
+
+			await handleProfile(parsed.key, parsed.extraValues, parsed.file);
+			break;
+		}
+
+		case 'unprofile': {
+			if (!parsed.extraValues || parsed.extraValues.length < 2) {
+				throw new Error('unprofile requires a name and at least one project path');
+			}
+
+			const [ name, ...paths ] = parsed.extraValues;
+			await handleUnprofile(name, paths, parsed.file);
 			break;
 		}
 	}

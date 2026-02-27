@@ -57,7 +57,7 @@ test('install --help exits 0 and lists options', async t => {
 test('config --help exits 0 and lists all actions as subcommands', async t => {
 	const { exitCode, stdout } = await runCli([ 'config', '--help' ]);
 	t.is(exitCode, 0);
-	for (const action of [ 'list', 'get', 'set', 'add', 'remove', 'unset' ]) {
+	for (const action of [ 'list', 'get', 'set', 'add', 'remove', 'unset', 'profile', 'unprofile' ]) {
 		t.true(stdout.includes(action), `config help should mention ${action}`);
 	}
 });

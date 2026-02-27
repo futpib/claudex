@@ -1476,6 +1476,234 @@ test('add stays on project when project already has own value for field', async 
 	t.is(typed.groupDefinitions.mygroup.packages, undefined);
 });
 
+// --- Config profile command tests ---
+
+test('config profile assigns profile to multiple projects', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projA = await createTemporaryDir('claudex-profile-a-');
+	await using projB = await createTemporaryDir('claudex-profile-b-');
+
+	const result = await runConfigWithDir(handle.configDir, [ 'profile', 'flutter', projA.dir, projB.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		profileDefinitions: Record<string, Record<string, unknown>>;
+		projects: Record<string, { profiles: string[] }>;
+	};
+	t.deepEqual(typed.profileDefinitions.flutter, {});
+	t.deepEqual(typed.projects[projA.dir].profiles, [ 'flutter' ]);
+	t.deepEqual(typed.projects[projB.dir].profiles, [ 'flutter' ]);
+});
+
+test('config profile auto-creates profileDefinition entry', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projC = await createTemporaryDir('claudex-profile-c-');
+
+	const result = await runConfigWithDir(handle.configDir, [ 'profile', 'newprofile', projC.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		profileDefinitions: Record<string, Record<string, unknown>>;
+		projects: Record<string, { profiles: string[] }>;
+	};
+	t.deepEqual(typed.profileDefinitions.newprofile, {});
+	t.deepEqual(typed.projects[projC.dir].profiles, [ 'newprofile' ]);
+});
+
+test('config profile preserves existing profileDefinition settings', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projD = await createTemporaryDir('claudex-profile-d-');
+
+	// Pre-create a profile with some settings
+	await runConfigWithDir(handle.configDir, [ 'set', '--profile', 'dev', 'settingSources', 'user' ]);
+
+	// Assign a project to the existing profile
+	const result = await runConfigWithDir(handle.configDir, [ 'profile', 'dev', projD.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		profileDefinitions: Record<string, { settingSources?: string }>;
+		projects: Record<string, { profiles: string[] }>;
+	};
+	t.is(typed.profileDefinitions.dev.settingSources, 'user');
+	t.deepEqual(typed.projects[projD.dir].profiles, [ 'dev' ]);
+});
+
+test('config profile is idempotent (does not duplicate)', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projF = await createTemporaryDir('claudex-profile-f-');
+
+	await runConfigWithDir(handle.configDir, [ 'profile', 'flutter', projF.dir ]);
+	const config1 = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+
+	// Run again with same path
+	const result = await runConfigWithDir(handle.configDir, [ 'profile', 'flutter', projF.dir ]);
+	t.is(result.exitCode, 0);
+	const config2 = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+
+	t.deepEqual(config1, config2);
+});
+
+test('config profile tilde-collapses paths', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryHomeDir('.claudex-test-profile-');
+
+	const result = await runConfigWithDir(handle.configDir, [ 'profile', 'flutter', project.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const { projects } = config as { projects: Record<string, unknown> };
+
+	const home = homedir();
+	const realHome = await realpath(home);
+	const realProjectDir = await realpath(project.dir);
+	const expectedTildePath = '~' + realProjectDir.slice(realHome.length);
+
+	t.truthy(projects[expectedTildePath], `expected project key ${expectedTildePath}`);
+	t.deepEqual((projects[expectedTildePath] as { profiles: string[] }).profiles, [ 'flutter' ]);
+	t.is(projects[project.dir], undefined, 'should not have absolute path key');
+});
+
+test('config profile outputs diff to stderr', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projE = await createTemporaryDir('claudex-profile-e-');
+
+	const result = await runConfigWithDir(handle.configDir, [ 'profile', 'flutter', projE.dir ]);
+	t.is(result.exitCode, 0);
+	t.true(result.stderr.includes('@@'), 'should have unified diff hunk header');
+	t.true(result.stderr.includes('flutter'), 'diff should mention the profile name');
+});
+
+test('config profile errors without paths', async t => {
+	await using handle = await createTemporaryConfigDir();
+
+	const result = await runConfigWithDir(handle.configDir, [ 'profile', 'flutter' ]);
+	t.not(result.exitCode, 0);
+});
+
+test('config profile does not create profileDefinitions when it exists in another file', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projG = await createTemporaryDir('claudex-profile-g-');
+
+	const claudexDir = path.join(handle.configDir, 'claudex');
+	const configJsonDirectory = path.join(claudexDir, 'config.json.d');
+	await mkdir(configJsonDirectory, { recursive: true });
+
+	// Define the profile in a separate config fragment file
+	await writeFile(
+		path.join(configJsonDirectory, '01-profiles.json'),
+		JSON.stringify({ profileDefinitions: { existingprofile: { settingSources: 'user' } } }),
+	);
+
+	// Now assign a project to that profile via the main config.json
+	const result = await runConfigWithDir(handle.configDir, [ 'profile', 'existingprofile', projG.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(claudexDir, 'config.json'));
+	const typed = config as {
+		profileDefinitions?: Record<string, Record<string, unknown>>;
+		projects: Record<string, { profiles: string[] }>;
+	};
+
+	// The project should be assigned to the profile
+	t.deepEqual(typed.projects[projG.dir].profiles, [ 'existingprofile' ]);
+
+	// ProfileDefinitions should NOT be created in config.json since it already exists elsewhere
+	t.is(typed.profileDefinitions, undefined);
+});
+
+// --- Config unprofile command tests ---
+
+test('config unprofile removes profile from projects', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projA = await createTemporaryDir('claudex-unprofile-a-');
+	await using projB = await createTemporaryDir('claudex-unprofile-b-');
+
+	// Assign both to a profile
+	await runConfigWithDir(handle.configDir, [ 'profile', 'flutter', projA.dir, projB.dir ]);
+
+	// Unprofile both
+	const result = await runConfigWithDir(handle.configDir, [ 'unprofile', 'flutter', projA.dir, projB.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		profileDefinitions?: Record<string, Record<string, unknown>>;
+		projects?: Record<string, { profiles?: string[] }>;
+	};
+	// Profile definition should remain
+	t.deepEqual(typed.profileDefinitions?.flutter, {});
+	// Projects should be cleaned up (empty after removing profiles)
+	t.is(typed.projects, undefined);
+});
+
+test('config unprofile cleans up empty profiles array and project entries', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projA = await createTemporaryDir('claudex-unprofile-cleanup-');
+
+	// Create a project with profile and another field
+	await runConfigWithDir(handle.configDir, [ 'profile', 'flutter', projA.dir ]);
+	await runConfigWithDir(handle.configDir, [ 'add', '--project', projA.dir, 'packages', 'vim' ]);
+
+	// Unprofile
+	const result = await runConfigWithDir(handle.configDir, [ 'unprofile', 'flutter', projA.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		projects?: Record<string, { profiles?: string[]; packages?: string[] }>;
+	};
+	// Project should still exist (has packages), but no profiles
+	t.truthy(typed.projects?.[projA.dir]);
+	t.is(typed.projects?.[projA.dir].profiles, undefined);
+	t.deepEqual(typed.projects?.[projA.dir].packages, [ 'vim' ]);
+});
+
+test('config unprofile is idempotent for projects without the profile', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projA = await createTemporaryDir('claudex-unprofile-idempotent-');
+
+	// Unprofiling a project that was never profiled is a no-op
+	const result = await runConfigWithDir(handle.configDir, [ 'unprofile', 'flutter', projA.dir ]);
+	t.is(result.exitCode, 0);
+});
+
+test('config unprofile errors without paths', async t => {
+	await using handle = await createTemporaryConfigDir();
+
+	const result = await runConfigWithDir(handle.configDir, [ 'unprofile', 'flutter' ]);
+	t.not(result.exitCode, 0);
+});
+
+test('config unprofile errors without name', async t => {
+	await using handle = await createTemporaryConfigDir();
+
+	const result = await runConfigWithDir(handle.configDir, [ 'unprofile' ]);
+	t.not(result.exitCode, 0);
+});
+
+test('config unprofile tilde-collapses paths', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryHomeDir('.claudex-test-unprofile-');
+
+	// Assign to profile (will tilde-collapse)
+	await runConfigWithDir(handle.configDir, [ 'profile', 'flutter', project.dir ]);
+
+	// Unprofile using the absolute path (should match tilde-collapsed key)
+	const result = await runConfigWithDir(handle.configDir, [ 'unprofile', 'flutter', project.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		projects?: Record<string, unknown>;
+	};
+	// Project should be cleaned up entirely (only had profiles field)
+	t.is(typed.projects, undefined);
+});
+
 test('profile scope resolves file when profile exists in specific config file', async t => {
 	await using handle = await createTemporaryConfigDir();
 

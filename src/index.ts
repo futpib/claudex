@@ -221,6 +221,31 @@ export async function main() {
 			});
 		});
 
+	configCommand.command('profile').description('Add a profile to projects')
+		.argument('<name>', 'Profile name')
+		.argument('<paths...>', 'Project paths to assign')
+		.option('--file <path>', 'Write to a specific file in config.json.d')
+		.passThroughOptions()
+		.action(async (name: string, paths: string[], options: { file?: string }) => {
+			await runConfigAction({
+				action: 'profile', scope: { type: 'global' }, file: options.file, key: name, extraValues: paths,
+			});
+		});
+
+	configCommand.command('unprofile').description('Remove a profile from projects')
+		.argument('<name>', 'Profile name')
+		.argument('<paths...>', 'Project paths to unprofile')
+		.option('--file <path>', 'Write to a specific file in config.json.d')
+		.passThroughOptions()
+		.action(async (name: string, paths: string[], options: { file?: string }) => {
+			await runConfigAction({
+				action: 'unprofile',
+				scope: { type: 'project', path: process.cwd(), fromCwd: true },
+				file: options.file,
+				extraValues: [ name, ...paths ],
+			});
+		});
+
 	program
 		.command('config-interactive')
 		.description('Interactive TUI for browsing and editing claudex configuration')
