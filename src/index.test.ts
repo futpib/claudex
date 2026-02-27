@@ -62,6 +62,15 @@ test('config --help exits 0 and lists all actions as subcommands', async t => {
 	}
 });
 
+for (const action of [ 'group', 'ungroup', 'profile', 'unprofile' ]) {
+	test(`config ${action} shows help after missing argument error`, async t => {
+		const { exitCode, stderr } = await runCli([ 'config', action ]);
+		t.not(exitCode, 0);
+		t.true(stderr.includes('Usage:'), `config ${action} error should include usage`);
+		t.true(stderr.includes('--help'), `config ${action} error should mention --help`);
+	});
+}
+
 for (const action of [ 'list', 'get', 'set', 'add', 'remove', 'unset' ]) {
 	test(`config ${action} --help exits 0 and lists scope options`, async t => {
 		const { exitCode, stdout } = await runCli([ 'config', action, '--help' ]);

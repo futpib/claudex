@@ -139,6 +139,7 @@ export async function main() {
 	const configCommand = program
 		.command('config')
 		.description('Manage claudex configuration')
+		.showHelpAfterError()
 		.enablePositionalOptions();
 
 	const scopeOptions = (cmd: Command) => cmd
