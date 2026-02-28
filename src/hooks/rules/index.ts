@@ -21,6 +21,7 @@ import { banOutdatedYearInSearch } from './ban-outdated-year-in-search.js';
 import { banWrongPackageManager } from './ban-wrong-package-manager.js';
 import { banAbsolutePaths } from './ban-absolute-paths.js';
 import { banHomeDirAbsolutePaths } from './ban-home-dir-absolute-paths.js';
+import { preferLocalGithubRepo } from './prefer-local-github-repo.js';
 import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
 import { logToolUse } from './log-tool-use.js';
 
@@ -78,6 +79,7 @@ export const allRules: Rule[] = [
 	banAbsolutePaths,
 	banHomeDirAbsolutePaths,
 	banWrongPackageManager,
+	preferLocalGithubRepo,
 	requireCoAuthorshipProof,
 	logToolUse,
 ];

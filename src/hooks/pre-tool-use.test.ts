@@ -1164,6 +1164,137 @@ test('allows grep when hooks not configured', async t => {
 	t.is(result.exitCode, 0);
 });
 
+// --- prefer-local-github-repo ---
+
+function createWebFetchToolInput(url: string): Record<string, unknown> {
+	return {
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		session_id: 'test-session',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		transcript_path: '/tmp/test-transcript',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		tool_name: 'WebFetch',
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		tool_input: {
+			url,
+			prompt: 'read the file',
+		},
+	};
+}
+
+test('blocks WebFetch to raw.githubusercontent.com when sibling repo with .git exists', async t => {
+	const parentDir = await mkdtemp(path.join(tmpdir(), 'claudex-test-'));
+	const projectDir = path.join(parentDir, 'my-project');
+	const siblingDir = path.join(parentDir, 'iroh-ssh-android');
+	await mkdir(projectDir, { recursive: true });
+	await mkdir(path.join(siblingDir, '.git'), { recursive: true });
+	await using config = await createHooksConfig({ preferLocalGithubRepo: true });
+
+	try {
+		const result = await runHook(
+			createWebFetchToolInput('https://raw.githubusercontent.com/futpib/iroh-ssh-android/master/README.md'),
+			projectDir,
+			{
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: config.configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('iroh-ssh-android'));
+		t.true(result.stderr.includes('cloned locally'));
+	} finally {
+		await rm(parentDir, { recursive: true });
+	}
+});
+
+test('blocks WebFetch to github.com blob URL when sibling repo with .git exists', async t => {
+	const parentDir = await mkdtemp(path.join(tmpdir(), 'claudex-test-'));
+	const projectDir = path.join(parentDir, 'my-project');
+	const siblingDir = path.join(parentDir, 'iroh-ssh-android');
+	await mkdir(projectDir, { recursive: true });
+	await mkdir(path.join(siblingDir, '.git'), { recursive: true });
+	await using config = await createHooksConfig({ preferLocalGithubRepo: true });
+
+	try {
+		const result = await runHook(
+			createWebFetchToolInput('https://github.com/futpib/iroh-ssh-android/blob/master/README.md'),
+			projectDir,
+			{
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: config.configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('iroh-ssh-android'));
+		t.true(result.stderr.includes('cloned locally'));
+	} finally {
+		await rm(parentDir, { recursive: true });
+	}
+});
+
+test('allows WebFetch when sibling dir does not exist', async t => {
+	const parentDir = await mkdtemp(path.join(tmpdir(), 'claudex-test-'));
+	const projectDir = path.join(parentDir, 'my-project');
+	await mkdir(projectDir, { recursive: true });
+	await using config = await createHooksConfig({ preferLocalGithubRepo: true });
+
+	try {
+		const result = await runHook(
+			createWebFetchToolInput('https://raw.githubusercontent.com/futpib/iroh-ssh-android/master/README.md'),
+			projectDir,
+			{
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: config.configDir,
+			},
+		);
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await rm(parentDir, { recursive: true });
+	}
+});
+
+test('allows WebFetch when sibling dir exists but has no .git', async t => {
+	const parentDir = await mkdtemp(path.join(tmpdir(), 'claudex-test-'));
+	const projectDir = path.join(parentDir, 'my-project');
+	const siblingDir = path.join(parentDir, 'iroh-ssh-android');
+	await mkdir(projectDir, { recursive: true });
+	await mkdir(siblingDir, { recursive: true });
+	await using config = await createHooksConfig({ preferLocalGithubRepo: true });
+
+	try {
+		const result = await runHook(
+			createWebFetchToolInput('https://raw.githubusercontent.com/futpib/iroh-ssh-android/master/README.md'),
+			projectDir,
+			{
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: config.configDir,
+			},
+		);
+
+		t.is(result.exitCode, 0);
+	} finally {
+		await rm(parentDir, { recursive: true });
+	}
+});
+
+test('allows WebFetch to non-GitHub URLs', async t => {
+	await using config = await createHooksConfig({ preferLocalGithubRepo: true });
+
+	const result = await runHook(
+		createWebFetchToolInput('https://docs.rs/iroh/latest/iroh/'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 0);
+});
+
 test('accepts unknown tool names not in any schema', async t => {
 	await using config = await createHooksConfig({});
 
