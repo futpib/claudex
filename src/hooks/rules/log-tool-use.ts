@@ -3,7 +3,7 @@ import type { KnownToolInput } from '../schemas.js';
 import type { Rule } from './index.js';
 
 // Skip logging for read-only tools and internal tools
-const readOnlyTools = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
+const readOnlyTools = new Set([ 'Grep', 'LS', 'Glob', 'NotebookRead', 'BashOutput' ]);
 const internalTools = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
 
 function omitLongFields(input: KnownToolInput): unknown {
@@ -19,6 +19,11 @@ function omitLongFields(input: KnownToolInput): unknown {
 
 	if (input.tool_name === 'Write') {
 		const { content, ...rest } = input.tool_input;
+		return rest;
+	}
+
+	if (input.tool_name === 'WebFetch') {
+		const { prompt, ...rest } = input.tool_input;
 		return rest;
 	}
 
