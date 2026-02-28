@@ -9,20 +9,30 @@ function createExecaStub(stdout = '') {
 }
 
 function withWindowId<T>(windowId: string | undefined, fn: () => T): T {
-	const saved = process.env.WINDOWID;
+	const savedWindowId = process.env.WINDOWID;
+	const savedTmux = process.env.TMUX;
 	if (windowId === undefined) {
 		delete process.env.WINDOWID;
 	} else {
 		process.env.WINDOWID = windowId;
 	}
 
+	// Prevent resolveWindowId from calling tmux during tests
+	delete process.env.TMUX;
+
 	try {
 		return fn();
 	} finally {
-		if (saved === undefined) {
+		if (savedWindowId === undefined) {
 			delete process.env.WINDOWID;
 		} else {
-			process.env.WINDOWID = saved;
+			process.env.WINDOWID = savedWindowId;
+		}
+
+		if (savedTmux === undefined) {
+			delete process.env.TMUX;
+		} else {
+			process.env.TMUX = savedTmux;
 		}
 	}
 }
