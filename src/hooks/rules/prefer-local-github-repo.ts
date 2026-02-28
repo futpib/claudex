@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { dirname, join } from 'node:path';
+import { collapseHomedir } from '../../utils.js';
 import type { Rule } from './index.js';
 
 const githubUrlPatterns = [
@@ -49,7 +50,7 @@ export const preferLocalGithubRepo: Rule = {
 		return {
 			type: 'violation',
 			messages: [
-				`❌ The repository "${repoName}" is cloned locally at ${siblingDir}`,
+				`❌ The repository "${repoName}" is cloned locally at ${collapseHomedir(siblingDir)}`,
 				'Read the files directly from the local directory instead of fetching from GitHub.',
 			],
 		};
