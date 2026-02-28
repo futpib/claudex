@@ -2,6 +2,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import os from 'node:os';
+import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { execa } from 'execa';
 import invariant from 'invariant';
@@ -122,4 +123,23 @@ export async function ensureHookSetup() {
 	if (needsUpdate) {
 		await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));
 	}
+}
+
+export async function ensureOpenCodePluginSetup() {
+	const pluginsDir = path.join(os.homedir(), '.config', 'opencode', 'plugins');
+	await fs.mkdir(pluginsDir, { recursive: true });
+
+	const buildDir = path.dirname(fileURLToPath(import.meta.url));
+	const pluginSource = path.join(buildDir, 'opencode-plugin.js');
+	const pluginLink = path.join(pluginsDir, 'claudex.js');
+
+	try {
+		await fs.unlink(pluginLink);
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
+	}
+
+	await fs.symlink(pluginSource, pluginLink);
 }

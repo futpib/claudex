@@ -1,5 +1,13 @@
 import { builtinLauncherDefinitions, type LauncherDefinition } from './config/index.js';
 
+export function isClaudeCodeLauncher(def: LauncherDefinition | undefined): boolean {
+	if (!def) {
+		return true;
+	}
+
+	return def.command.length === 1 && def.command[0] === 'claude';
+}
+
 export function resolveLauncherDefinition(
 	launcherName: string,
 	configLauncherDefinitions: Record<string, LauncherDefinition> | undefined,
@@ -42,9 +50,9 @@ export function buildLauncherCommand(
 		args.push('--model', model);
 	}
 
-	// For the bare "claude" launcher, don't insert "--" separator
-	const isBareClaude = def.command.length === 1 && def.command[0] === 'claude';
-	if (isBareClaude) {
+	// For bare single-command launchers (claude, opencode), don't insert "--" separator
+	const isBare = def.command.length === 1 && (def.command[0] === 'claude' || def.command[0] === 'opencode');
+	if (isBare) {
 		args.push(...claudeArgs);
 	} else {
 		args.push('--', ...claudeArgs);

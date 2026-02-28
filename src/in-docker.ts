@@ -6,8 +6,8 @@ import fs from 'node:fs/promises';
 import { execa } from 'execa';
 import { z } from 'zod';
 import { type LauncherDefinition } from './config/index.js';
-import { hookGroupSchema } from './hooks.js';
-import { buildLauncherCommand } from './launcher.js';
+import { hookGroupSchema, ensureOpenCodePluginSetup } from './hooks.js';
+import { buildLauncherCommand, isClaudeCodeLauncher } from './launcher.js';
 import { setupKnownHosts } from './ssh/known-hosts.js';
 import { setupHostPortForwarding } from './port-proxy/container.js';
 import { parseJsonWithSchema } from './hooks/shared.js';
@@ -120,6 +120,10 @@ export async function mainInDocker() {
 		if (launcherCommandJson) {
 			const launcherCommand = JSON.parse(launcherCommandJson) as string[];
 			const def: LauncherDefinition = { command: launcherCommand, model: launcherModel };
+			if (!isClaudeCodeLauncher(def)) {
+				await ensureOpenCodePluginSetup();
+			}
+
 			const { command, args } = buildLauncherCommand(def, undefined, claudeArgs);
 			await execa(command, args, {
 				stdin: process.stdin,

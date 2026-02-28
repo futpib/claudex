@@ -19,7 +19,7 @@ import { isUnsafeDirectory } from './safety.js';
 import { isErrnoException, collapseHomedir } from './utils.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, getContainerPrefix, runDockerContainer } from './docker/run.js';
-import { resolveLauncherDefinition, buildLauncherCommand } from './launcher.js';
+import { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher } from './launcher.js';
 
 async function ensureMcpServerConfig(projectRoot: string) {
 	const claudeJsonPath = path.join(os.homedir(), '.claude.json');
@@ -374,6 +374,13 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	await ensureHookSetup();
 
+	// Resolve launcher name early for opencode plugin setup
+	const effectiveLauncherName = cliLauncher ?? earlyConfig.config.launcher;
+	if (effectiveLauncherName === 'opencode') {
+		const { ensureOpenCodePluginSetup } = await import('./hooks.js');
+		await ensureOpenCodePluginSetup();
+	}
+
 	// Ensure MCP server is configured in ~/.claude.json
 	const currentFileUrl = import.meta.url;
 	const currentFilePath = fileURLToPath(currentFileUrl);
@@ -440,9 +447,10 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 		const cliInDockerPath = path.join(projectRoot, 'build', 'cli-in-docker.js');
 
+		const isClaude = isClaudeCodeLauncher(launcherDef);
 		const dockerClaudeArgs = [
-			...(config.dockerDangerouslySkipPermissions ? [ '--dangerously-skip-permissions' ] : []),
-			...(config.dockerAllowDangerouslySkipPermissions ? [ '--allow-dangerously-skip-permissions' ] : []),
+			...(isClaude && config.dockerDangerouslySkipPermissions ? [ '--dangerously-skip-permissions' ] : []),
+			...(isClaude && config.dockerAllowDangerouslySkipPermissions ? [ '--allow-dangerously-skip-permissions' ] : []),
 			...claudeArgs,
 		];
 
@@ -471,17 +479,17 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	} else {
 		// Load config for settingSources even in non-Docker mode
 		const { config, profileVolumes } = await getMergedConfig(cwd);
-		const settingSources = config.settingSources ?? 'user,local';
-		console.error(`Setting sources: ${settingSources}`);
+		const isClaude = isClaudeCodeLauncher(launcherDef);
 
-		const addDirArgs = await buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
+		const claudeFullArgs: string[] = [];
+		if (isClaude) {
+			const settingSources = config.settingSources ?? 'user,local';
+			console.error(`Setting sources: ${settingSources}`);
+			const addDirArgs = await buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
+			claudeFullArgs.push('--setting-sources', settingSources, ...addDirArgs);
+		}
 
-		const claudeFullArgs = [
-			'--setting-sources',
-			settingSources,
-			...addDirArgs,
-			...claudeArgs,
-		];
+		claudeFullArgs.push(...claudeArgs);
 
 		if (launcherDef) {
 			const { command: launcherCmd, args: launcherArgs } = buildLauncherCommand(launcherDef, cliModel, claudeFullArgs);
@@ -534,4 +542,4 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	}
 }
 
-export { resolveLauncherDefinition, buildLauncherCommand } from './launcher.js';
+export { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher } from './launcher.js';

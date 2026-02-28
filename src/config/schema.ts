@@ -83,6 +83,10 @@ export const builtinLauncherDefinitions: Record<string, LauncherDefinition> = {
 	claude: {
 		command: [ 'claude' ],
 	},
+	opencode: {
+		command: [ 'opencode' ],
+		volumes: [ '~/.local/share/opencode', '~/.config/opencode' ],
+	},
 	ollama: {
 		command: [ 'ollama', 'launch', 'claude' ],
 		packages: [ 'ollama' ],

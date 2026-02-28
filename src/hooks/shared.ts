@@ -55,7 +55,7 @@ export function formatTranscriptInfo(sessionId: string, transcriptPath: string):
 export async function logMessage(message: string): Promise<void> {
 	await sendHostMessage({
 		type: 'journal',
-		tag: 'claude-code',
+		tag: 'claudex',
 		priority: 'info',
 		message,
 	});

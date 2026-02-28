@@ -7,6 +7,7 @@ import {
 	expandVolumePaths, expandPathEnv,
 	type Volume, type ClaudexConfig, type LauncherDefinition,
 } from '../config/index.js';
+import { isClaudeCodeLauncher } from '../launcher.js';
 import { getGitWorktreeParentPath } from '../git.js';
 import { getSshKeys, getSshHosts, getFilteredKnownHosts } from '../ssh/known-hosts.js';
 import { shieldEnvVars } from '../secrets.js';
@@ -334,16 +335,23 @@ export async function runDockerContainer(parameters: {
 
 	dockerArgs.push('-w', cwd);
 
-	// Default to 'user,local' to ignore shared project .claude/ but allow local overrides
-	const settingSources = config.settingSources ?? 'user,local';
-	console.error(`Setting sources: ${settingSources}`);
+	const isClaude = isClaudeCodeLauncher(launcherDef);
 
-	const addDirArgs = await buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
+	// Claude-specific args: --setting-sources, --add-dir, permission flags
+	const claudeSpecificArgs: string[] = [];
+	if (isClaude) {
+		const settingSources = config.settingSources ?? 'user,local';
+		console.error(`Setting sources: ${settingSources}`);
+		claudeSpecificArgs.push('--setting-sources', settingSources);
+
+		const addDirArgs = await buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
+		claudeSpecificArgs.push(...addDirArgs);
+	}
 
 	if (useDockerShell) {
 		dockerArgs.push('--entrypoint', 'bash', imageName);
 	} else {
-		dockerArgs.push('--entrypoint', 'node', imageName, cliInDockerPath, '--setting-sources', settingSources, ...addDirArgs, ...claudeArgs);
+		dockerArgs.push('--entrypoint', 'node', imageName, cliInDockerPath, ...claudeSpecificArgs, ...claudeArgs);
 	}
 
 	const childProcess = execa('docker', dockerArgs, {

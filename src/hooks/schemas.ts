@@ -100,7 +100,7 @@ export const killBashToolInputSchema = z.object({
 
 export const baseToolInputSchema = z.object({
 	session_id: z.string(),
-	transcript_path: z.string(),
+	transcript_path: z.string().optional(),
 });
 
 export const knownToolInputSchema = z.union([

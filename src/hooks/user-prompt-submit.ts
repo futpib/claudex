@@ -10,7 +10,7 @@ import {
 
 const userPromptSubmitInputSchema = z.object({
 	session_id: z.string(),
-	transcript_path: z.string(),
+	transcript_path: z.string().optional(),
 	cwd: z.string(),
 	hook_event_name: z.literal('UserPromptSubmit'),
 	prompt: z.string(),
@@ -20,7 +20,7 @@ async function main() {
 	const input = await readStdin();
 	const hookInput = parseJsonWithSchema(input, userPromptSubmitInputSchema);
 	const sessionId = hookInput.session_id || '';
-	const transcriptPath = hookInput.transcript_path || '';
+	const transcriptPath = hookInput.transcript_path ?? '';
 	const prompt = hookInput.prompt || '';
 
 	const transcriptInfo = formatTranscriptInfo(sessionId, transcriptPath);

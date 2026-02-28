@@ -28,7 +28,7 @@ ARG USERNAME=claude
 # Install system dependencies (as root)
 RUN --mount=type=cache,target=/var/cache/pacman/pkg \
 	--mount=type=cache,target=/var/lib/pacman/sync \
-	pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh socat nodejs
+	pacman -Syu --noconfirm git bash base-devel sudo ripgrep fd jq openssh socat nodejs opencode
 
 # Install official repo packages from PACKAGES early (while yay builds in parallel)
 ARG PACKAGES=""
