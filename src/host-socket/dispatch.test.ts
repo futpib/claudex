@@ -119,16 +119,16 @@ test.serial('notifyAndFocus silently handles canceled errors', async t => {
 	}
 });
 
-test.serial('notifyAndFocus warns on non-canceled errors', async t => {
+test.serial('notifyAndFocus logs debug on non-canceled errors', async t => {
 	const execa = sinon.stub<Parameters<ExecaFn>, ReturnType<ExecaFn>>()
 		.rejects(new Error('command not found'));
-	const warn = sinon.stub(console, 'warn');
+	const debug = sinon.stub(console, 'debug');
 
 	try {
 		await notifyAndFocus([ 'test' ], '12345', execa);
-		t.true(warn.calledOnce);
-		t.true((warn.firstCall.args[0] as string).includes('[claudex]'));
+		t.true(debug.calledOnce);
+		t.true((debug.firstCall.args[0] as string).includes('[claudex]'));
 	} finally {
-		warn.restore();
+		debug.restore();
 	}
 });

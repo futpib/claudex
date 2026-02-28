@@ -6,13 +6,29 @@ const notifyWaitTimeoutMs = 60_000;
 
 export type ExecaFn = (command: string, args: string[], options?: Record<string, unknown>) => Promise<{ stdout?: string }>;
 
+async function resolveWindowId(execa: ExecaFn): Promise<string | undefined> {
+	if (process.env.TMUX) {
+		try {
+			const result = await execa('tmux', [ 'show-environment', 'WINDOWID' ]);
+			const match = /^WINDOWID=(.+)$/.exec(result.stdout?.trim() ?? '');
+			if (match) {
+				return match[1];
+			}
+		} catch {
+			// Tmux not available or no WINDOWID in session environment
+		}
+	}
+
+	return process.env.WINDOWID;
+}
+
 export async function handleNotify(message: NotifyMessage, execa: ExecaFn = defaultExeca): Promise<void> {
 	const args: string[] = [ '--app-name', 'claudex' ];
 	if (message.urgency) {
 		args.push('-u', message.urgency);
 	}
 
-	const windowId = process.env.WINDOWID;
+	const windowId = await resolveWindowId(execa);
 	if (windowId) {
 		args.push('--action', 'default=Focus');
 	}
@@ -46,7 +62,7 @@ export async function notifyAndFocus(args: string[], windowId: string, execa: Ex
 			return;
 		}
 
-		console.warn('[claudex] Failed to send notification or focus window:', error instanceof Error ? error.message : error);
+		console.debug('[claudex] Failed to send notification or focus window:', error instanceof Error ? error.message : error);
 	}
 }
 
