@@ -14,22 +14,40 @@ const keys = {
 	down: '\u001B[B',
 };
 
-async function sleep(ms: number): Promise<void> {
-	return new Promise(resolve => {
-		setTimeout(resolve, ms);
-	});
-}
-
-async function sendKeys(
+/**
+ * Wait for the process stdout to contain a specific string, then send a key.
+ * This is more robust than fixed delays — works regardless of CI speed.
+ */
+async function waitForPromptAndSend(
 	proc: ResultPromise,
-	keySequence: string[],
-	delay = 500,
+	waitFor: string,
+	key: string,
+	timeoutMs = 10_000,
 ): Promise<void> {
-	for (const key of keySequence) {
-		proc.stdin!.write(key);
-		// eslint-disable-next-line no-await-in-loop
-		await sleep(delay);
-	}
+	return new Promise((resolve, reject) => {
+		let buffer = '';
+		let resolved = false;
+
+		const timer = setTimeout(() => {
+			if (!resolved) {
+				resolved = true;
+				reject(new Error(`Timed out waiting for "${waitFor}" in stdout. Buffer so far:\n${buffer}`));
+			}
+		}, timeoutMs);
+
+		const onData = (chunk: Uint8Array) => {
+			buffer += new TextDecoder().decode(chunk);
+			if (!resolved && buffer.includes(waitFor)) {
+				resolved = true;
+				clearTimeout(timer);
+				proc.stdout!.off('data', onData);
+				proc.stdin!.write(key);
+				resolve();
+			}
+		};
+
+		proc.stdout!.on('data', onData);
+	});
 }
 
 async function createTemporaryConfigDir() {
@@ -47,8 +65,8 @@ async function readJsonFile(filePath: string): Promise<unknown> {
 	return JSON.parse(content);
 }
 
-// 15s timeout: enough for the TUI interaction locally, but prevents hanging in CI
-const tuiTimeout = 15_000;
+// 30s timeout: enough for the TUI interaction in CI
+const tuiTimeout = 30_000;
 
 test.serial('add a package via config-interactive', async t => {
 	t.timeout(tuiTimeout + 5000);
@@ -67,13 +85,10 @@ test.serial('add a package via config-interactive', async t => {
 		},
 	});
 
-	await sendKeys(proc, [
-		keys.enter, // Select "packages"
-		keys.enter, // Select "Add value"
-		'vim\r', // Type value and confirm
-		keys.down, // Skip "Project" → "Global"
-		keys.enter, // Select "Global" placement
-	]);
+	await waitForPromptAndSend(proc, 'Select a configuration key:', keys.enter); // Select "packages"
+	await waitForPromptAndSend(proc, 'Action for packages', keys.enter); // Select "Add value"
+	await waitForPromptAndSend(proc, 'Value(s) to add to packages', 'vim\r'); // Type value and confirm
+	await waitForPromptAndSend(proc, 'Where should this change be written?', keys.down + keys.enter); // Skip "Project" → "Global"
 
 	const result = await proc;
 	t.false(result.timedOut, `Process timed out.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
@@ -103,20 +118,11 @@ test.serial('set a boolean via config-interactive', async t => {
 		},
 	});
 
-	// Menu order: packages(0), volumes(1), env(2), ssh(3), hostPorts(4),
-	// extraHosts(5), shareVolumes(6)
-	await sendKeys(proc, [
-		keys.down,
-		keys.down,
-		keys.down,
-		keys.down,
-		keys.down,
-		keys.down,
-		keys.enter, // Select "shareVolumes"
-		keys.enter, // Select "Set to true"
-		keys.down, // Skip "Project" → "Global"
-		keys.enter, // Select "Global" placement
-	]);
+	// Navigate to shareVolumes: 6 downs from packages(0)
+	const downKeys = keys.down.repeat(6);
+	await waitForPromptAndSend(proc, 'Select a configuration key:', downKeys + keys.enter); // Select "shareVolumes"
+	await waitForPromptAndSend(proc, 'Action for shareVolumes', keys.enter); // Select "Set to true"
+	await waitForPromptAndSend(proc, 'Where should this change be written?', keys.down + keys.enter); // Skip "Project" → "Global"
 
 	const result = await proc;
 	t.false(result.timedOut, `Process timed out.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
