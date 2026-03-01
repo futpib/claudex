@@ -1178,7 +1178,7 @@ test('config ungroup removes group from multiple projects', async t => {
 	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', projA.dir, projB.dir ]);
 
 	// Ungroup both
-	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', projA.dir, projB.dir ]);
+	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', 'mygroup', projA.dir, projB.dir ]);
 	t.is(result.exitCode, 0);
 
 	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
@@ -1201,7 +1201,7 @@ test('config ungroup cleans up empty project entries', async t => {
 	await runConfigWithDir(handle.configDir, [ 'add', '--project', projA.dir, 'packages', 'vim' ]);
 
 	// Ungroup
-	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', projA.dir ]);
+	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', 'mygroup', projA.dir ]);
 	t.is(result.exitCode, 0);
 
 	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
@@ -1219,8 +1219,30 @@ test('config ungroup is idempotent for projects without group', async t => {
 	await using projA = await createTemporaryDir('claudex-ungroup-idempotent-');
 
 	// Ungrouping a project that was never grouped is a no-op
-	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', projA.dir ]);
+	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', 'anygroup', projA.dir ]);
 	t.is(result.exitCode, 0);
+});
+
+test('config ungroup with group name does not ungroup unrelated projects whose path matches the name', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using projA = await createTemporaryDir('claudex-ungroup-namearg-a-');
+	await using projB = await createTemporaryDir('claudex-ungroup-namearg-b-');
+
+	// Assign both to the same group
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', projA.dir, projB.dir ]);
+
+	// Ungroup only projB, passing group name as first arg (like: claudex config ungroup mygroup /path/to/projB)
+	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', 'mygroup', projB.dir ]);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		projects?: Record<string, { group?: string }>;
+	};
+	// ProjA should still be in the group
+	t.is(typed.projects?.[projA.dir]?.group, 'mygroup');
+	// ProjB should have been ungrouped
+	t.is(typed.projects?.[projB.dir]?.group, undefined);
 });
 
 test('config ungroup errors without paths', async t => {
@@ -1238,7 +1260,7 @@ test('config ungroup tilde-collapses paths under home directory', async t => {
 	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
 
 	// Ungroup using the absolute path (should match tilde-collapsed key)
-	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', project.dir ]);
+	const result = await runConfigWithDir(handle.configDir, [ 'ungroup', 'mygroup', project.dir ]);
 	t.is(result.exitCode, 0);
 
 	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));

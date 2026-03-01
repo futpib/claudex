@@ -1292,11 +1292,12 @@ export async function configMain(parsed: ParsedArgs): Promise<void> {
 		}
 
 		case 'ungroup': {
-			if (!parsed.extraValues || parsed.extraValues.length === 0) {
-				throw new Error('ungroup requires at least one project path');
+			if (!parsed.extraValues || parsed.extraValues.length < 2) {
+				throw new Error('ungroup requires a group name and at least one project path');
 			}
 
-			await handleUngroup(parsed.extraValues, parsed.file);
+			const [ , ...ungroupPaths ] = parsed.extraValues;
+			await handleUngroup(ungroupPaths, parsed.file);
 			break;
 		}
 

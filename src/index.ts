@@ -212,15 +212,16 @@ export async function main() {
 		});
 
 	configCommand.command('ungroup').description('Remove group assignment from projects')
+		.argument('<name>', 'Group name')
 		.argument('<paths...>', 'Project paths to ungroup')
 		.option('--file <path>', 'Write to a specific file in config.json.d')
 		.passThroughOptions()
-		.action(async (paths: string[], options: { file?: string }) => {
+		.action(async (name: string, paths: string[], options: { file?: string }) => {
 			await runConfigAction({
 				action: 'ungroup',
 				scope: { type: 'project', path: process.cwd(), fromCwd: true },
 				file: options.file,
-				extraValues: paths,
+				extraValues: [ name, ...paths ],
 			});
 		});
 
