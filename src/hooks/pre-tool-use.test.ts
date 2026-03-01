@@ -160,6 +160,81 @@ test('allows git checkout -b with start-point when on regular branch', async t =
 	t.is(result.exitCode, 0);
 });
 
+// --- ban-git-remote-set-url ---
+
+test('rejects git remote set-url from SSH to HTTPS for same repo', async t => {
+	await using repo = await createTemporaryGitRepo();
+	await using config = await createHooksConfig({ banGitRemoteSetUrl: true });
+
+	await execa('git', [ 'remote', 'add', 'origin', 'git@gitlab.com:fdroid/fdroiddata.git' ], { cwd: repo.dir });
+
+	const result = await runHook(
+		createBashToolInput('git remote set-url origin https://gitlab.com/fdroid/fdroiddata.git'),
+		repo.dir,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 2);
+	t.true(result.stderr.includes('SSH to HTTPS is not allowed'));
+});
+
+test('allows git remote set-url to HTTPS for a different repo', async t => {
+	await using repo = await createTemporaryGitRepo();
+	await using config = await createHooksConfig({ banGitRemoteSetUrl: true });
+
+	await execa('git', [ 'remote', 'add', 'origin', 'git@gitlab.com:fdroid/fdroiddata.git' ], { cwd: repo.dir });
+
+	const result = await runHook(
+		createBashToolInput('git remote set-url origin https://gitlab.com/fdroid/other.git'),
+		repo.dir,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 0);
+});
+
+test('allows git remote set-url to SSH URL', async t => {
+	await using repo = await createTemporaryGitRepo();
+	await using config = await createHooksConfig({ banGitRemoteSetUrl: true });
+
+	await execa('git', [ 'remote', 'add', 'origin', 'git@gitlab.com:fdroid/fdroiddata.git' ], { cwd: repo.dir });
+
+	const result = await runHook(
+		createBashToolInput('git remote set-url origin git@gitlab.com:fdroid/fdroiddata.git'),
+		repo.dir,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 0);
+});
+
+test('allows git remote set-url when hooks not configured', async t => {
+	await using repo = await createTemporaryGitRepo();
+	await using config = await createHooksConfig({});
+
+	await execa('git', [ 'remote', 'add', 'origin', 'git@gitlab.com:fdroid/fdroiddata.git' ], { cwd: repo.dir });
+
+	const result = await runHook(
+		createBashToolInput('git remote set-url origin https://gitlab.com/fdroid/fdroiddata.git'),
+		repo.dir,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 0);
+});
+
 test('rejects git -C flag', async t => {
 	await using config = await createHooksConfig({ banGitC: true });
 

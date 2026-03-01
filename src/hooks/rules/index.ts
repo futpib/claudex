@@ -5,6 +5,7 @@ import { banCargoManifestPath } from './ban-cargo-manifest-path.js';
 import { banYarnCwd } from './ban-yarn-cwd.js';
 import { banGitAddAll } from './ban-git-add-all.js';
 import { banGitCommitAmend } from './ban-git-commit-amend.js';
+import { banGitRemoteSetUrl } from './ban-git-remote-set-url.js';
 import { banGitCommitNoVerify } from './ban-git-commit-no-verify.js';
 import { banGitCheckoutRedundantStartPoint } from './ban-git-checkout-redundant-start-point.js';
 import { banBackgroundBash } from './ban-background-bash.js';
@@ -63,6 +64,7 @@ export const allRules: Rule[] = [
 	banYarnCwd,
 	banGitAddAll,
 	banGitCommitAmend,
+	banGitRemoteSetUrl,
 	banGitCommitNoVerify,
 	banGitCheckoutRedundantStartPoint,
 	banBackgroundBash,
