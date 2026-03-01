@@ -62,6 +62,7 @@ type MainOptions = {
 	dockerShell: boolean;
 	dockerExec: boolean;
 	dockerExecRoot: boolean;
+	container: string | undefined;
 	dockerPull: boolean;
 	dockerNoCache: boolean;
 	dockerSudo: boolean;
@@ -80,6 +81,7 @@ export async function main() {
 		.option('--docker-shell', 'Launch a bash shell inside the Docker container')
 		.option('--docker-exec', 'Exec into a running claudex container for current directory')
 		.option('--docker-exec-root', 'Exec into a running claudex container as root with full privileges')
+		.option('--container <name>', 'Target a specific container')
 		.option('--docker-pull', 'Pull the latest base image when building')
 		.option('--docker-no-cache', 'Build the Docker image without cache')
 		.option('--docker-sudo', 'Allow sudo inside the container (less secure)')
@@ -355,6 +357,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		dockerShell: useDockerShell,
 		dockerExec: useDockerExec,
 		dockerExecRoot: useDockerExecRoot,
+		container: specificContainer,
 		dockerPull,
 		dockerNoCache,
 		dockerSudo,
@@ -405,7 +408,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	// Handle --docker-exec / --docker-exec-root: exec into a running container
 	if (useDockerExec || useDockerExecRoot) {
-		const containerName = await findRunningContainer(cwd);
+		const containerName = await findRunningContainer(cwd, specificContainer);
 		const execArgs = useDockerExecRoot
 			? [ 'exec', '-it', '--privileged', '--user', 'root', containerName, 'bash' ]
 			: [ 'exec', '-it', containerName, 'bash' ];
