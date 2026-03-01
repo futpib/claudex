@@ -47,7 +47,11 @@ async function readJsonFile(filePath: string): Promise<unknown> {
 	return JSON.parse(content);
 }
 
+// 15s timeout: enough for the TUI interaction locally, but prevents hanging in CI
+const tuiTimeout = 15_000;
+
 test.serial('add a package via config-interactive', async t => {
+	t.timeout(tuiTimeout + 5000);
 	await using handle = await createTemporaryConfigDir();
 
 	const proc = execa('node', [ cliPath, 'config-interactive' ], {
@@ -55,6 +59,7 @@ test.serial('add a package via config-interactive', async t => {
 		stdout: 'pipe',
 		stderr: 'pipe',
 		reject: false,
+		timeout: tuiTimeout,
 		env: {
 			...process.env,
 			// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -71,13 +76,15 @@ test.serial('add a package via config-interactive', async t => {
 	]);
 
 	const result = await proc;
-	t.is(result.exitCode, 0);
+	t.false(result.timedOut, `Process timed out.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
+	t.is(result.exitCode, 0, `Exit code ${result.exitCode}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
 
 	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
 	t.deepEqual((config as { packages: string[] }).packages, [ 'vim' ]);
 });
 
 test.serial('set a boolean via config-interactive', async t => {
+	t.timeout(tuiTimeout + 5000);
 	await using handle = await createTemporaryConfigDir();
 
 	// Pre-create the config dir so getMergedConfig finds it
@@ -88,6 +95,7 @@ test.serial('set a boolean via config-interactive', async t => {
 		stdout: 'pipe',
 		stderr: 'pipe',
 		reject: false,
+		timeout: tuiTimeout,
 		env: {
 			...process.env,
 			// eslint-disable-next-line @typescript-eslint/naming-convention
@@ -111,7 +119,8 @@ test.serial('set a boolean via config-interactive', async t => {
 	]);
 
 	const result = await proc;
-	t.is(result.exitCode, 0);
+	t.false(result.timedOut, `Process timed out.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
+	t.is(result.exitCode, 0, `Exit code ${result.exitCode}.\nstdout: ${result.stdout}\nstderr: ${result.stderr}`);
 
 	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
 	t.is((config as { shareVolumes: boolean }).shareVolumes, true);
