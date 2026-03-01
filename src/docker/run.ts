@@ -99,6 +99,7 @@ function parseEnvSpec(spec: string): [string, string] {
 
 export type DockerRunResult = {
 	childProcess: ResultPromise;
+	containerName: string;
 	sshAgent: SshAgentInfo | undefined;
 	hostSocket: { socketPath: string; cleanup: () => Promise<void> } | undefined;
 	cleanupHostPortProxies: (() => void) | undefined;
@@ -160,6 +161,22 @@ export async function runDockerContainer(parameters: {
 		if (launcherBase.extraHosts) {
 			config.extraHosts = { ...config.extraHosts, ...launcherBase.extraHosts };
 		}
+
+		if (launcherBase.rootInitCommands?.length) {
+			config.rootInitCommands = [ ...(config.rootInitCommands ?? []), ...launcherBase.rootInitCommands ];
+		}
+
+		if (launcherBase.userInitCommands?.length) {
+			config.userInitCommands = [ ...(config.userInitCommands ?? []), ...launcherBase.userInitCommands ];
+		}
+
+		if (launcherBase.rootStartupCommands?.length) {
+			config.rootStartupCommands = [ ...(config.rootStartupCommands ?? []), ...launcherBase.rootStartupCommands ];
+		}
+
+		if (launcherBase.userStartupCommands?.length) {
+			config.userStartupCommands = [ ...(config.userStartupCommands ?? []), ...launcherBase.userStartupCommands ];
+		}
 	}
 
 	// Merge CLI flags with config
@@ -203,7 +220,7 @@ export async function runDockerContainer(parameters: {
 
 	const dockerArgs = [
 		'run',
-		'--rm',
+		'-d',
 		'-it',
 		...(dockerSudo ? [] : [ '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges' ]),
 		...(config.dockerIpcPrivate === false ? [] : [ '--ipc=private' ]),
@@ -333,6 +350,11 @@ export async function runDockerContainer(parameters: {
 		}
 	}
 
+	// Pass user startup commands via env var for in-docker.ts to handle
+	if (config.userStartupCommands && config.userStartupCommands.length > 0) {
+		dockerArgs.push('-e', `CLAUDEX_USER_STARTUP_COMMANDS=${JSON.stringify(config.userStartupCommands)}`);
+	}
+
 	dockerArgs.push('-w', cwd);
 
 	const isClaude = isClaudeCodeLauncher(launcherDef);
@@ -348,19 +370,66 @@ export async function runDockerContainer(parameters: {
 		claudeSpecificArgs.push(...addDirArgs);
 	}
 
+	// Build the real entrypoint command that will ultimately become PID 1
+	let realEntrypointCmd: string;
 	if (useDockerShell) {
-		dockerArgs.push('--entrypoint', 'bash', imageName);
+		realEntrypointCmd = 'exec bash';
 	} else {
-		dockerArgs.push('--entrypoint', 'node', imageName, cliInDockerPath, ...claudeSpecificArgs, ...claudeArgs);
+		const entrypointArgs = [ cliInDockerPath, ...claudeSpecificArgs, ...claudeArgs ];
+		const escapedArgs = entrypointArgs.map(a => `'${a.replaceAll('\'', String.raw`'\''`)}'`).join(' ');
+		realEntrypointCmd = `exec node ${escapedArgs}`;
 	}
 
-	const childProcess = execa('docker', dockerArgs, {
+	// PID 1 blocks on FIFO read, then exec's the command written to it
+	dockerArgs.push('--entrypoint', 'sh', imageName, '-c', 'mkfifo /tmp/.claudex-cmd && IFS= read -r cmd < /tmp/.claudex-cmd && exec sh -c "$cmd"');
+
+	// Step 1: Start container in detached mode — PID 1 blocks on FIFO
+	await execa('docker', dockerArgs, {
+		stdout: process.stdout,
+		stderr: process.stderr,
+	});
+
+	// Step 2: Run root startup commands via docker exec
+	if (config.rootStartupCommands && config.rootStartupCommands.length > 0) {
+		for (const cmd of config.rootStartupCommands) {
+			// eslint-disable-next-line no-await-in-loop
+			await execa(
+				'docker',
+				[
+					'exec',
+					'--privileged',
+					'--user',
+					'root',
+					containerName,
+					'sh',
+					'-c',
+					cmd,
+				],
+				{
+					stdout: process.stdout,
+					stderr: process.stderr,
+				},
+			);
+		}
+	}
+
+	// Step 3: Write the real entrypoint command to the FIFO — PID 1 exec's into it
+	await execa('docker', [
+		'exec',
+		containerName,
+		'sh',
+		'-c',
+		`echo '${realEntrypointCmd.replaceAll('\'', String.raw`'\''`)}' > /tmp/.claudex-cmd`,
+	]);
+
+	// Step 4: Attach to the container (stdin/stdout now connected to the real process)
+	const childProcess = execa('docker', [ 'attach', containerName ], {
 		stdin: process.stdin,
 		stdout: process.stdout,
 		stderr: process.stderr,
 	});
 
 	return {
-		childProcess, sshAgent, hostSocket, cleanupHostPortProxies,
+		childProcess, containerName, sshAgent, hostSocket, cleanupHostPortProxies,
 	};
 }

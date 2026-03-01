@@ -79,6 +79,14 @@ export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull
 		buildArgs.push('--build-arg', `PACKAGES=${config.packages.join(' ')}`);
 	}
 
+	if (config.rootInitCommands && config.rootInitCommands.length > 0) {
+		buildArgs.push('--build-arg', `ROOT_INIT_COMMANDS=${JSON.stringify(config.rootInitCommands)}`);
+	}
+
+	if (config.userInitCommands && config.userInitCommands.length > 0) {
+		buildArgs.push('--build-arg', `USER_INIT_COMMANDS=${JSON.stringify(config.userInitCommands)}`);
+	}
+
 	buildArgs.push('-t', imageName, '-');
 
 	const dockerfileContent = await fs.readFile(dockerfilePath, 'utf8');

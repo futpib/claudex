@@ -421,6 +421,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	}
 
 	let claudeChildProcess;
+	let dockerContainerName: string | undefined;
 	let sshAgent: SshAgentInfo | undefined;
 	let hostSocket: { socketPath: string; cleanup: () => Promise<void> } | undefined;
 	let cleanupHostPortProxies: (() => void) | undefined;
@@ -459,6 +460,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 		({
 			childProcess: claudeChildProcess,
+			containerName: dockerContainerName,
 			sshAgent,
 			hostSocket,
 			cleanupHostPortProxies,
@@ -524,6 +526,15 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	try {
 		await claudeChildProcess;
 	} finally {
+		// Cleanup Docker container if we started one (in case attach didn't clean up)
+		if (dockerContainerName) {
+			try {
+				await execa('docker', [ 'rm', '-f', dockerContainerName ]);
+			} catch {
+				// Container may already be removed
+			}
+		}
+
 		// Remind user about temp directory
 		if (temporaryDirCreated) {
 			console.log(`Temporary directory used: ${temporaryDirCreated}`);

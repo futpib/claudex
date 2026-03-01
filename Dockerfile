@@ -63,6 +63,15 @@ RUN --mount=type=cache,target=/var/cache/pacman/pkg \
 COPY --from=claude-code-installer /root/.local/bin/claude /opt/claude-code/.local/bin/claude
 COPY --from=claude-code-installer /root/.local/share/claude /opt/claude-code/.local/share/claude
 
+# Run root init commands (as root, after packages installed)
+ARG ROOT_INIT_COMMANDS="[]"
+RUN <<'INIT_SCRIPT'
+set -xe
+echo "${ROOT_INIT_COMMANDS}" | jq -r '.[]' | while IFS= read -r cmd; do
+	eval "$cmd"
+done
+INIT_SCRIPT
+
 # Create non-root user WITHOUT sudo access
 RUN set -xe; \
 	useradd -m -u ${USER_ID} ${USERNAME}; \
@@ -72,3 +81,12 @@ RUN set -xe; \
 # Switch to non-root user (no sudo from this point)
 USER ${USERNAME}
 ENV PATH="/opt/claude-code/.local/bin:/home/${USERNAME}/.local/bin:${PATH}"
+
+# Run user init commands (as user, after user created)
+ARG USER_INIT_COMMANDS="[]"
+RUN <<'INIT_SCRIPT'
+set -xe
+echo "${USER_INIT_COMMANDS}" | jq -r '.[]' | while IFS= read -r cmd; do
+	eval "$cmd"
+done
+INIT_SCRIPT

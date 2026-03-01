@@ -135,6 +135,27 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		...overlay.extraHosts,
 	};
 
+	// Init/startup commands: concatenate preserving order (no dedup — order matters, duplicates may be intentional)
+	const rootInitCommands = [
+		...(base.rootInitCommands ?? []),
+		...(overlay.rootInitCommands ?? []),
+	];
+
+	const userInitCommands = [
+		...(base.userInitCommands ?? []),
+		...(overlay.userInitCommands ?? []),
+	];
+
+	const rootStartupCommands = [
+		...(base.rootStartupCommands ?? []),
+		...(overlay.rootStartupCommands ?? []),
+	];
+
+	const userStartupCommands = [
+		...(base.userStartupCommands ?? []),
+		...(overlay.userStartupCommands ?? []),
+	];
+
 	// ShareVolumes: overlay takes precedence if defined, otherwise use base
 	const shareVolumes = overlay.shareVolumes ?? base.shareVolumes;
 
@@ -182,6 +203,10 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 			: undefined,
 		hostPorts: hostPorts.length > 0 ? hostPorts : undefined,
 		extraHosts: Object.keys(extraHosts).length > 0 ? extraHosts : undefined,
+		rootInitCommands: rootInitCommands.length > 0 ? rootInitCommands : undefined,
+		userInitCommands: userInitCommands.length > 0 ? userInitCommands : undefined,
+		rootStartupCommands: rootStartupCommands.length > 0 ? rootStartupCommands : undefined,
+		userStartupCommands: userStartupCommands.length > 0 ? userStartupCommands : undefined,
 		shareVolumes,
 		shareAdditionalDirectories,
 		settingSources,
@@ -364,6 +389,10 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		ssh: config.ssh,
 		hostPorts: config.hostPorts ? [ ...config.hostPorts ].sort((a, b) => a - b) : undefined,
 		extraHosts: config.extraHosts ? sortEnv(config.extraHosts) : undefined,
+		rootInitCommands: config.rootInitCommands,
+		userInitCommands: config.userInitCommands,
+		rootStartupCommands: config.rootStartupCommands,
+		userStartupCommands: config.userStartupCommands,
 		settingSources: config.settingSources,
 		hooks: config.hooks,
 		mcpServers: config.mcpServers,

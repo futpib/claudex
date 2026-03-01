@@ -40,6 +40,10 @@ export const baseConfigSchema = z.object({
 	mcpServers: mcpServersConfigSchema.optional(),
 	notifications: z.boolean().optional(),
 	hooksDescriptions: z.boolean().optional(), // Default true - inject active hook rule descriptions into CLAUDE.md
+	rootInitCommands: z.array(z.string()).optional(), // Commands run as root during Docker build, after packages installed
+	userInitCommands: z.array(z.string()).optional(), // Commands run as user during Docker build, after user created
+	rootStartupCommands: z.array(z.string()).optional(), // Commands run as root at container start, via docker exec --user root
+	userStartupCommands: z.array(z.string()).optional(), // Commands run as user at container start, before Claude
 	profiles: z.array(z.string()).optional(), // References to named profiles defined at root level
 	launcher: z.string().optional(), // Name of launcher to use (e.g. "ollama")
 	dockerDangerouslySkipPermissions: z.boolean().optional(),

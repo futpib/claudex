@@ -106,6 +106,16 @@ async function setupHookSymlinks() {
 }
 
 export async function mainInDocker() {
+	// Run user startup commands before any other setup
+	const userStartupJson = process.env.CLAUDEX_USER_STARTUP_COMMANDS;
+	if (userStartupJson) {
+		const commands = JSON.parse(userStartupJson) as string[];
+		for (const cmd of commands) {
+			// eslint-disable-next-line no-await-in-loop
+			await execa('sh', [ '-c', cmd ], { stdio: 'inherit' });
+		}
+	}
+
 	await setupHookSymlinks();
 	await setupKnownHosts();
 	const cleanupPortForwarding = await setupHostPortForwarding();
