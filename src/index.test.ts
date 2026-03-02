@@ -27,6 +27,7 @@ test('--help exits 0 and lists all options', async t => {
 		'--docker-exec-root',
 		'--docker-pull',
 		'--docker-no-cache',
+		'--docker-skip-build',
 		'--docker-sudo',
 		'--allow-unsafe-directory',
 		'--package',

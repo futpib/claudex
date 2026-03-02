@@ -41,7 +41,7 @@ const refreshTargets: RefreshTarget[] = [
 	{ name: 'yay', dockerTarget: 'yay-builder', getLatestVersion: getLatestYayVersion },
 ];
 
-export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = false, noCache = false) {
+export function getDockerImageMeta(cwd: string) {
 	const userInfo = os.userInfo();
 	const userId = userInfo.uid;
 	const { username } = userInfo;
@@ -54,6 +54,14 @@ export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull
 	const cwdBasename = path.basename(cwd);
 
 	const imageName = `claudex-${cwdBasename}`.toLowerCase();
+
+	return {
+		userId, username, projectRoot, dockerfilePath, imageName,
+	};
+}
+
+export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = false, noCache = false) {
+	const { userId, username, projectRoot, dockerfilePath, imageName } = getDockerImageMeta(cwd);
 
 	// Always build image (Docker cache makes this fast if nothing changed)
 	const buildArgs = [

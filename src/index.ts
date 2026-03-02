@@ -65,6 +65,7 @@ type MainOptions = {
 	container: string | undefined;
 	dockerPull: boolean;
 	dockerNoCache: boolean;
+	dockerSkipBuild: boolean;
 	dockerSudo: boolean;
 	allowUnsafeDirectory: boolean;
 	package: string[];
@@ -84,6 +85,7 @@ export async function main() {
 		.option('--container <name>', 'Target a specific container')
 		.option('--docker-pull', 'Pull the latest base image when building')
 		.option('--docker-no-cache', 'Build the Docker image without cache')
+		.option('--docker-skip-build', 'Skip Docker image build and use existing image')
 		.option('--docker-sudo', 'Allow sudo inside the container (less secure)')
 		.option('--allow-unsafe-directory', 'Skip directory safety checks (home, hidden, unowned, no .git)')
 		.option('--package <name>', 'Add apt package to install in Docker (repeatable)', collect, [])
@@ -361,6 +363,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		container: specificContainer,
 		dockerPull,
 		dockerNoCache,
+		dockerSkipBuild,
 		dockerSudo,
 		allowUnsafeDirectory,
 		package: cliPackages,
@@ -479,6 +482,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			useDockerShell,
 			dockerPull,
 			dockerNoCache,
+			dockerSkipBuild,
 			claudeArgs: dockerClaudeArgs,
 			cliInDockerPath,
 		}));

@@ -15,7 +15,7 @@ import { paths } from '../paths.js';
 import { startHostSocketServer } from '../host-socket/server.js';
 import { type SshAgentInfo, startSshAgent } from '../ssh/agent.js';
 import { startHostPortProxies } from '../port-proxy/host.js';
-import { ensureDockerImage, refreshDockerStagesInBackground } from './build.js';
+import { ensureDockerImage, getDockerImageMeta, refreshDockerStagesInBackground } from './build.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
@@ -119,12 +119,13 @@ export async function runDockerContainer(parameters: {
 	useDockerShell: boolean;
 	dockerPull: boolean;
 	dockerNoCache: boolean;
+	dockerSkipBuild: boolean;
 	claudeArgs: string[];
 	cliInDockerPath: string;
 }): Promise<DockerRunResult> {
 	const {
 		cwd, profileVolumes, launcherDef, cliPackages, cliVolumes, cliEnv, cliSshKeys,
-		cliModel, dockerSudo, useDockerShell, dockerPull, dockerNoCache, claudeArgs, cliInDockerPath,
+		cliModel, dockerSudo, useDockerShell, dockerPull, dockerNoCache, dockerSkipBuild, claudeArgs, cliInDockerPath,
 	} = parameters;
 	const config = { ...parameters.config };
 
@@ -210,8 +211,17 @@ export async function runDockerContainer(parameters: {
 		}
 	}
 
-	const { username, projectRoot, imageName, dockerfileContent } = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
-	void refreshDockerStagesInBackground(dockerfileContent);
+	let username: string;
+	let projectRoot: string;
+	let imageName: string;
+	if (dockerSkipBuild) {
+		({ username, projectRoot, imageName } = getDockerImageMeta(cwd));
+	} else {
+		const result = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
+		({ username, projectRoot, imageName } = result);
+		void refreshDockerStagesInBackground(result.dockerfileContent);
+	}
+
 	const randomSuffix = Math.random().toString(36).slice(2, 8);
 	const containerName = `${getContainerPrefix(cwd)}${randomSuffix}`;
 	const homeDir = os.homedir();
