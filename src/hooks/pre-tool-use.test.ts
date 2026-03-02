@@ -1,8 +1,9 @@
+import process from 'node:process';
+import path from 'node:path';
 import {
 	mkdir, mkdtemp, rm, writeFile,
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import path from 'node:path';
 import { execa } from 'execa';
 import test from 'ava';
 
@@ -1364,6 +1365,128 @@ test('allows WebFetch to non-GitHub URLs', async t => {
 		{
 			// eslint-disable-next-line @typescript-eslint/naming-convention
 			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 0);
+});
+
+// --- suggest-command-substitute ---
+
+async function createFakeBinDir(commands: string[]): Promise<{ dir: string; [Symbol.asyncDispose](): Promise<void> }> {
+	const dir = await mkdtemp(path.join(tmpdir(), 'claudex-fake-bin-'));
+	// Create a fake `which` that only knows about commands within this directory,
+	// so production code using `execa('which', ...)` works without needing the real
+	// system PATH (which might contain real pip/pip3). Uses shell parameter expansion
+	// instead of `dirname` to avoid needing external binaries.
+	await writeFile(
+		path.join(dir, 'which'),
+		// eslint-disable-next-line no-template-curly-in-string
+		'#!/bin/sh\ntest -x "${0%/*}/$1" && echo "${0%/*}/$1"\n',
+		{ mode: 0o755 },
+	);
+	await Promise.all(commands.map(async cmd => {
+		const scriptPath = path.join(dir, cmd);
+		await writeFile(scriptPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });
+	}));
+	return {
+		dir,
+		async [Symbol.asyncDispose]() {
+			await rm(dir, { recursive: true });
+		},
+	};
+}
+
+test('rejects pip when pip does not exist but uv is available', async t => {
+	await using fakeBin = await createFakeBinDir([ 'uv' ]);
+	await using config = await createHooksConfig({ suggestCommandSubstitute: true });
+
+	const result = await runHook(
+		createBashToolInput('pip install requests'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			PATH: `${fakeBin.dir}:${path.dirname(process.execPath)}`,
+		},
+	);
+
+	t.is(result.exitCode, 2);
+	t.true(result.stderr.includes('"pip" not found'));
+	t.true(result.stderr.includes('uv'));
+});
+
+test('rejects pip3 when pip3 does not exist but uv is available', async t => {
+	await using fakeBin = await createFakeBinDir([ 'uv' ]);
+	await using config = await createHooksConfig({ suggestCommandSubstitute: true });
+
+	const result = await runHook(
+		createBashToolInput('pip3 install requests'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			PATH: `${fakeBin.dir}:${path.dirname(process.execPath)}`,
+		},
+	);
+
+	t.is(result.exitCode, 2);
+	t.true(result.stderr.includes('"pip3" not found'));
+	t.true(result.stderr.includes('uv'));
+});
+
+test('rejects uv when uv does not exist but pip is available', async t => {
+	await using fakeBin = await createFakeBinDir([ 'pip' ]);
+	await using config = await createHooksConfig({ suggestCommandSubstitute: true });
+
+	const result = await runHook(
+		createBashToolInput('uv pip install requests'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			PATH: `${fakeBin.dir}:${path.dirname(process.execPath)}`,
+		},
+	);
+
+	t.is(result.exitCode, 2);
+	t.true(result.stderr.includes('"uv" not found'));
+	t.true(result.stderr.includes('pip'));
+});
+
+test('allows pip when pip exists', async t => {
+	await using fakeBin = await createFakeBinDir([ 'pip', 'uv' ]);
+	await using config = await createHooksConfig({ suggestCommandSubstitute: true });
+
+	const result = await runHook(
+		createBashToolInput('pip install requests'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			PATH: `${fakeBin.dir}:${path.dirname(process.execPath)}`,
+		},
+	);
+
+	t.is(result.exitCode, 0);
+});
+
+test('allows pip when neither pip nor uv exists', async t => {
+	await using fakeBin = await createFakeBinDir([]);
+	await using config = await createHooksConfig({ suggestCommandSubstitute: true });
+
+	const result = await runHook(
+		createBashToolInput('pip install requests'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			PATH: `${fakeBin.dir}:${path.dirname(process.execPath)}`,
 		},
 	);
 

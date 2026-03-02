@@ -25,6 +25,7 @@ import { banHomeDirAbsolutePaths } from './ban-home-dir-absolute-paths.js';
 import { preferLocalGithubRepo } from './prefer-local-github-repo.js';
 import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
 import { logToolUse } from './log-tool-use.js';
+import { suggestCommandSubstitute } from './suggest-command-substitute.js';
 
 export type RuleViolation = {
 	type: 'violation';
@@ -83,6 +84,7 @@ export const allRules: Rule[] = [
 	banWrongPackageManager,
 	preferLocalGithubRepo,
 	requireCoAuthorshipProof,
+	suggestCommandSubstitute,
 	logToolUse,
 ];
 
