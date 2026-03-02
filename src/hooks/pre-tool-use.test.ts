@@ -1414,7 +1414,7 @@ test('rejects pip when pip does not exist but uv is available', async t => {
 
 	t.is(result.exitCode, 2);
 	t.true(result.stderr.includes('"pip" not found'));
-	t.true(result.stderr.includes('uv pip'));
+	t.true(result.stderr.includes('uv'));
 });
 
 test('rejects pip3 when pip3 does not exist but uv is available', async t => {
@@ -1434,7 +1434,7 @@ test('rejects pip3 when pip3 does not exist but uv is available', async t => {
 
 	t.is(result.exitCode, 2);
 	t.true(result.stderr.includes('"pip3" not found'));
-	t.true(result.stderr.includes('uv pip'));
+	t.true(result.stderr.includes('uv'));
 });
 
 test('rejects uv when uv does not exist but pip is available', async t => {

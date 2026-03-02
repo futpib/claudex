@@ -1,23 +1,12 @@
 import { execa } from 'execa';
 import type { Rule } from './index.js';
 
-type CommandAlternative = {
-	/** Executable name to check for existence on the system and to match in bash invocations */
-	executable: string;
-	/** How to invoke this alternative (shown in the suggestion message) */
-	invocation: string;
-};
-
 /**
  * Groups of interchangeable commands. When any command in a group is used but
  * not found, the rule suggests whichever other commands in the group are available.
  */
-const commandGroups: CommandAlternative[][] = [
-	[
-		{ executable: 'pip', invocation: 'pip' },
-		{ executable: 'pip3', invocation: 'pip3' },
-		{ executable: 'uv', invocation: 'uv pip' },
-	],
+const commandGroups: string[][] = [
+	[ 'pip', 'pip3', 'uv' ],
 ];
 
 async function commandExists(cmd: string): Promise<boolean> {
@@ -45,21 +34,21 @@ export const suggestCommandSubstitute: Rule = {
 		const usedCommands = await context.helpers.extractCommandNames(context.command);
 
 		for (const group of commandGroups) {
-			for (const alt of group) {
-				if (!usedCommands.has(alt.executable)) {
+			for (const cmd of group) {
+				if (!usedCommands.has(cmd)) {
 					continue;
 				}
 
 				// eslint-disable-next-line no-await-in-loop
-				if (await commandExists(alt.executable)) {
+				if (await commandExists(cmd)) {
 					continue; // Command exists, no issue
 				}
 
 				// Find available alternatives from the same group (in parallel)
-				const others = group.filter(other => other.executable !== alt.executable);
+				const others = group.filter(other => other !== cmd);
 				// eslint-disable-next-line no-await-in-loop
-				const otherExists = await Promise.all(others.map(async other => commandExists(other.executable)));
-				const available = others.filter((_, i) => otherExists[i]).map(other => other.invocation);
+				const otherExists = await Promise.all(others.map(async other => commandExists(other)));
+				const available = others.filter((_, i) => otherExists[i]);
 
 				if (available.length === 0) {
 					continue; // No alternatives available, don't block
@@ -68,7 +57,7 @@ export const suggestCommandSubstitute: Rule = {
 				return {
 					type: 'violation',
 					messages: [
-						`❌ Command "${alt.executable}" not found`,
+						`❌ Command "${cmd}" not found`,
 						`Available alternatives: ${available.join(', ')}`,
 					],
 				};
