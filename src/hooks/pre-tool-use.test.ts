@@ -1375,6 +1375,16 @@ test('allows WebFetch to non-GitHub URLs', async t => {
 
 async function createFakeBinDir(commands: string[]): Promise<{ dir: string; [Symbol.asyncDispose](): Promise<void> }> {
 	const dir = await mkdtemp(path.join(tmpdir(), 'claudex-fake-bin-'));
+	// Create a fake `which` that only knows about commands within this directory,
+	// so production code using `execa('which', ...)` works without needing the real
+	// system PATH (which might contain real pip/pip3). Uses shell parameter expansion
+	// instead of `dirname` to avoid needing external binaries.
+	await writeFile(
+		path.join(dir, 'which'),
+		// eslint-disable-next-line no-template-curly-in-string
+		'#!/bin/sh\ntest -x "${0%/*}/$1" && echo "${0%/*}/$1"\n',
+		{ mode: 0o755 },
+	);
 	await Promise.all(commands.map(async cmd => {
 		const scriptPath = path.join(dir, cmd);
 		await writeFile(scriptPath, '#!/bin/sh\nexit 0\n', { mode: 0o755 });

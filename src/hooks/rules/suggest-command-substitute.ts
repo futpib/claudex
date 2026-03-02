@@ -1,6 +1,4 @@
-import process from 'node:process';
-import path from 'node:path';
-import { access, constants } from 'node:fs/promises';
+import { execa } from 'execa';
 import type { Rule } from './index.js';
 
 type CommandAlternative = {
@@ -25,24 +23,12 @@ const commandGroups: CommandAlternative[][] = [
 ];
 
 async function commandExists(cmd: string): Promise<boolean> {
-	const pathEnv = process.env.PATH ?? '';
-	const dirs = pathEnv.split(path.delimiter);
-
-	for (const dir of dirs) {
-		if (!dir) {
-			continue;
-		}
-
-		try {
-			// eslint-disable-next-line no-await-in-loop
-			await access(path.join(dir, cmd), constants.X_OK);
-			return true;
-		} catch {
-			// Not in this directory, continue searching
-		}
+	try {
+		await execa('which', [ cmd ]);
+		return true;
+	} catch {
+		return false;
 	}
-
-	return false;
 }
 
 export const suggestCommandSubstitute: Rule = {
