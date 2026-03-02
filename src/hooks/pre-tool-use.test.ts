@@ -1404,7 +1404,7 @@ test('rejects pip when pip does not exist but uv is available', async t => {
 
 	t.is(result.exitCode, 2);
 	t.true(result.stderr.includes('"pip" not found'));
-	t.true(result.stderr.includes('uv'));
+	t.true(result.stderr.includes('uv pip'));
 });
 
 test('rejects pip3 when pip3 does not exist but uv is available', async t => {
@@ -1424,7 +1424,27 @@ test('rejects pip3 when pip3 does not exist but uv is available', async t => {
 
 	t.is(result.exitCode, 2);
 	t.true(result.stderr.includes('"pip3" not found'));
-	t.true(result.stderr.includes('uv'));
+	t.true(result.stderr.includes('uv pip'));
+});
+
+test('rejects uv when uv does not exist but pip is available', async t => {
+	await using fakeBin = await createFakeBinDir([ 'pip' ]);
+	await using config = await createHooksConfig({ suggestCommandSubstitute: true });
+
+	const result = await runHook(
+		createBashToolInput('uv pip install requests'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			PATH: `${fakeBin.dir}:${path.dirname(process.execPath)}`,
+		},
+	);
+
+	t.is(result.exitCode, 2);
+	t.true(result.stderr.includes('"uv" not found'));
+	t.true(result.stderr.includes('pip'));
 });
 
 test('allows pip when pip exists', async t => {
