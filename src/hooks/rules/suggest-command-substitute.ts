@@ -34,21 +34,22 @@ export const suggestCommandSubstitute: Rule = {
 		const usedCommands = await context.helpers.extractCommandNames(context.command);
 
 		for (const group of commandGroups) {
-			for (const cmd of group) {
-				if (!usedCommands.has(cmd)) {
-					continue;
-				}
+			const usedInGroup = group.filter(cmd => usedCommands.has(cmd));
+			if (usedInGroup.length === 0) {
+				continue;
+			}
 
-				// eslint-disable-next-line no-await-in-loop
-				if (await commandExists(cmd)) {
+			// Check existence of all commands in the group in parallel
+			// eslint-disable-next-line no-await-in-loop
+			const existsResults = await Promise.all(group.map(async cmd => commandExists(cmd)));
+			const existsMap = new Map(group.map((cmd, i) => [ cmd, existsResults[i] ]));
+
+			for (const cmd of usedInGroup) {
+				if (existsMap.get(cmd)) {
 					continue; // Command exists, no issue
 				}
 
-				// Find available alternatives from the same group (in parallel)
-				const others = group.filter(other => other !== cmd);
-				// eslint-disable-next-line no-await-in-loop
-				const otherExists = await Promise.all(others.map(async other => commandExists(other)));
-				const available = others.filter((_, i) => otherExists[i]);
+				const available = group.filter(other => other !== cmd && existsMap.get(other));
 
 				if (available.length === 0) {
 					continue; // No alternatives available, don't block
