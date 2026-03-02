@@ -2,9 +2,7 @@ import { execa } from 'execa';
 import type { Rule } from './index.js';
 
 type CommandAlternative = {
-	/** Executable name(s) in bash invocations that trigger this alternative */
-	triggers: string[];
-	/** Executable name to check for existence on the system */
+	/** Executable name to check for existence on the system and to match in bash invocations */
 	executable: string;
 	/** How to invoke this alternative (shown in the suggestion message) */
 	invocation: string;
@@ -16,9 +14,9 @@ type CommandAlternative = {
  */
 const commandGroups: CommandAlternative[][] = [
 	[
-		{ triggers: [ 'pip' ], executable: 'pip', invocation: 'pip' },
-		{ triggers: [ 'pip3' ], executable: 'pip3', invocation: 'pip3' },
-		{ triggers: [ 'uv' ], executable: 'uv', invocation: 'uv pip' },
+		{ executable: 'pip', invocation: 'pip' },
+		{ executable: 'pip3', invocation: 'pip3' },
+		{ executable: 'uv', invocation: 'uv pip' },
 	],
 ];
 
@@ -48,8 +46,7 @@ export const suggestCommandSubstitute: Rule = {
 
 		for (const group of commandGroups) {
 			for (const alt of group) {
-				const triggeredCommand = alt.triggers.find(t => usedCommands.has(t));
-				if (!triggeredCommand) {
+				if (!usedCommands.has(alt.executable)) {
 					continue;
 				}
 
@@ -58,18 +55,11 @@ export const suggestCommandSubstitute: Rule = {
 					continue; // Command exists, no issue
 				}
 
-				// Find available alternatives from the same group
-				const available: string[] = [];
-				for (const other of group) {
-					if (other.executable === alt.executable) {
-						continue;
-					}
-
-					// eslint-disable-next-line no-await-in-loop
-					if (await commandExists(other.executable)) {
-						available.push(other.invocation);
-					}
-				}
+				// Find available alternatives from the same group (in parallel)
+				const others = group.filter(other => other.executable !== alt.executable);
+				// eslint-disable-next-line no-await-in-loop
+				const otherExists = await Promise.all(others.map(async other => commandExists(other.executable)));
+				const available = others.filter((_, i) => otherExists[i]).map(other => other.invocation);
 
 				if (available.length === 0) {
 					continue; // No alternatives available, don't block
@@ -78,7 +68,7 @@ export const suggestCommandSubstitute: Rule = {
 				return {
 					type: 'violation',
 					messages: [
-						`❌ Command "${triggeredCommand}" not found`,
+						`❌ Command "${alt.executable}" not found`,
 						`Available alternatives: ${available.join(', ')}`,
 					],
 				};
