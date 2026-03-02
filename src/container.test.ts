@@ -39,17 +39,17 @@ test('findRunningContainer throws when specificName is not running', async t => 
 // --- findRunningContainer auto-discovery ---
 
 test('findRunningContainer returns the single matching container', async t => {
-	const execaStub = createExecaStub('claudex-iroh-abc123');
+	const execaStub = createExecaStub('claudex-iroh-abc123\t2026-03-02 17:00:00 +0000 +00');
 	const result = await findRunningContainer('/home/user/code/iroh', undefined, execaStub);
 	t.is(result, 'claudex-iroh-abc123');
 });
 
 test('findRunningContainer uses prefix anchor in docker filter', async t => {
-	const execaStub = createExecaStub('claudex-iroh-abc123');
+	const execaStub = createExecaStub('claudex-iroh-abc123\t2026-03-02 17:00:00 +0000 +00');
 	await findRunningContainer('/home/user/code/iroh', undefined, execaStub);
 	t.deepEqual(execaStub.firstCall.args, [
 		'docker',
-		[ 'ps', '--filter', 'name=^claudex-iroh-', '--format', '{{.Names}}' ],
+		[ 'ps', '--filter', 'name=^claudex-iroh-', '--format', '{{.Names}}\t{{.CreatedAt}}' ],
 	]);
 });
 
@@ -60,12 +60,13 @@ test('findRunningContainer throws when no containers found', async t => {
 });
 
 test('findRunningContainer throws when multiple containers found', async t => {
-	const execaStub = createExecaStub('claudex-iroh-abc123\nclaudex-iroh-def456');
+	const execaStub = createExecaStub('claudex-iroh-abc123\t2026-03-02 17:00:00 +0000 +00\nclaudex-iroh-def456\t2026-03-02 16:00:00 +0000 +00');
 	const error = await t.throwsAsync(async () => findRunningContainer('/home/user/code/iroh', undefined, execaStub));
 	t.truthy(error?.message.includes('Multiple running claudex containers found for iroh'));
 	t.truthy(error?.message.includes('claudex-iroh-abc123'));
 	t.truthy(error?.message.includes('claudex-iroh-def456'));
 	t.truthy(error?.message.includes('--container'));
+	t.truthy(error?.message.includes('created '));
 });
 
 test('findRunningContainer does not match containers from similarly-named projects', async t => {
@@ -74,7 +75,7 @@ test('findRunningContainer does not match containers from similarly-named projec
 	// which belongs to a different project directory "iroh-ssh-android".
 	// The docker filter itself enforces this via the ^ anchor; here we verify
 	// the correct filter string is passed.
-	const execaStub = createExecaStub('claudex-iroh-abc123');
+	const execaStub = createExecaStub('claudex-iroh-abc123\t2026-03-02 17:00:00 +0000 +00');
 	await findRunningContainer('/home/user/code/iroh', undefined, execaStub);
 
 	const filterArg = execaStub.firstCall.args[1][2];

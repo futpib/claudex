@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa } from 'execa';
+import { DateTime } from 'luxon';
 import { Command } from 'commander';
 import { createClaudeCodeMemory } from './memory.js';
 import { ensureHookSetup } from './hooks.js';
@@ -290,19 +291,25 @@ export async function findRunningContainer(cwd: string, specificName?: string, e
 	const containerPrefix = getContainerPrefix(cwd);
 	const cwdBasename = path.basename(cwd);
 
-	const result = await execaFn('docker', [ 'ps', '--filter', `name=^${containerPrefix}`, '--format', '{{.Names}}' ]);
-	const containers = result.stdout.split('\n').filter(Boolean);
+	const result = await execaFn('docker', [ 'ps', '--filter', `name=^${containerPrefix}`, '--format', '{{.Names}}\t{{.CreatedAt}}' ]);
+	const lines = result.stdout.split('\n').filter(Boolean);
 
-	if (containers.length === 0) {
+	if (lines.length === 0) {
 		throw new Error(`No running claudex containers found for ${cwdBasename}. Start one with: claudex`);
 	}
 
-	if (containers.length > 1) {
-		const list = containers.map(c => `  ${c}`).join('\n');
+	if (lines.length > 1) {
+		const list = lines.map(line => {
+			const [ name, ...createdParts ] = line.split('\t');
+			const created = createdParts.join('\t').trim();
+			const dt = created ? DateTime.fromSQL(created.replace(/ [+-]\d{2}$/, '')) : undefined;
+			const relative = dt?.isValid ? dt.toRelative() : created;
+			return relative ? `  ${name}  (created ${relative})` : `  ${name}`;
+		}).join('\n');
 		throw new Error(`Multiple running claudex containers found for ${cwdBasename}:\n${list}\n\nSpecify one with --container <name>`);
 	}
 
-	return containers[0];
+	return lines[0].split('\t')[0];
 }
 
 async function runInstall(packages: string[], options: { save: boolean; container?: string }) {
