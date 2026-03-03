@@ -55,7 +55,7 @@ RUN --mount=type=cache,target=/var/cache/pacman/pkg \
 		echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers; \
 		chmod 777 /tmp/yay-build; \
 		su - builder -c "yay -S --noconfirm --needed --builddir /tmp/yay-build ${PACKAGES}"; \
-		userdel -r builder; \
+		userdel -r builder || true; \
 		sed -i '/%wheel ALL=(ALL) NOPASSWD: ALL/d' /etc/sudoers; \
 	fi
 
