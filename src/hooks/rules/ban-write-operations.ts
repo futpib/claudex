@@ -1,7 +1,5 @@
 import type { Rule } from './index.js';
 
-const nudge = 'Ask the user for explicit approval before performing write operations on their behalf.';
-
 // Generic write-action words matched against tokenized MCP tool names
 const writeActionWords = new Set([
 	'add',
@@ -74,11 +72,8 @@ export const banWriteOperations: Rule = {
 		const mcpMatch = checkMcpTool(context.toolName);
 		if (mcpMatch) {
 			return {
-				type: 'violation',
-				messages: [
-					`❌ ${mcpMatch} — this is a write operation that acts on behalf of the user`,
-					nudge,
-				],
+				type: 'ask',
+				reason: `${mcpMatch} — this is a write operation that acts on behalf of the user`,
 			};
 		}
 
@@ -89,11 +84,8 @@ export const banWriteOperations: Rule = {
 		const bashMatch = await context.helpers.getWriteOperation(context.command);
 		if (bashMatch) {
 			return {
-				type: 'violation',
-				messages: [
-					`❌ ${bashMatch} — this is a write operation that acts on behalf of the user`,
-					nudge,
-				],
+				type: 'ask',
+				reason: `${bashMatch} — this is a write operation that acts on behalf of the user`,
 			};
 		}
 

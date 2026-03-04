@@ -5,7 +5,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { execa } from 'execa';
-import test from 'ava';
+import test, { type ExecutionContext } from 'ava';
 
 const hookPath = path.join(import.meta.dirname, '../../../build/hooks/pre-tool-use.js');
 
@@ -13,6 +13,7 @@ type HookResult = {
 	exitCode: number;
 	stdout: string;
 	stderr: string;
+	json?: Record<string, unknown>;
 };
 
 async function createHooksConfig(hooks: Record<string, boolean>) {
@@ -37,26 +38,51 @@ async function runHook(input: Record<string, unknown>, env?: Record<string, stri
 		reject: false,
 		env: { ...process.env, ...env },
 	});
+	const stdout = String(result.stdout);
+	let json: Record<string, unknown> | undefined;
+	try {
+		json = JSON.parse(stdout) as Record<string, unknown>;
+	} catch {}
+
 	return {
 		exitCode: result.exitCode ?? 0,
-		stdout: String(result.stdout),
+		stdout,
 		stderr: String(result.stderr),
+		json,
 	};
 }
 
-function createBashToolInput(command: string): Record<string, unknown> {
+function assertAskDecision(t: ExecutionContext, result: HookResult, reasonPattern?: string | RegExp) {
+	t.is(result.exitCode, 0);
+	t.truthy(result.json, 'expected JSON output on stdout');
+	const hookOutput = (result.json?.hookSpecificOutput ?? {}) as Record<string, unknown>;
+	t.is(hookOutput.hookEventName, 'PreToolUse');
+	t.is(hookOutput.permissionDecision, 'ask');
+	if (reasonPattern) {
+		const reason = hookOutput.permissionDecisionReason as string;
+		if (typeof reasonPattern === 'string') {
+			t.true(reason.includes(reasonPattern), `expected reason to include "${reasonPattern}", got "${reason}"`);
+		} else {
+			t.regex(reason, reasonPattern);
+		}
+	}
+}
+
+function createBashToolInput(command: string, permissionMode?: string): Record<string, unknown> {
 	return {
 		session_id: 'test-session', // eslint-disable-line @typescript-eslint/naming-convention
 		transcript_path: '/tmp/test-transcript', // eslint-disable-line @typescript-eslint/naming-convention
+		permission_mode: permissionMode, // eslint-disable-line @typescript-eslint/naming-convention
 		tool_name: 'Bash', // eslint-disable-line @typescript-eslint/naming-convention
 		tool_input: { command }, // eslint-disable-line @typescript-eslint/naming-convention
 	};
 }
 
-function createMcpToolInput(toolName: string): Record<string, unknown> {
+function createMcpToolInput(toolName: string, permissionMode?: string): Record<string, unknown> {
 	return {
 		session_id: 'test-session', // eslint-disable-line @typescript-eslint/naming-convention
 		transcript_path: '/tmp/test-transcript', // eslint-disable-line @typescript-eslint/naming-convention
+		permission_mode: permissionMode, // eslint-disable-line @typescript-eslint/naming-convention
 		tool_name: toolName, // eslint-disable-line @typescript-eslint/naming-convention
 		tool_input: {}, // eslint-disable-line @typescript-eslint/naming-convention
 	};
@@ -74,8 +100,7 @@ test('rejects gh api -X POST', async t => {
 		createBashToolInput('gh api repos/owner/repo/pulls/123/comments -X POST -f body=\'message\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
-	t.true(result.stderr.includes('write operation'));
+	assertAskDecision(t, result, 'write operation');
 });
 
 test('rejects gh api -X PUT', async t => {
@@ -84,7 +109,7 @@ test('rejects gh api -X PUT', async t => {
 		createBashToolInput('gh api repos/owner/repo/issues/1 -X PUT -f state=closed'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects gh api -X PATCH', async t => {
@@ -93,7 +118,7 @@ test('rejects gh api -X PATCH', async t => {
 		createBashToolInput('gh api repos/owner/repo/issues/1 -X PATCH -f state=closed'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects gh api -X DELETE', async t => {
@@ -102,7 +127,7 @@ test('rejects gh api -X DELETE', async t => {
 		createBashToolInput('gh api repos/owner/repo/comments/123 -X DELETE'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects gh api graphql mutation', async t => {
@@ -111,8 +136,7 @@ test('rejects gh api graphql mutation', async t => {
 		createBashToolInput('gh api graphql -f query=\'mutation { resolveReviewThread(input: {threadId: "PRRT_123"}) { thread { isResolved } } }\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
-	t.true(result.stderr.includes('GraphQL mutation'));
+	assertAskDecision(t, result, 'GraphQL');
 });
 
 test('rejects gh api with -f flag (implicit POST)', async t => {
@@ -121,7 +145,7 @@ test('rejects gh api with -f flag (implicit POST)', async t => {
 		createBashToolInput('gh api repos/owner/repo/pulls/123/comments -f body=\'hello\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('allows gh api GET (read-only)', async t => {
@@ -141,7 +165,7 @@ test('rejects glab api -X POST', async t => {
 		createBashToolInput('glab api projects/123/merge_requests/456/notes -X POST -f body=\'message\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects glab api graphql mutation', async t => {
@@ -150,7 +174,7 @@ test('rejects glab api graphql mutation', async t => {
 		createBashToolInput('glab api graphql -f query=\'mutation { mergeRequestSetDraft(input: {iid: "456"}) { mergeRequest { draft } } }\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 // --- curl ---
@@ -161,7 +185,7 @@ test('rejects curl -X POST', async t => {
 		createBashToolInput('curl -X POST https://api.github.com/repos/owner/repo/issues/1/comments -d \'{"body":"message"}\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl -X PUT', async t => {
@@ -170,7 +194,7 @@ test('rejects curl -X PUT', async t => {
 		createBashToolInput('curl -X PUT https://api.example.com/resource/1 -d \'{"key":"value"}\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl --data (implicit POST)', async t => {
@@ -179,7 +203,7 @@ test('rejects curl --data (implicit POST)', async t => {
 		createBashToolInput('curl --data \'{"body":"hello"}\' https://api.github.com/repos/owner/repo/issues/1/comments'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl -d (implicit POST)', async t => {
@@ -188,7 +212,7 @@ test('rejects curl -d (implicit POST)', async t => {
 		createBashToolInput('curl -d @payload.json https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl --json', async t => {
@@ -197,7 +221,7 @@ test('rejects curl --json', async t => {
 		createBashToolInput('curl --json \'{"key":"value"}\' https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl -F (multipart form)', async t => {
@@ -206,7 +230,7 @@ test('rejects curl -F (multipart form)', async t => {
 		createBashToolInput('curl -F file=@upload.txt https://api.example.com/upload'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl --form', async t => {
@@ -215,7 +239,7 @@ test('rejects curl --form', async t => {
 		createBashToolInput('curl --form file=@upload.txt https://api.example.com/upload'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl -T (upload/PUT)', async t => {
@@ -224,7 +248,7 @@ test('rejects curl -T (upload/PUT)', async t => {
 		createBashToolInput('curl -T file.tar.gz https://api.example.com/upload'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl --upload-file', async t => {
@@ -233,7 +257,7 @@ test('rejects curl --upload-file', async t => {
 		createBashToolInput('curl --upload-file file.tar.gz https://api.example.com/upload'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl --data-binary', async t => {
@@ -242,7 +266,7 @@ test('rejects curl --data-binary', async t => {
 		createBashToolInput('curl --data-binary @payload.bin https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl --data-raw', async t => {
@@ -251,7 +275,7 @@ test('rejects curl --data-raw', async t => {
 		createBashToolInput('curl --data-raw \'{"key":"value"}\' https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects curl --data-urlencode', async t => {
@@ -260,7 +284,7 @@ test('rejects curl --data-urlencode', async t => {
 		createBashToolInput('curl --data-urlencode \'name=hello world\' https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('allows curl GET (read-only)', async t => {
@@ -289,7 +313,7 @@ test('rejects wget --post-data', async t => {
 		createBashToolInput('wget --post-data=\'{"body":"message"}\' https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects wget --post-file', async t => {
@@ -298,7 +322,7 @@ test('rejects wget --post-file', async t => {
 		createBashToolInput('wget --post-file=payload.json https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects wget --method=POST', async t => {
@@ -307,7 +331,7 @@ test('rejects wget --method=POST', async t => {
 		createBashToolInput('wget --method=POST --body-data=\'{"key":"value"}\' https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects wget --method=PUT', async t => {
@@ -316,7 +340,7 @@ test('rejects wget --method=PUT', async t => {
 		createBashToolInput('wget --method=PUT --body-data=\'{"key":"value"}\' https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects wget --body-data', async t => {
@@ -325,7 +349,7 @@ test('rejects wget --body-data', async t => {
 		createBashToolInput('wget --body-data=\'{"key":"value"}\' --method=PATCH https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects wget --body-file', async t => {
@@ -334,7 +358,7 @@ test('rejects wget --body-file', async t => {
 		createBashToolInput('wget --body-file=payload.json --method=DELETE https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('allows wget GET (read-only)', async t => {
@@ -354,7 +378,7 @@ test('rejects http POST', async t => {
 		createBashToolInput('http POST https://api.github.com/repos/owner/repo/issues/1/comments body=\'message\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects http PUT', async t => {
@@ -363,7 +387,7 @@ test('rejects http PUT', async t => {
 		createBashToolInput('http PUT https://api.example.com/resource/1 key=value'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects http PATCH', async t => {
@@ -372,7 +396,7 @@ test('rejects http PATCH', async t => {
 		createBashToolInput('http PATCH https://api.example.com/resource/1 status=closed'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects http DELETE', async t => {
@@ -381,7 +405,7 @@ test('rejects http DELETE', async t => {
 		createBashToolInput('http DELETE https://api.example.com/resource/1'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects https POST (httpie shortcut)', async t => {
@@ -390,7 +414,7 @@ test('rejects https POST (httpie shortcut)', async t => {
 		createBashToolInput('https POST api.example.com/endpoint key=value'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 // --- MCP tools ---
@@ -401,8 +425,7 @@ test('rejects Slack MCP send_message', async t => {
 		createMcpToolInput('mcp__plugin_slack_slack__slack_send_message'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
-	t.true(result.stderr.includes('MCP write tool'));
+	assertAskDecision(t, result, 'MCP write tool');
 });
 
 test('rejects Slack MCP schedule_message', async t => {
@@ -411,7 +434,7 @@ test('rejects Slack MCP schedule_message', async t => {
 		createMcpToolInput('mcp__plugin_slack_slack__slack_schedule_message'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects Slack MCP create_canvas', async t => {
@@ -420,7 +443,7 @@ test('rejects Slack MCP create_canvas', async t => {
 		createMcpToolInput('mcp__plugin_slack_slack__slack_create_canvas'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects Slack MCP send_message_draft', async t => {
@@ -429,7 +452,7 @@ test('rejects Slack MCP send_message_draft', async t => {
 		createMcpToolInput('mcp__plugin_slack_slack__slack_send_message_draft'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('allows Slack MCP read_channel', async t => {
@@ -465,7 +488,7 @@ test('rejects Notion MCP create page', async t => {
 		createMcpToolInput('mcp__notion__notion_create_page'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects Notion MCP update page', async t => {
@@ -474,7 +497,7 @@ test('rejects Notion MCP update page', async t => {
 		createMcpToolInput('mcp__notion__notion_update_page'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects Notion MCP delete block', async t => {
@@ -483,7 +506,7 @@ test('rejects Notion MCP delete block', async t => {
 		createMcpToolInput('mcp__notion__notion_delete_block'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects Notion MCP append block', async t => {
@@ -492,7 +515,7 @@ test('rejects Notion MCP append block', async t => {
 		createMcpToolInput('mcp__notion__notion_append_block_children'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects generic MCP write tool', async t => {
@@ -501,7 +524,7 @@ test('rejects generic MCP write tool', async t => {
 		createMcpToolInput('mcp__some_server__upload_file'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects camelCase MCP write tool', async t => {
@@ -510,7 +533,7 @@ test('rejects camelCase MCP write tool', async t => {
 		createMcpToolInput('mcp__server__createFooEntity'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects kebab-case MCP write tool', async t => {
@@ -519,7 +542,7 @@ test('rejects kebab-case MCP write tool', async t => {
 		createMcpToolInput('mcp__server__delete-item'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('allows generic MCP read tool', async t => {
@@ -539,8 +562,7 @@ test('rejects unknown command with -X POST', async t => {
 		createBashToolInput('xh -X POST https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
-	t.true(result.stderr.includes('xh'));
+	assertAskDecision(t, result, 'xh');
 });
 
 test('rejects unknown command with --data flag', async t => {
@@ -549,7 +571,7 @@ test('rejects unknown command with --data flag', async t => {
 		createBashToolInput('mycurl --data \'{"key":"value"}\' https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects unknown command with --json flag', async t => {
@@ -558,7 +580,7 @@ test('rejects unknown command with --json flag', async t => {
 		createBashToolInput('apicli --json \'{"key":"value"}\' https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects unknown command with --request POST', async t => {
@@ -567,7 +589,7 @@ test('rejects unknown command with --request POST', async t => {
 		createBashToolInput('fetcher --request POST https://api.example.com/endpoint'),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('rejects unknown command with mutation in args', async t => {
@@ -576,7 +598,7 @@ test('rejects unknown command with mutation in args', async t => {
 		createBashToolInput('graphql-client \'mutation { deleteUser(id: "123") { id } }\''),
 		env(config),
 	);
-	t.is(result.exitCode, 2);
+	assertAskDecision(t, result);
 });
 
 test('allows unknown command without write flags', async t => {
@@ -610,12 +632,80 @@ test('allows MCP write operations when rule is disabled', async t => {
 
 // --- error message content ---
 
-test('error message nudges toward seeking user approval', async t => {
+test('ask decision includes reason describing the write operation', async t => {
 	await using config = await createHooksConfig({ banWriteOperations: true });
 	const result = await runHook(
 		createBashToolInput('curl -X POST https://api.example.com/endpoint'),
 		env(config),
 	);
+	assertAskDecision(t, result, 'write operation');
+});
+
+// --- permission modes ---
+
+test('uses ask decision in default permission mode', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('curl -X POST https://api.example.com/endpoint', 'default'),
+		env(config),
+	);
+	assertAskDecision(t, result);
+});
+
+test('uses ask decision for MCP in default permission mode', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createMcpToolInput('mcp__plugin_slack_slack__slack_send_message', 'default'),
+		env(config),
+	);
+	assertAskDecision(t, result);
+});
+
+test('uses exit code 2 in bypassPermissions mode for bash', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('curl -X POST https://api.example.com/endpoint', 'bypassPermissions'),
+		env(config),
+	);
 	t.is(result.exitCode, 2);
-	t.true(result.stderr.includes('explicit approval'));
+	t.true(result.stderr.includes('write operation'));
+	t.falsy(result.json, 'should not output JSON in bypass mode');
+});
+
+test('uses exit code 2 in bypassPermissions mode for MCP', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createMcpToolInput('mcp__plugin_slack_slack__slack_send_message', 'bypassPermissions'),
+		env(config),
+	);
+	t.is(result.exitCode, 2);
+	t.true(result.stderr.includes('MCP write tool'));
+	t.falsy(result.json, 'should not output JSON in bypass mode');
+});
+
+test('uses ask decision in acceptEdits permission mode', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('curl -X POST https://api.example.com/endpoint', 'acceptEdits'),
+		env(config),
+	);
+	assertAskDecision(t, result);
+});
+
+test('uses ask decision in dontAsk permission mode', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('curl -X POST https://api.example.com/endpoint', 'dontAsk'),
+		env(config),
+	);
+	assertAskDecision(t, result);
+});
+
+test('uses ask decision in plan permission mode', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('curl -X POST https://api.example.com/endpoint', 'plan'),
+		env(config),
+	);
+	assertAskDecision(t, result);
 });

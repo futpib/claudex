@@ -33,7 +33,12 @@ export type RuleViolation = {
 	messages: string[];
 };
 
-export type RuleResult = RuleViolation | { type: 'pass' } | { type: 'side-effect' };
+export type RuleAsk = {
+	type: 'ask';
+	reason: string;
+};
+
+export type RuleResult = RuleViolation | RuleAsk | { type: 'pass' } | { type: 'side-effect' };
 
 export type RuleContext = {
 	input: PreToolUseHookInput;
@@ -42,6 +47,7 @@ export type RuleContext = {
 	sessionId: string;
 	transcriptPath: string;
 	command: string;
+	permissionMode: string;
 	cwd: string;
 	helpers: typeof bashParserHelpers;
 	hooks: Record<string, boolean | undefined>;

@@ -15,6 +15,23 @@ import { allRules } from './rules/index.js';
 const readOnlyTools = new Set([ 'Grep', 'LS', 'WebFetch', 'Glob', 'NotebookRead', 'WebSearch', 'BashOutput' ]);
 const internalTools = new Set([ 'TodoWrite', 'Task', 'AskUserQuestion' ]);
 
+function handleAskResult(reason: string, permissionMode: string): never {
+	if (permissionMode === 'bypassPermissions') {
+		console.error(reason);
+		process.exit(2);
+	}
+
+	const output = {
+		hookSpecificOutput: {
+			hookEventName: 'PreToolUse',
+			permissionDecision: 'ask',
+			permissionDecisionReason: reason,
+		},
+	};
+	console.log(JSON.stringify(output));
+	process.exit(0);
+}
+
 async function main() {
 	const input = await readStdin();
 
@@ -26,6 +43,7 @@ async function main() {
 	const command = knownInput?.tool_name === 'Bash' ? knownInput.tool_input.command : '';
 	const sessionId = preToolUseHookInput.session_id ?? '';
 	const transcriptPath = preToolUseHookInput.transcript_path ?? '';
+	const permissionMode = preToolUseHookInput.permission_mode ?? 'default';
 	const isMcpTool = toolName.startsWith('mcp__');
 
 	const { config } = await getMergedConfig(process.cwd());
@@ -38,6 +56,7 @@ async function main() {
 		sessionId,
 		transcriptPath,
 		command,
+		permissionMode,
 		cwd: process.cwd(),
 		helpers,
 		hooks,
@@ -61,6 +80,10 @@ async function main() {
 			}
 
 			process.exit(2);
+		}
+
+		if (result.type === 'ask') {
+			handleAskResult(result.reason, permissionMode);
 		}
 	}
 
@@ -88,6 +111,10 @@ async function main() {
 			}
 
 			process.exit(2);
+		}
+
+		if (result.type === 'ask') {
+			handleAskResult(result.reason, permissionMode);
 		}
 	}
 
