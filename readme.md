@@ -15,7 +15,11 @@ A CLI wrapper and hook management system for Anthropic's Claude Code that adds D
 - **SSH Forwarding**: Automatic SSH agent setup and forwarding into Docker containers
 - **Hook System**: Extensible pre-tool-use, user-prompt-submit, notification, and stop hooks
 - **MCP Server**: Built-in requirements tracking tool for Claude Code sessions
-- **Multi-Scope Configuration**: Layered config system with global, project, and group scopes
+- **Multi-Scope Configuration**: Layered config system with global, project, group, and profile scopes
+- **Accounts**: Isolated Claude configurations per named account (`--account <name>`)
+- **OpenCode Integration**: Use OpenCode as an alternative AI launcher via `--launcher opencode`
+- **Host Port Proxying**: Automatically forward host-side ports into Docker containers via socat
+- **Startup Commands**: Run custom init and startup commands inside Docker containers at build or start time
 
 ## Installation
 
@@ -61,14 +65,17 @@ claudex --docker-exec-root
 | `--docker-exec-root` | Exec into a running container as root with full privileges |
 | `--docker-pull` | Pull the latest base image when building |
 | `--docker-no-cache` | Build image without Docker cache |
+| `--docker-skip-build` | Skip Docker image build and use existing image |
 | `--docker-sudo` | Allow sudo inside the container |
+| `--container <name>` | Target a specific container by name |
 | `--allow-unsafe-directory` | Skip directory safety checks |
 | `--package <name>` | Install pacman package in Docker (repeatable) |
 | `--volume <spec>` | Mount volume: `path` or `host:container` (repeatable) |
 | `--env <spec>` | Set env var: `KEY=value` or `KEY` for passthrough (repeatable) |
 | `--ssh-key <path>` | Add SSH key to agent (repeatable) |
-| `--launcher <name>` | Select launcher by name (e.g. `ollama`) |
+| `--launcher <name>` | Select launcher by name (e.g. `ollama`, `opencode`) |
 | `--model <name>` | Override the launcher's default model |
+| `--account <name>` | Use a specific claudex account (isolated Claude config) |
 
 ### Docker Safety
 
@@ -165,6 +172,59 @@ claudex config set ssh.keys '["~/.ssh/id_ed25519"]'
 claudex config set ssh.hosts '["github.com", "gitlab.com"]'
 ```
 
+### Accounts
+
+Claudex supports multiple named accounts to keep Claude configurations isolated (e.g. for different projects or organizations). Each account gets its own Claude config directory under `~/.config/claudex/accounts/<name>/claude`.
+
+```bash
+# Run with a specific account
+claudex --account work
+
+# Set the default account for a project
+claudex config set account work
+```
+
+### OpenCode Integration
+
+Claudex supports [OpenCode](https://opencode.ai/) as an alternative launcher. When selected, the OpenCode plugin (`opencode-plugin.ts`) is automatically registered and bridges OpenCode hook events (tool calls, stop, user prompts) to claudex hook executables.
+
+```bash
+# Run with OpenCode launcher
+claudex --launcher opencode
+
+# Set OpenCode as the default launcher for a project
+claudex config set launcher opencode
+```
+
+The built-in `opencode` launcher definition mounts `~/.local/share/opencode` and `~/.config/opencode` into the container automatically.
+
+### Host Port Proxying
+
+When `hostPorts` is configured, claudex starts host-side `socat` proxies so the container can reach localhost-only services on the host via `host.docker.internal`.
+
+```bash
+# Expose host port 11434 (Ollama) to the container
+claudex config add hostPorts 11434
+```
+
+### Startup and Init Commands
+
+Run custom commands during Docker image build or at container startup:
+
+```bash
+# Run as root during image build (after packages are installed)
+claudex config add rootInitCommands 'echo "hello from root build"'
+
+# Run as user during image build
+claudex config add userInitCommands 'npm install -g typescript'
+
+# Run as root at every container start
+claudex config add rootStartupCommands 'service nginx start'
+
+# Run as user at every container start (before Claude)
+claudex config add userStartupCommands 'eval "$(ssh-agent -s)"'
+```
+
 ## Config Management
 
 Manage claudex configuration from the command line with `claudex config`:
@@ -183,7 +243,9 @@ claudex config <action> [scope flags] [key] [value]
 - `unset <key> [<value>]` — remove a key, or remove a specific value from an array
 - `keys` — list available configuration keys and their types
 - `group <name> <paths...>` — assign multiple projects to a group at once
-- `ungroup <paths...>` — remove group assignment from projects
+- `ungroup <name> <paths...>` — remove projects from a group
+- `profile <name> <paths...>` — add a profile to multiple projects at once
+- `unprofile <name> <paths...>` — remove a profile from multiple projects
 
 ### Scope Flags
 
@@ -207,14 +269,26 @@ claudex config <action> [scope flags] [key] [value]
 | `hostPorts` | number[] | add, unset |
 | `extraHosts.<HOST>` | string | set, unset |
 | `shareVolumes` | boolean | set, unset |
+| `shareAdditionalDirectories` | boolean | set, unset |
 | `settingSources` | string | set, unset |
 | `hooks` | boolean / object | set, unset |
 | `hooks.<FLAG>` | boolean | set, unset |
 | `mcpServers` | boolean / object | set, unset |
 | `mcpServers.<NAME>` | boolean | set, unset |
 | `notifications` | boolean | set, unset |
+| `hooksDescriptions` | boolean | set, unset |
 | `profiles` | string[] | add, unset |
 | `group` | string (project only) | set, unset |
+| `account` | string | set, unset |
+| `launcher` | string | set, unset |
+| `rootInitCommands` | string[] | add, unset |
+| `userInitCommands` | string[] | add, unset |
+| `rootStartupCommands` | string[] | add, unset |
+| `userStartupCommands` | string[] | add, unset |
+| `dockerDangerouslySkipPermissions` | boolean | set, unset |
+| `dockerAllowDangerouslySkipPermissions` | boolean | set, unset |
+| `dockerIpcPrivate` | boolean | set, unset |
+| `dockerPidsLimit` | boolean | set, unset |
 
 ### Profiles
 
@@ -296,11 +370,17 @@ claudex config get --group mygroup hostPorts
 # Assign multiple projects to a group
 claudex config group mygroup ~/code/foo ~/code/bar
 
-# Remove projects from their group
-claudex config ungroup ~/code/foo
+# Remove projects from a group
+claudex config ungroup mygroup ~/code/foo
 
 # List projects in a group
 claudex config list --group mygroup --members
+
+# Assign a profile to multiple projects at once
+claudex config profile gh ~/code/foo ~/code/bar
+
+# Remove a profile from projects
+claudex config unprofile gh ~/code/foo
 ```
 
 ## Config Interactive TUI
@@ -370,6 +450,7 @@ Or in `config.json`:
 | `banGitAddAll` | Ban `git add -A` / `--all` / `--no-ignore-removal` |
 | `banGitCommitAmend` | Ban `git commit --amend` |
 | `banGitCommitNoVerify` | Ban `git commit --no-verify` |
+| `banGitRemoteSetUrl` | Ban `git remote set-url` that switches SSH remote to HTTPS |
 | `banGitCheckoutRedundantStartPoint` | Ban redundant start-point in `git checkout -b` on detached HEAD |
 | `banBackgroundBash` | Ban `run_in_background` bash commands |
 | `banBashMinusC` | Ban `bash -c` or `sh -c` (run the command directly) |
@@ -385,8 +466,13 @@ Or in `config.json`:
 | `banAbsolutePaths` | Ban absolute paths under cwd in Bash commands (use relative paths) |
 | `banHomeDirAbsolutePaths` | Ban absolute paths under home directory in Bash commands (use `~/...`) |
 | `banWrongPackageManager` | Ban using wrong package manager for the project |
+| `banWriteOperations` | Require explicit user approval before HTTP write operations, GraphQL mutations, or MCP write tools |
+| `preferLocalGithubRepo` | Block fetching files from GitHub when the repo is already cloned locally as a sibling directory |
+| `suggestCommandSubstitute` | When a command is not found but an equivalent is available, suggest it (e.g. pip → uv) |
 | `requireCoAuthorshipProof` | Require co-authorship proof PIN for Co-authored-by commits |
 | `logToolUse` | Log non-read-only tool usage |
+| `logReadOnlyToolUse` | Log read-only tool usage |
+| `logPrompts` | Log user prompts |
 
 **MCP server flags:**
 
