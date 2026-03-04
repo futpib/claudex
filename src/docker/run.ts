@@ -7,6 +7,7 @@ import {
 	expandVolumePaths, expandPathEnv,
 	type Volume, type ClaudexConfig, type LauncherDefinition,
 } from '../config/index.js';
+import { getAccountPaths, ensureAccountDirs } from '../account.js';
 import { isClaudeCodeLauncher } from '../launcher.js';
 import { getGitWorktreeParentPath } from '../git.js';
 import { getSshKeys, getSshHosts, getFilteredKnownHosts } from '../ssh/known-hosts.js';
@@ -108,6 +109,7 @@ export type DockerRunResult = {
 export async function runDockerContainer(parameters: {
 	cwd: string;
 	config: ClaudexConfig;
+	account: string | undefined;
 	profileVolumes: string[];
 	launcherDef: LauncherDefinition | undefined;
 	cliPackages: string[];
@@ -124,7 +126,7 @@ export async function runDockerContainer(parameters: {
 	cliInDockerPath: string;
 }): Promise<DockerRunResult> {
 	const {
-		cwd, profileVolumes, launcherDef, cliPackages, cliVolumes, cliEnv, cliSshKeys,
+		cwd, account, profileVolumes, launcherDef, cliPackages, cliVolumes, cliEnv, cliSshKeys,
 		cliModel, dockerSudo, useDockerShell, dockerPull, dockerNoCache, dockerSkipBuild, claudeArgs, cliInDockerPath,
 	} = parameters;
 	const config = { ...parameters.config };
@@ -225,8 +227,10 @@ export async function runDockerContainer(parameters: {
 	const randomSuffix = Math.random().toString(36).slice(2, 8);
 	const containerName = `${getContainerPrefix(cwd)}${randomSuffix}`;
 	const homeDir = os.homedir();
-	const claudeConfigDir = path.join(homeDir, '.claude');
-	const claudeConfigFile = path.join(homeDir, '.claude.json');
+
+	const accountPaths = getAccountPaths(account);
+	await ensureAccountDirs(accountPaths);
+	const { claudeConfigDir } = accountPaths;
 
 	const dockerArgs = [
 		'run',
@@ -239,10 +243,19 @@ export async function runDockerContainer(parameters: {
 		containerName,
 		'-v',
 		`${cwd}:${cwd}`,
-		'-v',
-		`${claudeConfigDir}:/home/${username}/.claude`,
-		'-v',
-		`${claudeConfigFile}:/home/${username}/.claude.json`,
+		...(account
+			? [
+				'-v',
+				`${claudeConfigDir}:${claudeConfigDir}`,
+				'-e',
+				`CLAUDE_CONFIG_DIR=${claudeConfigDir}`,
+			]
+			: [
+				'-v',
+				`${claudeConfigDir}:/home/${username}/.claude`,
+				'-v',
+				`${path.join(homeDir, '.claude.json')}:/home/${username}/.claude.json`,
+			]),
 		'-v',
 		`${projectRoot}:${projectRoot}`,
 		'-v',

@@ -8,7 +8,7 @@ import { allRules } from './hooks/rules/index.js';
 
 const claudexMemoryDirectoryPath = path.join(paths.config, 'CLAUDE.md.d');
 
-const claudeCodeMemoryPath = path.join(os.homedir(), '.claude', 'CLAUDE.md');
+const defaultClaudeCodeMemoryPath = path.join(os.homedir(), '.claude', 'CLAUDE.md');
 
 function prettifyPath(filePath: string) {
 	const homeDir = os.homedir();
@@ -59,9 +59,9 @@ async function getFilesInClaudexMemoryDirectory(): Promise<string[]> {
 	return filesInMemoryDirectory;
 }
 
-async function shouldBackupClaudeCodeMemory(): Promise<boolean> {
+async function shouldBackupClaudeCodeMemory(memoryPath: string): Promise<boolean> {
 	try {
-		const content = await fs.readFile(claudeCodeMemoryPath, 'utf8');
+		const content = await fs.readFile(memoryPath, 'utf8');
 		return !content.includes(doNotEditThisFileMessage);
 	} catch (error) {
 		if (isErrnoException(error) && error.code === 'ENOENT') {
@@ -72,24 +72,27 @@ async function shouldBackupClaudeCodeMemory(): Promise<boolean> {
 	}
 }
 
-async function backupClaudeCodeMemory(): Promise<void> {
-	const backupPath = path.join(path.dirname(claudeCodeMemoryPath), 'CLAUDE.md.bak');
+async function backupClaudeCodeMemory(memoryPath: string): Promise<void> {
+	const backupPath = path.join(path.dirname(memoryPath), 'CLAUDE.md.bak');
 
 	if (await fileExists(backupPath)) {
 		const timestamp = new Date().toISOString().replaceAll(/[:.]/g, '-');
 		const timestampedBackupPath = `${backupPath}.${timestamp}`;
-		await fs.rename(claudeCodeMemoryPath, timestampedBackupPath);
+		await fs.rename(memoryPath, timestampedBackupPath);
 	} else {
-		await fs.rename(claudeCodeMemoryPath, backupPath);
+		await fs.rename(memoryPath, backupPath);
 	}
 }
 
-export async function createClaudeCodeMemory(resolvedHooks?: Record<string, boolean | undefined>) {
+export async function createClaudeCodeMemory(resolvedHooks?: Record<string, boolean | undefined>, claudeConfigDir?: string) {
+	const claudeCodeMemoryPath = claudeConfigDir
+		? path.join(claudeConfigDir, 'CLAUDE.md')
+		: defaultClaudeCodeMemoryPath;
 	const filesInMemoryDirectory = await getFilesInClaudexMemoryDirectory();
 
-	if (await shouldBackupClaudeCodeMemory()) {
+	if (await shouldBackupClaudeCodeMemory(claudeCodeMemoryPath)) {
 		console.warn('Backing up existing CLAUDE.md file...');
-		await backupClaudeCodeMemory();
+		await backupClaudeCodeMemory(claudeCodeMemoryPath);
 	}
 
 	await fs.writeFile(claudeCodeMemoryPath, (async function * () {

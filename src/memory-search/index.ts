@@ -1,5 +1,6 @@
 import process from 'node:process';
 import { Command } from 'commander';
+import { getAccountPaths } from '../account.js';
 import type { SearchTarget, SearchOptions } from './types.js';
 import { discoverSessions, getWorktreePaths } from './sessions.js';
 import { searchSessions } from './search.js';
@@ -25,6 +26,7 @@ export async function main(): Promise<void> {
 		.option('-r, --tool-result', 'Search tool results (non-Bash)')
 		.option('-s, --subagent-prompt', 'Search subagent prompts')
 		.option('--compact-summary', 'Search compact/continuation summaries')
+		.option('--account <name>', 'Use a specific claudex account')
 		.option('--project <path>', 'Project path', process.cwd())
 		.option('--session <id>', 'Search only a specific session')
 		.option('-C, --context <n>', 'Context lines around matches')
@@ -103,13 +105,15 @@ export async function main(): Promise<void> {
 				jsonOutput: Boolean(options.json),
 			};
 
+			const accountPaths = getAccountPaths(options.account as string | undefined);
+
 			const worktreePaths = await getWorktreePaths(searchOptions.projectPath);
 			const uniquePaths = new Set(worktreePaths);
 			if (!uniquePaths.has(searchOptions.projectPath)) {
 				uniquePaths.add(searchOptions.projectPath);
 			}
 
-			const allSessions = await Promise.all([ ...uniquePaths ].map(async p => discoverSessions(p, searchOptions.sessionId)));
+			const allSessions = await Promise.all([ ...uniquePaths ].map(async p => discoverSessions(p, searchOptions.sessionId, accountPaths.claudeConfigDir)));
 
 			const seen = new Set<string>();
 			const sessions: typeof allSessions[0] = [];

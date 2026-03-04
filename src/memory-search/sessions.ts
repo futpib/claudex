@@ -106,9 +106,10 @@ async function findSubagentFiles(projectDir: string, sessionId: string): Promise
 	}
 }
 
-export async function discoverSessions(projectPath: string, specificSessionId?: string): Promise<SessionFile[]> {
+export async function discoverSessions(projectPath: string, specificSessionId?: string, claudeConfigDir?: string): Promise<SessionFile[]> {
 	const encoded = encodeProjectPath(projectPath);
-	const projectDir = path.join(os.homedir(), '.claude', 'projects', encoded);
+	const baseDir = claudeConfigDir ?? path.join(os.homedir(), '.claude');
+	const projectDir = path.join(baseDir, 'projects', encoded);
 
 	try {
 		await fs.access(projectDir);

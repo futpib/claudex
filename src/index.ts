@@ -18,12 +18,15 @@ import {
 } from './config-cli.js';
 import { isUnsafeDirectory } from './safety.js';
 import { isErrnoException, collapseHomedir } from './utils.js';
+import { getAccountPaths, ensureAccountDirs } from './account.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, getContainerPrefix, runDockerContainer } from './docker/run.js';
 import { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher } from './launcher.js';
 
-async function ensureMcpServerConfig(projectRoot: string) {
-	const claudeJsonPath = path.join(os.homedir(), '.claude.json');
+async function ensureMcpServerConfig(projectRoot: string, claudeConfigDir?: string) {
+	const claudeJsonPath = claudeConfigDir
+		? path.join(claudeConfigDir, '.claude.json')
+		: path.join(os.homedir(), '.claude.json');
 	let config: Record<string, unknown> = {};
 
 	try {
@@ -75,6 +78,7 @@ type MainOptions = {
 	sshKey: string[];
 	launcher: string | undefined;
 	model: string | undefined;
+	account: string | undefined;
 };
 
 export async function main() {
@@ -96,6 +100,7 @@ export async function main() {
 		.option('--ssh-key <path>', 'Add SSH key to agent (repeatable)', collect, [])
 		.option('--launcher <name>', 'Select launcher by name (e.g. "ollama")')
 		.option('--model <name>', 'Override the launcher\'s default model')
+		.option('--account <name>', 'Use a specific claudex account')
 		.allowUnknownOption()
 		.passThroughOptions()
 		.argument('[claude-args...]')
@@ -379,6 +384,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		sshKey: cliSshKeys,
 		launcher: cliLauncher,
 		model: cliModel,
+		account: cliAccount,
 	} = options;
 
 	// Read config early for hook/mcp gating
@@ -386,7 +392,15 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const hooksResolved = resolveHooks(earlyConfig.config.hooks);
 	const mcpServersResolved = resolveMcpServers(earlyConfig.config.mcpServers);
 
-	await ensureHookSetup();
+	const account = cliAccount ?? earlyConfig.account;
+	const accountPaths = getAccountPaths(account);
+	await ensureAccountDirs(accountPaths);
+
+	if (account) {
+		console.error(`Account: ${account}`);
+	}
+
+	await ensureHookSetup(accountPaths.claudeConfigDir);
 
 	// Resolve launcher name early for opencode plugin setup
 	const effectiveLauncherName = cliLauncher ?? earlyConfig.config.launcher;
@@ -400,7 +414,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const currentFilePath = fileURLToPath(currentFileUrl);
 	const projectRoot = path.resolve(path.dirname(currentFilePath), '..');
 	if (mcpServersResolved.claudex) {
-		await ensureMcpServerConfig(projectRoot);
+		await ensureMcpServerConfig(projectRoot, account ? accountPaths.claudeConfigDir : undefined);
 	}
 
 	// Check directory safety and potentially create temp directory
@@ -478,6 +492,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		} = await runDockerContainer({
 			cwd,
 			config,
+			account,
 			profileVolumes,
 			launcherDef,
 			cliPackages,
@@ -525,7 +540,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	}
 
 	try {
-		await createClaudeCodeMemory(earlyConfig.config.hooksDescriptions === false ? undefined : hooksResolved);
+		await createClaudeCodeMemory(earlyConfig.config.hooksDescriptions === false ? undefined : hooksResolved, account ? accountPaths.claudeConfigDir : undefined);
 	} catch (error) {
 		if (!(
 			error instanceof Error

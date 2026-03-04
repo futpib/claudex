@@ -190,6 +190,8 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 
 	const dockerPidsLimit = overlay.dockerPidsLimit ?? base.dockerPidsLimit;
 
+	const account = overlay.account ?? base.account;
+
 	return {
 		profiles: profiles.length > 0 ? profiles : undefined,
 		packages: packages.length > 0 ? packages : undefined,
@@ -219,6 +221,7 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		dockerAllowDangerouslySkipPermissions,
 		dockerIpcPrivate,
 		dockerPidsLimit,
+		account,
 	};
 }
 
@@ -403,6 +406,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		dockerAllowDangerouslySkipPermissions: config.dockerAllowDangerouslySkipPermissions,
 		dockerIpcPrivate: config.dockerIpcPrivate,
 		dockerPidsLimit: config.dockerPidsLimit,
+		account: config.account,
 		// Profiles references are consumed during resolution and not carried to final output
 	};
 }
@@ -473,6 +477,7 @@ export type MergedConfigResult = {
 	group: string | undefined;
 	profiles: string[] | undefined;
 	project: string | undefined;
+	account: string | undefined;
 };
 
 // Legacy function for backward compatibility - deprecated
@@ -543,5 +548,6 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 		group: projectMatch?.config.group,
 		profiles: profiles && profiles.length > 0 ? profiles : undefined,
 		project: projectMatch?.path,
+		account: merged.account,
 	};
 }

@@ -20,8 +20,8 @@ const settingsSchema = z.object({
 type Settings = z.infer<typeof settingsSchema>;
 
 async function setupHookSymlinks() {
-	const homeDir = os.homedir();
-	const settingsPath = path.join(homeDir, '.claude', 'settings.json');
+	const claudeDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude');
+	const settingsPath = path.join(claudeDir, 'settings.json');
 
 	try {
 		const settingsContent = await fs.readFile(settingsPath, 'utf8');

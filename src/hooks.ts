@@ -65,8 +65,8 @@ async function setupHook(
 	return false;
 }
 
-export async function ensureHookSetup() {
-	const claudeDir = path.join(os.homedir(), '.claude');
+export async function ensureHookSetup(claudeConfigDir?: string) {
+	const claudeDir = claudeConfigDir ?? path.join(os.homedir(), '.claude');
 	const settingsPath = path.join(claudeDir, 'settings.json');
 
 	await fs.mkdir(claudeDir, { recursive: true });
