@@ -866,6 +866,275 @@ export async function getLsCommandArgs(command: string): Promise<string[] | unde
 	return result;
 }
 
+/**
+ * Detects if a bash command performs a write/mutation HTTP operation.
+ * Checks gh, glab, curl, wget, and httpie for write methods, data flags,
+ * and GraphQL mutations using the parsed AST.
+ * Returns a description of the write operation if found, undefined otherwise.
+ */
+export async function getWriteOperation(command: string): Promise<string | undefined> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return undefined;
+	}
+
+	let result: string | undefined;
+
+	someSimpleCommand(ast, cmd => {
+		const name = cmd.name ? getWordLiteralValue(cmd.name) : undefined;
+		if (!name) {
+			return false;
+		}
+
+		const args = cmd.args
+			.map(arg => getWordLiteralValue(arg))
+			.filter((arg): arg is string => arg !== undefined);
+
+		const match = checkWriteCommand(name, args);
+		if (match) {
+			result = match;
+			return true;
+		}
+
+		return false;
+	});
+
+	return result;
+}
+
+const writeMethods = new Set([
+	'post',
+	'put',
+	'patch',
+	'delete',
+]);
+
+function checkWriteCommand(name: string, args: string[]): string | undefined {
+	switch (name) {
+		case 'gh':
+		case 'glab': {
+			return checkCliApi(name, args);
+		}
+
+		case 'curl': {
+			return checkCurl(args);
+		}
+
+		case 'wget': {
+			return checkWget(args);
+		}
+
+		case 'http':
+		case 'https': {
+			return checkHttpie(name, args);
+		}
+
+		default: {
+			return checkGenericWrite(name, args);
+		}
+	}
+}
+
+function checkCliApi(cli: string, args: string[]): string | undefined {
+	if (args[0] !== 'api') {
+		return undefined;
+	}
+
+	// GraphQL mutation (check first — more specific than -f/-F)
+	if (args[1] === 'graphql') {
+		for (const arg of args) {
+			if (arg.includes('mutation')) {
+				return `${cli} api GraphQL mutation`;
+			}
+		}
+	}
+
+	for (let i = 1; i < args.length; i++) {
+		const arg = args[i];
+
+		// Explicit -X POST/PUT/PATCH/DELETE
+		if (arg === '-X' && i + 1 < args.length) {
+			const method = args[i + 1]?.toLowerCase();
+			if (method && writeMethods.has(method)) {
+				return `${cli} api with write HTTP method (${args[i + 1]})`;
+			}
+		}
+
+		// -f or -F flags imply POST
+		if (arg === '-f' || arg === '-F') {
+			return `${cli} api with -f/-F flags (implies POST)`;
+		}
+	}
+
+	return undefined;
+}
+
+const curlDataFlags = new Set([
+	'-d',
+	'--data',
+	'--data-ascii',
+	'--data-binary',
+	'--data-raw',
+	'--data-urlencode',
+	'--json',
+]);
+
+const curlFormFlags = new Set([
+	'-F',
+	'--form',
+	'--form-string',
+]);
+
+const curlUploadFlags = new Set([
+	'-T',
+	'--upload-file',
+]);
+
+function checkCurl(args: string[]): string | undefined {
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+
+		// Explicit -X POST/PUT/PATCH/DELETE
+		if (arg === '-X' && i + 1 < args.length) {
+			const method = args[i + 1]?.toLowerCase();
+			if (method && writeMethods.has(method)) {
+				return `curl with write HTTP method (${args[i + 1]})`;
+			}
+		}
+
+		// Data flags (imply POST)
+		if (curlDataFlags.has(arg)) {
+			return 'curl with data flags (implies POST)';
+		}
+
+		// Form flags (imply POST)
+		if (curlFormFlags.has(arg)) {
+			return 'curl with form flags (implies POST)';
+		}
+
+		// Upload flags (imply PUT)
+		if (curlUploadFlags.has(arg)) {
+			return 'curl with upload flag (implies PUT)';
+		}
+	}
+
+	return undefined;
+}
+
+function checkWget(args: string[]): string | undefined {
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+
+		// --post-data, --post-file
+		if (arg === '--post-data' || arg.startsWith('--post-data=')
+			|| arg === '--post-file' || arg.startsWith('--post-file=')) {
+			return 'wget with --post-data/--post-file';
+		}
+
+		// --method=POST/PUT/PATCH/DELETE
+		if (arg === '--method' && i + 1 < args.length) {
+			const method = args[i + 1]?.toLowerCase();
+			if (method && writeMethods.has(method)) {
+				return `wget with write --method (${args[i + 1]})`;
+			}
+		}
+
+		if (arg.startsWith('--method=')) {
+			const method = arg.slice('--method='.length).toLowerCase();
+			if (writeMethods.has(method)) {
+				return `wget with write --method (${arg.slice('--method='.length)})`;
+			}
+		}
+
+		// --body-data, --body-file
+		if (arg === '--body-data' || arg.startsWith('--body-data=')
+			|| arg === '--body-file' || arg.startsWith('--body-file=')) {
+			return 'wget with --body-data/--body-file';
+		}
+	}
+
+	return undefined;
+}
+
+function checkHttpie(command: string, args: string[]): string | undefined {
+	// First positional argument is the HTTP method (must be uppercase)
+	const method = args[0];
+	if (method && writeMethods.has(method.toLowerCase()) && method === method.toUpperCase()) {
+		return `${command} (httpie) with write HTTP method (${method})`;
+	}
+
+	return undefined;
+}
+
+const genericWriteFlags = new Set([
+	'-X',
+	'--request',
+	'-d',
+	'--data',
+	'--data-ascii',
+	'--data-binary',
+	'--data-raw',
+	'--data-urlencode',
+	'--json',
+	'-F',
+	'--form',
+	'--form-string',
+	'-T',
+	'--upload-file',
+	'--post-data',
+	'--post-file',
+	'--body-data',
+	'--body-file',
+	'--method',
+]);
+
+function checkGenericWrite(name: string, args: string[]): string | undefined {
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+
+		// -X / --request with write method
+		if ((arg === '-X' || arg === '--request') && i + 1 < args.length) {
+			const method = args[i + 1]?.toLowerCase();
+			if (method && writeMethods.has(method)) {
+				return `${name} with write HTTP method (${args[i + 1]})`;
+			}
+		}
+
+		// --method with write method (wget-style)
+		if (arg === '--method' && i + 1 < args.length) {
+			const method = args[i + 1]?.toLowerCase();
+			if (method && writeMethods.has(method)) {
+				return `${name} with write --method (${args[i + 1]})`;
+			}
+		}
+
+		if (arg.startsWith('--method=')) {
+			const method = arg.slice('--method='.length).toLowerCase();
+			if (writeMethods.has(method)) {
+				return `${name} with write --method (${arg.slice('--method='.length)})`;
+			}
+		}
+
+		// Any other write-implying flag
+		if (genericWriteFlags.has(arg)) {
+			return `${name} with write flag (${arg})`;
+		}
+
+		// --post-data=..., --post-file=..., --body-data=..., --body-file=...
+		if (arg.startsWith('--post-data=') || arg.startsWith('--post-file=')
+			|| arg.startsWith('--body-data=') || arg.startsWith('--body-file=')) {
+			return `${name} with write flag (${arg.split('=')[0]})`;
+		}
+
+		// GraphQL mutation in arguments
+		if (arg.includes('mutation')) {
+			return `${name} with GraphQL mutation`;
+		}
+	}
+
+	return undefined;
+}
+
 export async function hasYarnCwdFlag(command: string): Promise<boolean> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
