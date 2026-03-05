@@ -35,6 +35,7 @@ export async function main(): Promise<void> {
 		.option('--max-results <n>', 'Max results', '50')
 		.option('--max-line-width <n>', 'Max output line width (0 for unlimited)', '200')
 		.option('--json', 'JSON output')
+		.option('-l, --sessions-with-matches', 'Only print session IDs with matches')
 		.option('-i, --ignore-case', 'Case-insensitive search')
 		.action(async (pattern: string, options: Record<string, unknown>) => {
 			const targets = new Set<SearchTarget>();
@@ -103,6 +104,7 @@ export async function main(): Promise<void> {
 				maxResults: Number.parseInt(options.maxResults as string, 10),
 				maxLineWidth: Number.parseInt(options.maxLineWidth as string, 10),
 				jsonOutput: Boolean(options.json),
+				sessionsWithMatches: Boolean(options.sessionsWithMatches),
 			};
 
 			const accountPaths = getAccountPaths(options.account as string | undefined);
@@ -132,7 +134,25 @@ export async function main(): Promise<void> {
 				return;
 			}
 
-			if (searchOptions.jsonOutput) {
+			if (searchOptions.sessionsWithMatches) {
+				const sessionFilePaths = new Map<string, string>();
+				for (const session of sessions) {
+					sessionFilePaths.set(session.sessionId, session.filePath);
+				}
+
+				const seenPaths = new Set<string>();
+				for await (const match of searchSessions(sessions, searchOptions)) {
+					const filePath = sessionFilePaths.get(match.sessionId) ?? match.sessionId;
+					if (!seenPaths.has(filePath)) {
+						seenPaths.add(filePath);
+						console.log(filePath);
+					}
+				}
+
+				if (seenPaths.size === 0) {
+					process.exitCode = 1;
+				}
+			} else if (searchOptions.jsonOutput) {
 				const results = [];
 				for await (const match of searchSessions(sessions, searchOptions)) {
 					results.push({

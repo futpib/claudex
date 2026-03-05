@@ -10,6 +10,7 @@ export type SearchOptions = {
 	maxResults: number;
 	maxLineWidth: number;
 	jsonOutput: boolean;
+	sessionsWithMatches: boolean;
 };
 
 export type SearchMatch = {
