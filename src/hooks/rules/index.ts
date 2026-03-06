@@ -27,6 +27,7 @@ import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
 import { logToolUse } from './log-tool-use.js';
 import { banWriteOperations } from './ban-write-operations.js';
 import { suggestCommandSubstitute } from './suggest-command-substitute.js';
+import { preferGhx } from './prefer-ghx.js';
 
 export type RuleViolation = {
 	type: 'violation';
@@ -93,6 +94,7 @@ export const allRules: Rule[] = [
 	banWriteOperations,
 	requireCoAuthorshipProof,
 	suggestCommandSubstitute,
+	preferGhx,
 	logToolUse,
 ];
 
