@@ -284,6 +284,14 @@ export async function main() {
 			await runPs(options);
 		});
 
+	program
+		.command('attach')
+		.description('Re-attach to an orphaned claudex container and clean up when done')
+		.argument('[container]', 'Target a specific container by name')
+		.action(async (container: string | undefined) => {
+			await runAttach({ container });
+		});
+
 	await program.parseAsync(process.argv);
 }
 
@@ -465,6 +473,35 @@ async function runPs(options: { all?: boolean }) {
 	console.log(formatRow(headers));
 	for (const row of rows) {
 		console.log(formatRow(row));
+	}
+}
+
+async function runAttach(options: { container?: string }) {
+	const cwd = process.cwd();
+
+	let containerName: string;
+	try {
+		containerName = await findRunningContainer(cwd, options.container);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	console.error(`Attaching to ${containerName}...`);
+
+	try {
+		await execa('docker', [ 'attach', containerName ], {
+			stdin: process.stdin,
+			stdout: process.stdout,
+			stderr: process.stderr,
+		});
+	} finally {
+		try {
+			await execa('docker', [ 'rm', '-f', containerName ]);
+		} catch {
+			// Container may already be removed
+		}
 	}
 }
 
