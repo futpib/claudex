@@ -157,6 +157,35 @@ test('allows gh api GET (read-only)', async t => {
 	t.is(result.exitCode, 0);
 });
 
+// --- ghx ---
+
+test('rejects ghx api -X POST', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('ghx api repos/owner/repo/pulls/123/comments -X POST -f body=\'message\''),
+		env(config),
+	);
+	assertAskDecision(t, result, 'write operation');
+});
+
+test('allows ghx pr view --json (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('ghx pr view --json reviews,reviewRequests,comments'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows ghx api GET (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('ghx api repos/owner/repo/pulls/123/comments'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
 // --- glab api ---
 
 test('rejects glab api -X POST', async t => {

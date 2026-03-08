@@ -912,7 +912,9 @@ const writeMethods = new Set([
 function checkWriteCommand(name: string, args: string[]): string | undefined {
 	switch (name) {
 		case 'gh':
-		case 'glab': {
+		case 'ghx':
+		case 'glab':
+		case 'glabx': {
 			return checkCliApi(name, args);
 		}
 
