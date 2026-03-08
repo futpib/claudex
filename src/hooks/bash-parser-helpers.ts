@@ -945,7 +945,7 @@ function checkCliApi(cli: string, args: string[]): string | undefined {
 	// GraphQL mutation (check first — more specific than -f/-F)
 	if (args[1] === 'graphql') {
 		for (const arg of args) {
-			if (/mutation\s*[\w{(]/.test(arg)) {
+			if (/(?<![.\w])mutation\s*[{(A-Z]/.test(arg)) {
 				return `${cli} api GraphQL mutation`;
 			}
 		}
@@ -1129,7 +1129,7 @@ function checkGenericWrite(name: string, args: string[]): string | undefined {
 		}
 
 		// GraphQL mutation query in arguments (e.g. "mutation { ... }" or "mutation Foo(...)")
-		if (/mutation\s*[\w{(]/.test(arg)) {
+		if (/(?<![.\w])mutation\s*[{(A-Z]/.test(arg)) {
 			return `${name} with GraphQL mutation`;
 		}
 	}

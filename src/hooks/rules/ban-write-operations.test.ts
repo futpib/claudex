@@ -639,6 +639,33 @@ test('allows unknown command without write flags', async t => {
 	t.is(result.exitCode, 0);
 });
 
+test('allows rm of file with mutation in name', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('rm spec/domains/crm/gql/shop_items/update_campaigns_mutation_spec.rb'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git rm of file with mutation in name', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('git rm spec/domains/crm/gql/shop_items/update_campaigns_mutation_spec.rb'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git commit with mutation in message', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('git commit -m "Replace fan-out mutations with atomic updateShopItemCampaigns"'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
 // --- disabled rule ---
 
 test('allows write operations when rule is disabled', async t => {
