@@ -276,10 +276,26 @@ export async function main() {
 			await runInstall(packages, options);
 		});
 
+	program
+		.command('ps')
+		.description('List running claudex containers for the current project')
+		.option('--all', 'Show containers for all projects, not just the current directory')
+		.action(async (options: { all?: boolean }) => {
+			await runPs(options);
+		});
+
 	await program.parseAsync(process.argv);
 }
 
 export type ExecaFn = (command: string, args: string[]) => Promise<{ stdout: string }>;
+
+function filterContainerLines(lines: string[], prefix: string): string[] {
+	const namePattern = new RegExp(`^${prefix.replaceAll('-', String.raw`\-`)}[a-z0-9]+`);
+	return lines.filter(line => {
+		const name = line.split('\t')[0];
+		return namePattern.test(name);
+	});
+}
 
 export async function findRunningContainer(cwd: string, specificName?: string, execaFn: ExecaFn = execa): Promise<string> {
 	if (specificName) {
@@ -297,7 +313,7 @@ export async function findRunningContainer(cwd: string, specificName?: string, e
 	const cwdBasename = path.basename(cwd);
 
 	const result = await execaFn('docker', [ 'ps', '--filter', `name=^${containerPrefix}`, '--format', '{{.Names}}\t{{.CreatedAt}}' ]);
-	const lines = result.stdout.split('\n').filter(Boolean);
+	const lines = filterContainerLines(result.stdout.split('\n').filter(Boolean), containerPrefix);
 
 	if (lines.length === 0) {
 		throw new Error(`No running claudex containers found for ${cwdBasename}. Start one with: claudex`);
@@ -363,6 +379,92 @@ async function runInstall(packages: string[], options: { save: boolean; containe
 		} catch (error) {
 			console.error('Warning: failed to save packages to config:', error instanceof Error ? error.message : String(error));
 		}
+	}
+}
+
+async function runPs(options: { all?: boolean }) {
+	const cwd = process.cwd();
+	const nameFilter = options.all ? 'name=^claudex-' : `name=^${getContainerPrefix(cwd)}`;
+
+	let result;
+	try {
+		result = await execa('docker', [
+			'ps',
+			'--filter',
+			nameFilter,
+			'--format',
+			'{{.Names}}\t{{.CreatedAt}}\t{{.Status}}',
+		]);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	// Docker's name filter is a substring match, so filter more precisely in code.
+	const containerPrefix = options.all ? 'claudex-' : getContainerPrefix(cwd);
+	const lines = filterContainerLines(result.stdout.split('\n').filter(Boolean), containerPrefix);
+
+	if (lines.length === 0) {
+		console.error(options.all
+			? 'No running claudex containers found.'
+			: `No running claudex containers found for ${path.basename(cwd)}.`);
+		return;
+	}
+
+	type Row = {
+		name: string;
+		created: string;
+		status: string;
+		attached: string;
+	};
+
+	const rows: Row[] = [];
+
+	for (const line of lines) {
+		const [ name, ...rest ] = line.split('\t');
+		const created = rest[0] ?? '';
+		const status = rest[1] ?? '';
+
+		let attached = 'orphaned';
+		try {
+			// eslint-disable-next-line no-await-in-loop
+			const pgrepResult = await execa('pgrep', [ '-f', `docker attach ${name}` ]);
+			if (pgrepResult.stdout.trim()) {
+				attached = 'attached';
+			}
+		} catch {
+			// Pgrep exits non-zero when no match — container is orphaned
+		}
+
+		rows.push({
+			name,
+			created,
+			status,
+			attached,
+		});
+	}
+
+	// Calculate column widths
+	const headers: Row = {
+		name: 'NAME',
+		created: 'CREATED',
+		status: 'STATUS',
+		attached: 'ATTACHED',
+	};
+	const cols = {
+		name: Math.max(headers.name.length, ...rows.map(r => r.name.length)),
+		created: Math.max(headers.created.length, ...rows.map(r => r.created.length)),
+		status: Math.max(headers.status.length, ...rows.map(r => r.status.length)),
+		attached: Math.max(headers.attached.length, ...rows.map(r => r.attached.length)),
+	};
+
+	const formatRow = (r: typeof headers) =>
+		`${r.name.padEnd(cols.name)}  ${r.created.padEnd(cols.created)}  ${r.status.padEnd(cols.status)}  ${r.attached}`;
+
+	console.log(formatRow(headers));
+	for (const row of rows) {
+		console.log(formatRow(row));
 	}
 }
 
