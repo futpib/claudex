@@ -1,6 +1,7 @@
 import process from 'node:process';
 import { Command } from 'commander';
 import { getAccountPaths } from '../account.js';
+import { getMergedConfig } from '../config/index.js';
 import type { SearchTarget, SearchOptions } from './types.js';
 import { discoverSessions, getWorktreePaths } from './sessions.js';
 import { searchSessions } from './search.js';
@@ -107,7 +108,13 @@ export async function main(): Promise<void> {
 				sessionsWithMatches: Boolean(options.sessionsWithMatches),
 			};
 
-			const accountPaths = getAccountPaths(options.account as string | undefined);
+			let account = options.account as string | undefined;
+			if (!account) {
+				const merged = await getMergedConfig(searchOptions.projectPath);
+				account = merged.account;
+			}
+
+			const accountPaths = getAccountPaths(account);
 
 			const worktreePaths = await getWorktreePaths(searchOptions.projectPath);
 			const uniquePaths = new Set(worktreePaths);
