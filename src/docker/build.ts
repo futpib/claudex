@@ -99,7 +99,7 @@ export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull
 
 	const dockerfileContent = await fs.readFile(dockerfilePath, 'utf8');
 
-	await execa('docker', buildArgs, {
+	const runBuild = async (args: string[]) => execa('docker', args, {
 		input: dockerfileContent,
 		stdout: process.stdout,
 		stderr: process.stderr,
@@ -109,6 +109,17 @@ export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull
 			DOCKER_BUILDKIT: '1',
 		},
 	});
+
+	try {
+		await runBuild(buildArgs);
+	} catch (error) {
+		if (noCache) {
+			throw error;
+		}
+
+		console.error('Docker build failed, retrying with --no-cache...');
+		await runBuild([ ...buildArgs, '--no-cache' ]);
+	}
 
 	return {
 		userId, username, projectRoot, imageName, dockerfileContent,
