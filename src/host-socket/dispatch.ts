@@ -29,7 +29,18 @@ export async function handleNotify(message: NotifyMessage, execa: ExecaFn = defa
 	}
 
 	const windowId = await resolveWindowId(execa);
+
+	// Skip notification if the window is already focused
 	if (windowId) {
+		try {
+			const active = await execa('xdotool', [ 'getactivewindow' ]);
+			if (active.stdout?.trim() === windowId) {
+				return;
+			}
+		} catch {
+			// Xdotool not available or no active window — continue with notification
+		}
+
 		args.push('--action', 'default=Focus');
 	}
 

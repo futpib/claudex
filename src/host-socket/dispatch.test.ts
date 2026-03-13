@@ -65,8 +65,11 @@ test('handleNotify includes urgency when provided', async t => {
 	t.deepEqual(execa.firstCall.args[1], [ '--app-name', 'claudex', '-u', 'critical', 'Urgent' ]);
 });
 
-test('handleNotify adds --action when WINDOWID is set', async t => {
-	const execa = createExecaStub();
+test('handleNotify adds --action when WINDOWID is set and window is not focused', async t => {
+	const execa = sinon.stub<Parameters<ExecaFn>, ReturnType<ExecaFn>>();
+	// Xdotool getactivewindow returns a different window
+	execa.withArgs('xdotool', [ 'getactivewindow' ]).resolves({ stdout: '99999' });
+	execa.resolves({ stdout: '' });
 
 	await withWindowId('12345', async () => handleNotify({ type: 'notify', summary: 'Hello' }, execa));
 	// Let the fire-and-forget notifyAndFocus settle
@@ -74,10 +77,22 @@ test('handleNotify adds --action when WINDOWID is set', async t => {
 		setTimeout(resolve, 0);
 	});
 
+	t.is(execa.callCount, 2);
+	t.is(execa.firstCall.args[0], 'xdotool');
+	t.is(execa.secondCall.args[0], 'notify-send');
+	t.deepEqual(execa.secondCall.args[1], [ '--app-name', 'claudex', '--action', 'default=Focus', 'Hello' ]);
+	t.truthy(execa.secondCall.args[2]?.cancelSignal);
+});
+
+test('handleNotify skips notification when window is already focused', async t => {
+	const execa = sinon.stub<Parameters<ExecaFn>, ReturnType<ExecaFn>>();
+	execa.withArgs('xdotool', [ 'getactivewindow' ]).resolves({ stdout: '12345' });
+	execa.resolves({ stdout: '' });
+
+	await withWindowId('12345', async () => handleNotify({ type: 'notify', summary: 'Hello' }, execa));
+
 	t.is(execa.callCount, 1);
-	t.is(execa.firstCall.args[0], 'notify-send');
-	t.deepEqual(execa.firstCall.args[1], [ '--app-name', 'claudex', '--action', 'default=Focus', 'Hello' ]);
-	t.truthy(execa.firstCall.args[2]?.cancelSignal);
+	t.is(execa.firstCall.args[0], 'xdotool');
 });
 
 test.serial('handleNotify warns on notify-send failure without WINDOWID', async t => {
