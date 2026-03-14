@@ -12,12 +12,13 @@ import {
 	getMergedConfig, resolveMcpServers,
 	resolveHooks, type ClaudexConfig,
 	type LauncherDefinition,
+	readAllConfigFiles, writeSingleConfigFile,
 } from './config/index.js';
 import {
 	configMain, configMainFromArgv, type Scope, type ParsedArgs,
 } from './config-cli.js';
 import { isUnsafeDirectory } from './safety.js';
-import { isErrnoException, collapseHomedir } from './utils.js';
+import { isErrnoException, collapseHomedir, expandTilde } from './utils.js';
 import { getAccountPaths, ensureAccountDirs } from './account.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, getContainerPrefix, runDockerContainer } from './docker/run.js';
@@ -292,6 +293,14 @@ export async function main() {
 			await runAttach({ container });
 		});
 
+	program
+		.command('mv <source> <destination>')
+		.description('Move a project and its Claude session data to a new path')
+		.option('--account <name>', 'Use a specific claudex account')
+		.action(async (source: string, destination: string, options: { account?: string }) => {
+			await runMv(source, destination, options);
+		});
+
 	await program.parseAsync(process.argv);
 }
 
@@ -502,6 +511,86 @@ async function runAttach(options: { container?: string }) {
 		} catch {
 			// Container may already be removed
 		}
+	}
+}
+
+function encodeProjectPath(projectPath: string): string {
+	return projectPath.replaceAll(/[/.]/g, '-');
+}
+
+async function runMv(source: string, destination: string, options: { account?: string }) {
+	const resolvedSource = path.resolve(expandTilde(source));
+	const resolvedDestination = path.resolve(expandTilde(destination));
+
+	// Move the actual project directory first
+	try {
+		await fs.rename(resolvedSource, resolvedDestination);
+		console.error(`Moved ${collapseHomedir(resolvedSource)} → ${collapseHomedir(resolvedDestination)}`);
+	} catch (error) {
+		if (isErrnoException(error) && error.code === 'ENOENT') {
+			console.error(`Error: source directory does not exist: ${collapseHomedir(resolvedSource)}`);
+		} else {
+			console.error(`Error: failed to move directory: ${error instanceof Error ? error.message : String(error)}`);
+		}
+
+		process.exitCode = 1;
+		return;
+	}
+
+	const mergedConfig = await getMergedConfig(resolvedDestination);
+	const account = options.account ?? mergedConfig.account;
+	const accountPaths = getAccountPaths(account);
+	const projectsDir = path.join(accountPaths.claudeConfigDir, 'projects');
+
+	const encodedSource = encodeProjectPath(resolvedSource);
+	const encodedDestination = encodeProjectPath(resolvedDestination);
+	const sourceDataDir = path.join(projectsDir, encodedSource);
+	const destinationDataDir = path.join(projectsDir, encodedDestination);
+
+	// Move Claude project data directory
+	try {
+		await fs.access(destinationDataDir);
+		console.error(`Error: destination data directory already exists: ${collapseHomedir(destinationDataDir)}`);
+		process.exitCode = 1;
+		return;
+	} catch {
+		// Doesn't exist — good
+	}
+
+	try {
+		await fs.rename(sourceDataDir, destinationDataDir);
+		console.error(`Moved ${collapseHomedir(sourceDataDir)} → ${collapseHomedir(destinationDataDir)}`);
+	} catch (error) {
+		if (isErrnoException(error) && error.code === 'ENOENT') {
+			console.error(`Warning: no Claude project data at ${collapseHomedir(sourceDataDir)} (no sessions yet?)`);
+		} else {
+			throw error;
+		}
+	}
+
+	// Update claudex config project keys
+	const collapsedSource = collapseHomedir(resolvedSource);
+	const collapsedDestination = collapseHomedir(resolvedDestination);
+	const sourceKeys = new Set([ resolvedSource, collapsedSource ]);
+
+	const configEntries = await readAllConfigFiles();
+	for (const entry of configEntries) {
+		if (!entry.config.projects) {
+			continue;
+		}
+
+		const matchingKey = Object.keys(entry.config.projects).find(key => sourceKeys.has(expandTilde(key)));
+		if (!matchingKey) {
+			continue;
+		}
+
+		const projectConfig = entry.config.projects[matchingKey];
+		const { [matchingKey]: _, ...remainingProjects } = entry.config.projects;
+		entry.config.projects = { ...remainingProjects, [collapsedDestination]: projectConfig };
+
+		// eslint-disable-next-line no-await-in-loop
+		await writeSingleConfigFile(entry.path, entry.config);
+		console.error(`Updated project key in ${collapseHomedir(entry.path)}: ${matchingKey} → ${collapsedDestination}`);
 	}
 }
 
