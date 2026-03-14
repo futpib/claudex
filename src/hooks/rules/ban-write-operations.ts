@@ -1,7 +1,7 @@
 import type { Rule } from './index.js';
 
 // Generic write-action words matched against tokenized MCP tool names
-const writeActionWords = new Set([
+export const writeActionWords = new Set([
 	'add',
 	'append',
 	'approve',

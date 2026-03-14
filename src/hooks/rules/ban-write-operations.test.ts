@@ -186,6 +186,125 @@ test('allows ghx api GET (read-only)', async t => {
 	t.is(result.exitCode, 0);
 });
 
+// --- gh/ghx write subcommands ---
+
+test('rejects gh pr create', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh pr create --title "Fix bug" --body "Details"'),
+		env(config),
+	);
+	assertAskDecision(t, result, 'write subcommand');
+});
+
+test('rejects ghx pr create', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('ghx pr create --repo owner/repo --head feature --title "Fix"'),
+		env(config),
+	);
+	assertAskDecision(t, result, 'write subcommand');
+});
+
+test('rejects gh issue close', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh issue close 123'),
+		env(config),
+	);
+	assertAskDecision(t, result, 'write subcommand');
+});
+
+test('rejects gh pr merge', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh pr merge 123'),
+		env(config),
+	);
+	assertAskDecision(t, result, 'write subcommand');
+});
+
+test('rejects gh release create', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh release create v1.0.0'),
+		env(config),
+	);
+	assertAskDecision(t, result, 'write subcommand');
+});
+
+test('rejects gh repo create', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh repo create my-repo --public'),
+		env(config),
+	);
+	assertAskDecision(t, result, 'write subcommand');
+});
+
+test('allows gh pr view (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh pr view 123'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows gh pr list (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh pr list'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows gh issue view (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh issue view 123'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows gh pr diff (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh pr diff'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows gh pr checkout (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh pr checkout 123'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows gh auth login (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh auth login'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows gh repo clone (read-only)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('gh repo clone owner/repo'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
 // --- glab api ---
 
 test('rejects glab api -X POST', async t => {

@@ -11,6 +11,7 @@ import type {
 	BashWord,
 	BashWordPart,
 } from '@futpib/parser/build/bash.js';
+import { writeActionWords } from './rules/ban-write-operations.js';
 
 /**
  * Parse a bash command string into an AST.
@@ -915,7 +916,7 @@ function checkWriteCommand(name: string, args: string[]): string | undefined {
 		case 'ghx':
 		case 'glab':
 		case 'glabx': {
-			return checkCliApi(name, args);
+			return checkCli(name, args);
 		}
 
 		case 'curl': {
@@ -937,9 +938,28 @@ function checkWriteCommand(name: string, args: string[]): string | undefined {
 	}
 }
 
-function checkCliApi(cli: string, args: string[]): string | undefined {
+function checkCliSubcommand(cli: string, args: string[]): string | undefined {
+	for (const arg of args) {
+		if (arg === '--') {
+			break;
+		}
+
+		if (arg.startsWith('-')) {
+			continue;
+		}
+
+		if (writeActionWords.has(arg.toLowerCase())) {
+			const positionalArgs = args.filter(a => !a.startsWith('-'));
+			return `${cli} ${positionalArgs.join(' ')} (write subcommand)`;
+		}
+	}
+
+	return undefined;
+}
+
+function checkCli(cli: string, args: string[]): string | undefined {
 	if (args[0] !== 'api') {
-		return undefined;
+		return checkCliSubcommand(cli, args);
 	}
 
 	// GraphQL mutation (check first — more specific than -f/-F)
