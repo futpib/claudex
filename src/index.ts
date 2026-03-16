@@ -347,23 +347,8 @@ export async function main() {
 					targets: new Set([ 'user' ] as const),
 					sessionId,
 				})) {
-					if (content.text.includes(proof) || proof.includes(content.text.trim())) {
+					if (content.text.includes(proof)) {
 						found = true;
-						break;
-					}
-
-					const minLength = Math.min(20, proof.length);
-					if (proof.length >= minLength) {
-						for (let i = 0; i <= proof.length - minLength; i++) {
-							const substring = proof.slice(i, i + minLength);
-							if (content.text.includes(substring)) {
-								found = true;
-								break;
-							}
-						}
-					}
-
-					if (found) {
 						break;
 					}
 				}
