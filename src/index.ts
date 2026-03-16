@@ -301,6 +301,82 @@ export async function main() {
 			await runMv(source, destination, options);
 		});
 
+	program
+		.command('confirm')
+		.description('Confirm a pending action by its short ID')
+		.argument('<id>', 'Short confirmation ID')
+		.argument('<proof>', 'Proof text with exact quote from the user')
+		.action(async (shortId: string, proof: string) => {
+			const {
+				loadPendingConfirmation, verifyConfirmationToken, storeConfirmation,
+			} = await import('./confirm.js');
+			const { buildToolUseMap, extractContent } = await import('./memory-search/parser.js');
+
+			let token;
+			try {
+				token = await loadPendingConfirmation(shortId);
+			} catch {
+				console.error(`❌ Unknown confirmation ID: ${shortId}`);
+				process.exitCode = 1;
+				return;
+			}
+
+			let payload;
+			try {
+				payload = await verifyConfirmationToken(token);
+			} catch (error) {
+				console.error(`❌ Invalid or expired confirmation token: ${error instanceof Error ? error.message : String(error)}`);
+				process.exitCode = 1;
+				return;
+			}
+
+			const { actionHash, sessionId, transcriptPath } = payload;
+
+			try {
+				const toolUseMap = await buildToolUseMap(transcriptPath);
+				let found = false;
+
+				for await (const content of extractContent(transcriptPath, toolUseMap, {
+					targets: new Set([ 'user' ] as const),
+					sessionId,
+				})) {
+					if (content.text.includes(proof) || proof.includes(content.text.trim())) {
+						found = true;
+						break;
+					}
+
+					const minLength = Math.min(20, proof.length);
+					if (proof.length >= minLength) {
+						for (let i = 0; i <= proof.length - minLength; i++) {
+							const substring = proof.slice(i, i + minLength);
+							if (content.text.includes(substring)) {
+								found = true;
+								break;
+							}
+						}
+					}
+
+					if (found) {
+						break;
+					}
+				}
+
+				if (!found) {
+					console.error('❌ Proof quote not found in session transcript.');
+					console.error('The proof must contain an exact quote from the user in this session.');
+					process.exitCode = 1;
+					return;
+				}
+			} catch (error) {
+				console.error(`❌ Failed to read session transcript: ${error instanceof Error ? error.message : String(error)}`);
+				process.exitCode = 1;
+				return;
+			}
+
+			await storeConfirmation(actionHash, sessionId, token, proof);
+			console.log(`✅ Confirmation stored for action ${actionHash.slice(0, 12)}...`);
+		});
+
 	await program.parseAsync(process.argv);
 }
 

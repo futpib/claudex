@@ -1844,6 +1844,7 @@ __metadata:
     eslint-config-xo-typescript-overrides: "npm:^2.0.3"
     execa: "npm:^9.6.1"
     invariant: "npm:^2.2.4"
+    jose: "npm:^6.2.1"
     luxon: "npm:^3.7.2"
     sinon: "npm:^21.0.1"
     typescript: "npm:^5.9.3"
@@ -4351,6 +4352,13 @@ __metadata:
   version: 6.1.3
   resolution: "jose@npm:6.1.3"
   checksum: 10/9626c51e8c3792b505e954f3094698c182208617b62dfb27269230f31e57560b083985ed8128b8a9753aa92daf18d3a2341cc826d149503f14569abe87d42389
+  languageName: node
+  linkType: hard
+
+"jose@npm:^6.2.1":
+  version: 6.2.1
+  resolution: "jose@npm:6.2.1"
+  checksum: 10/12f06a76ac743eb48314e662e02b141f6e4644dbcbdb1cd083c3867b1f72f1e148a67ebf4978d0d5adeb62f4be1572feee76f1849cbc32f8af1457ec9f788299
   languageName: node
   linkType: hard
 

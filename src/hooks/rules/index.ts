@@ -24,6 +24,7 @@ import { banAbsolutePaths } from './ban-absolute-paths.js';
 import { banHomeDirAbsolutePaths } from './ban-home-dir-absolute-paths.js';
 import { preferLocalGithubRepo } from './prefer-local-github-repo.js';
 import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
+import { requireGitMutationConfirmation } from './require-git-mutation-confirmation.js';
 import { logToolUse } from './log-tool-use.js';
 import { banWriteOperations } from './ban-write-operations.js';
 import { suggestCommandSubstitute } from './suggest-command-substitute.js';
@@ -93,6 +94,7 @@ export const allRules: Rule[] = [
 	preferLocalGithubRepo,
 	banWriteOperations,
 	requireCoAuthorshipProof,
+	requireGitMutationConfirmation,
 	suggestCommandSubstitute,
 	preferGhx,
 	logToolUse,
