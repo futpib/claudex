@@ -2,12 +2,54 @@ import process from 'node:process';
 import { Command } from 'commander';
 import { getAccountPaths } from '../account.js';
 import { getMergedConfig } from '../config/index.js';
-import type { SearchTarget, SearchOptions } from './types.js';
+import type { SearchTarget, SearchOptions, SessionFile } from './types.js';
 import { discoverSessions, getWorktreePaths } from './sessions.js';
 import { searchSessions } from './search.js';
 import {
 	formatMatch, formatSummary, resetTruncationState, getDidTruncate,
 } from './output.js';
+
+function resolveSessionOffset(sessionValue: string | undefined, sessions: SessionFile[]): SessionFile[] {
+	if (sessionValue === undefined || sessionValue === 'all') {
+		return sessions;
+	}
+
+	if (/^-?\d+$/.test(sessionValue)) {
+		const offset = Number.parseInt(sessionValue, 10);
+
+		// Get unique parent session IDs preserving discovery order (newest-first)
+		const parentSessions: SessionFile[] = [];
+		const seenIds = new Set<string>();
+		for (const s of sessions) {
+			if (!s.isSubagent && !seenIds.has(s.sessionId)) {
+				seenIds.add(s.sessionId);
+				parentSessions.push(s);
+			}
+		}
+
+		// Reverse to chronological order (oldest-first) for indexing
+		const chronological = [ ...parentSessions ].reverse();
+
+		const targetIndex = offset <= 0
+			// -0 = latest (last in chronological), -1 = previous, etc.
+			? chronological.length - 1 + offset
+			// 1 = first (oldest), 1-based
+			: offset - 1;
+
+		if (targetIndex < 0 || targetIndex >= chronological.length) {
+			const total = chronological.length;
+			throw new Error(`Session offset ${sessionValue} is out of range (${total} session${total === 1 ? '' : 's'} available)`);
+		}
+
+		const targetSessionId = chronological[targetIndex].sessionId;
+
+		// Return the target session and its subagents
+		return sessions.filter(s => s.sessionId === targetSessionId);
+	}
+
+	// UUID prefix match
+	return sessions.filter(s => s.sessionId.startsWith(sessionValue));
+}
 
 const allTargets: SearchTarget[] = [ 'user', 'assistant', 'bash-command', 'bash-output', 'tool-use', 'tool-result', 'subagent-prompt', 'compact-summary' ];
 
@@ -121,17 +163,26 @@ export function buildMemorySearchCommand(): Command {
 				uniquePaths.add(searchOptions.projectPath);
 			}
 
-			const allSessions = await Promise.all([ ...uniquePaths ].map(async p => discoverSessions(p, searchOptions.sessionId, accountPaths.claudeConfigDir)));
+			const allSessions = await Promise.all([ ...uniquePaths ].map(async p => discoverSessions(p, undefined, accountPaths.claudeConfigDir)));
 
 			const seen = new Set<string>();
-			const sessions: typeof allSessions[0] = [];
+			const deduplicated: SessionFile[] = [];
 			for (const batch of allSessions) {
 				for (const session of batch) {
 					if (!seen.has(session.filePath)) {
 						seen.add(session.filePath);
-						sessions.push(session);
+						deduplicated.push(session);
 					}
 				}
+			}
+
+			let sessions: SessionFile[];
+			try {
+				sessions = resolveSessionOffset(searchOptions.sessionId, deduplicated);
+			} catch (error) {
+				console.error((error as Error).message);
+				process.exitCode = 1;
+				return;
 			}
 
 			if (sessions.length === 0) {
