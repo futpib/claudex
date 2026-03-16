@@ -94,7 +94,7 @@ export async function main() {
 		.option('--docker-skip-build', 'Skip Docker image build and use existing image')
 		.option('--docker-sudo', 'Allow sudo inside the container (less secure)')
 		.option('--allow-unsafe-directory', 'Skip directory safety checks (home, hidden, unowned, no .git)')
-		.option('--package <name>', 'Add apt package to install in Docker (repeatable)', collect, [])
+		.option('--package <name>', 'Add pacman package to install in Docker (repeatable)', collect, [])
 		.option('--volume <spec>', 'Add volume mount: path or host:container (repeatable)', collect, [])
 	// eslint-disable-next-line no-template-curly-in-string
 		.option('--env <spec>', 'Add env var: KEY=value or KEY for KEY=${KEY} (repeatable)', collect, [])
