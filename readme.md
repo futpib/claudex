@@ -85,14 +85,14 @@ Containers run with `--cap-drop ALL --security-opt no-new-privileges` unless `--
 
 ### Co-Authorship Proof System
 
-When Claude makes code changes, you can mark commits as co-authored with cryptographic verification:
+When Claude attempts a `git commit` with `Co-authored-by:`, the `requireCoAuthorshipProof` hook intercepts it and requires explicit confirmation:
 
 ```bash
-# Generate a proof PIN for co-authorship
-claudex-submit-co-authorship-proof
+# After claudex shows a confirmation ID, confirm the co-authorship with a verbatim quote
+claudex confirm <id> '<verbatim quote from user that requested this commit>'
 ```
 
-This creates a proof entry that must be included in commit messages when using `Co-authored-by: Claude Code`. The pre-tool-use hook validates these proofs before allowing commits.
+The hook checks that Claude actually contributed to the code being committed, blocking the commit until the proof is confirmed.
 
 ### Memory Management
 
@@ -408,6 +408,44 @@ claudex install --container claudex-myproject-abc123 nodejs
 
 Packages are installed with pacman and persisted to the project config by default (use `--no-save` to skip).
 
+## Container Management
+
+### Listing Containers
+
+```bash
+# List running claudex containers for the current project
+claudex ps
+
+# List all running claudex containers
+claudex ps --all
+```
+
+### Re-Attaching to a Container
+
+```bash
+# Re-attach to an orphaned claudex container (cleans up on exit)
+claudex attach
+
+# Attach to a specific container by name
+claudex attach claudex-myproject-abc123
+```
+
+### Moving a Project
+
+Move a project directory along with its Claude session data and config references:
+
+```bash
+claudex mv ~/code/old-name ~/code/new-name
+```
+
+### Confirming Pending Actions
+
+Some hook rules (e.g. `requireGitMutationConfirmation`, `requireCoAuthorshipProof`) block an action and emit a short confirmation ID. Confirm with a verbatim quote from the user that authorized the action:
+
+```bash
+claudex confirm <id> '<verbatim quote from the user>'
+```
+
 ## Configuration
 
 ### Hooks and MCP Servers
@@ -468,8 +506,10 @@ Or in `config.json`:
 | `banWrongPackageManager` | Ban using wrong package manager for the project |
 | `banWriteOperations` | Require explicit user approval before HTTP write operations, GraphQL mutations, or MCP write tools |
 | `preferLocalGithubRepo` | Block fetching files from GitHub when the repo is already cloned locally as a sibling directory |
+| `preferGhx` | Use `ghx` instead of `gh` when `ghx` is available |
 | `suggestCommandSubstitute` | When a command is not found but an equivalent is available, suggest it (e.g. pip → uv) |
-| `requireCoAuthorshipProof` | Require co-authorship proof PIN for Co-authored-by commits |
+| `requireCoAuthorshipProof` | Require co-authorship confirmation before `git commit` with `Co-authored-by:` |
+| `requireGitMutationConfirmation` | Require explicit user confirmation before git mutations (commit, push, merge, etc.) |
 | `logToolUse` | Log non-read-only tool usage |
 | `logReadOnlyToolUse` | Log read-only tool usage |
 | `logPrompts` | Log user prompts |
@@ -598,7 +638,6 @@ npx xo
 - `claudex-hook-user-prompt-submit` - User prompt event handler
 - `claudex-hook-notification` - Notification event handler (desktop notifications)
 - `claudex-hook-stop` - Stop event handler (task completion notifications)
-- `claudex-submit-co-authorship-proof` - Co-authorship proof submission tool
 
 ## Contributing
 
