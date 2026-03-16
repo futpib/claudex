@@ -11,11 +11,10 @@ import {
 
 const allTargets: SearchTarget[] = [ 'user', 'assistant', 'bash-command', 'bash-output', 'tool-use', 'tool-result', 'subagent-prompt', 'compact-summary' ];
 
-export async function main(): Promise<void> {
-	const program = new Command();
+export function buildMemorySearchCommand(): Command {
+	const command = new Command('search');
 
-	program
-		.name('claudex-memory-search')
+	command
 		.description('Search Claude Code conversation transcripts')
 		.showHelpAfterError()
 		.argument('<pattern>', 'Pattern to search for (literal string and regex)')
@@ -193,5 +192,5 @@ export async function main(): Promise<void> {
 			}
 		});
 
-	await program.parseAsync();
+	return command;
 }
