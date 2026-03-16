@@ -39,10 +39,9 @@ export const logToolUse: Rule = {
 		description: 'Tool usage is being logged',
 	},
 	async fn(context) {
-		const isMcpTool = context.toolName.startsWith('mcp__');
 		const isReadOnly = readOnlyTools.has(context.toolName);
 
-		if (internalTools.has(context.toolName) || isMcpTool) {
+		if (internalTools.has(context.toolName)) {
 			return { type: 'pass' };
 		}
 
