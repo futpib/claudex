@@ -82,3 +82,16 @@ test('findRunningContainer does not match containers from similarly-named projec
 	// Must start with ^ to anchor the match at the beginning of the name
 	t.is(filterArg, 'name=^claudex-iroh-');
 });
+
+test('findRunningContainer excludes containers from project whose name starts with same prefix', async t => {
+	// Docker returns both claudex-iroh-abc123 (project "iroh") and
+	// claudex-iroh-ssh-abc123 (project "iroh-ssh") because docker's
+	// name filter is a substring/prefix match. filterContainerLines
+	// must reject the latter when cwd is "iroh".
+	const execaStub = createExecaStub(
+		'claudex-iroh-abc123\t2026-03-02 17:00:00 +0000 +00\t Up 5 minutes\n'
+		+ 'claudex-iroh-ssh-abc123\t2026-03-02 16:00:00 +0000 +00\tUp 10 minutes',
+	);
+	const result = await findRunningContainer('/home/user/code/iroh', undefined, execaStub);
+	t.is(result, 'claudex-iroh-abc123');
+});

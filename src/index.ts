@@ -385,7 +385,7 @@ export async function main() {
 export type ExecaFn = (command: string, args: string[]) => Promise<{ stdout: string }>;
 
 function filterContainerLines(lines: string[], prefix: string): string[] {
-	const namePattern = new RegExp(`^${prefix.replaceAll('-', String.raw`\-`)}[a-z0-9]+`);
+	const namePattern = new RegExp(`^${prefix.replaceAll('-', String.raw`\-`)}[a-z0-9]+$`);
 	return lines.filter(line => {
 		const name = line.split('\t')[0];
 		return namePattern.test(name);
