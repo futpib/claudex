@@ -404,11 +404,8 @@ export async function findRunningContainer(cwd: string, specificName?: string, e
 		return containers[0];
 	}
 
-	const containerPrefix = getContainerPrefix(cwd);
 	const cwdBasename = path.basename(cwd);
-
-	const result = await execaFn('docker', [ 'ps', '--filter', `name=^${containerPrefix}`, '--format', '{{.Names}}\t{{.CreatedAt}}' ]);
-	const lines = filterContainerLines(result.stdout.split('\n').filter(Boolean), containerPrefix);
+	const lines = await listContainers({ cwd, execaFn });
 
 	if (lines.length === 0) {
 		throw new Error(`No running claudex containers found for ${cwdBasename}. Start one with: claudex`);
@@ -477,28 +474,36 @@ async function runInstall(packages: string[], options: { save: boolean; containe
 	}
 }
 
-async function runPs(options: { all?: boolean }) {
-	const cwd = process.cwd();
-	const nameFilter = options.all ? 'name=^claudex-' : `name=^${getContainerPrefix(cwd)}`;
+async function listContainers(options: { all?: boolean; cwd?: string; execaFn?: ExecaFn }): Promise<string[]> {
+	const cwd = options.cwd ?? process.cwd();
+	const containerPrefix = options.all ? 'claudex-' : getContainerPrefix(cwd);
+	const execaFn = options.execaFn ?? execa;
 
-	let result;
-	try {
-		result = await execa('docker', [
-			'ps',
-			'--filter',
-			nameFilter,
-			'--format',
-			'{{.Names}}\t{{.CreatedAt}}\t{{.Status}}',
-		]);
-	} catch (error) {
-		console.error(error instanceof Error ? error.message : String(error));
-		// eslint-disable-next-line unicorn/no-process-exit
-		process.exit(1);
-	}
+	const result = await execaFn('docker', [
+		'ps',
+		'--filter',
+		`name=^${containerPrefix}`,
+		'--format',
+		'{{.Names}}\t{{.CreatedAt}}\t{{.Status}}',
+	]);
 
 	// Docker's name filter is a substring match, so filter more precisely in code.
-	const containerPrefix = options.all ? 'claudex-' : getContainerPrefix(cwd);
-	const lines = filterContainerLines(result.stdout.split('\n').filter(Boolean), containerPrefix);
+	return filterContainerLines(result.stdout.split('\n').filter(Boolean), containerPrefix);
+}
+
+async function isContainerAttached(name: string): Promise<boolean> {
+	try {
+		const pgrepResult = await execa('pgrep', [ '-f', `docker attach ${name}` ]);
+		return Boolean(pgrepResult.stdout.trim());
+	} catch {
+		// Pgrep exits non-zero when no match — container is orphaned
+		return false;
+	}
+}
+
+async function runPs(options: { all?: boolean }) {
+	const cwd = process.cwd();
+	const lines = await listContainers(options);
 
 	if (lines.length === 0) {
 		console.error(options.all
@@ -521,16 +526,8 @@ async function runPs(options: { all?: boolean }) {
 		const created = rest[0] ?? '';
 		const status = rest[1] ?? '';
 
-		let attached = 'orphaned';
-		try {
-			// eslint-disable-next-line no-await-in-loop
-			const pgrepResult = await execa('pgrep', [ '-f', `docker attach ${name}` ]);
-			if (pgrepResult.stdout.trim()) {
-				attached = 'attached';
-			}
-		} catch {
-			// Pgrep exits non-zero when no match — container is orphaned
-		}
+		// eslint-disable-next-line no-await-in-loop
+		const attached = await isContainerAttached(name) ? 'attached' : 'orphaned';
 
 		rows.push({
 			name,
@@ -593,42 +590,13 @@ async function runAttach(options: { container?: string }) {
 }
 
 async function runPrune(options: { all?: boolean; force?: boolean }) {
-	const cwd = process.cwd();
-	const nameFilter = options.all ? 'name=^claudex-' : `name=^${getContainerPrefix(cwd)}`;
-
-	let result;
-	try {
-		result = await execa('docker', [
-			'ps',
-			'--filter',
-			nameFilter,
-			'--format',
-			'{{.Names}}\t{{.CreatedAt}}\t{{.Status}}',
-		]);
-	} catch (error) {
-		console.error(error instanceof Error ? error.message : String(error));
-		// eslint-disable-next-line unicorn/no-process-exit
-		process.exit(1);
-	}
-
-	const containerPrefix = options.all ? 'claudex-' : getContainerPrefix(cwd);
-	const lines = filterContainerLines(result.stdout.split('\n').filter(Boolean), containerPrefix);
+	const lines = await listContainers(options);
 
 	const orphaned: string[] = [];
 	for (const line of lines) {
 		const name = line.split('\t')[0];
-		let isAttached = false;
-		try {
-			// eslint-disable-next-line no-await-in-loop
-			const pgrepResult = await execa('pgrep', [ '-f', `docker attach ${name}` ]);
-			if (pgrepResult.stdout.trim()) {
-				isAttached = true;
-			}
-		} catch {
-			// Pgrep exits non-zero when no match — container is orphaned
-		}
-
-		if (!isAttached) {
+		// eslint-disable-next-line no-await-in-loop
+		if (!await isContainerAttached(name)) {
 			orphaned.push(name);
 		}
 	}

@@ -49,7 +49,7 @@ test('findRunningContainer uses prefix anchor in docker filter', async t => {
 	await findRunningContainer('/home/user/code/iroh', undefined, execaStub);
 	t.deepEqual(execaStub.firstCall.args, [
 		'docker',
-		[ 'ps', '--filter', 'name=^claudex-iroh-', '--format', '{{.Names}}\t{{.CreatedAt}}' ],
+		[ 'ps', '--filter', 'name=^claudex-iroh-', '--format', '{{.Names}}\t{{.CreatedAt}}\t{{.Status}}' ],
 	]);
 });
 
