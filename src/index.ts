@@ -384,11 +384,16 @@ export async function main() {
 
 export type ExecaFn = (command: string, args: string[]) => Promise<{ stdout: string }>;
 
-function filterContainerLines(lines: string[], prefix: string): string[] {
-	const namePattern = new RegExp(`^${prefix.replaceAll('-', String.raw`\-`)}[a-z0-9]+$`);
+export const containerNamePattern = /^claudex-.+-[a-z\d]{6}$/;
+
+export function filterContainerLines(lines: string[], prefix: string): string[] {
 	return lines.filter(line => {
 		const name = line.split('\t')[0];
-		return namePattern.test(name);
+		if (!name.startsWith(prefix)) {
+			return false;
+		}
+
+		return /^[a-z\d]{6}$/.test(name.slice(prefix.length));
 	});
 }
 
@@ -488,7 +493,12 @@ async function listContainers(options: { all?: boolean; cwd?: string; execaFn?: 
 	]);
 
 	// Docker's name filter is a substring match, so filter more precisely in code.
-	return filterContainerLines(result.stdout.split('\n').filter(Boolean), containerPrefix);
+	const lines = result.stdout.split('\n').filter(Boolean);
+	if (options.all) {
+		return lines.filter(line => containerNamePattern.test(line.split('\t')[0]));
+	}
+
+	return filterContainerLines(lines, containerPrefix);
 }
 
 async function isContainerAttached(name: string): Promise<boolean> {
