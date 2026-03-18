@@ -1,5 +1,6 @@
 import process from 'node:process';
 import path from 'node:path';
+import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import fs from 'node:fs/promises';
@@ -294,6 +295,15 @@ export async function main() {
 		});
 
 	program
+		.command('prune')
+		.description('Remove orphaned claudex containers')
+		.option('--all', 'Remove orphaned containers for all projects, not just the current directory')
+		.option('-f, --force', 'Skip confirmation prompt')
+		.action(async (options: { all?: boolean; force?: boolean }) => {
+			await runPrune(options);
+		});
+
+	program
 		.command('mv <source> <destination>')
 		.description('Move a project and its Claude session data to a new path')
 		.option('--account <name>', 'Use a specific claudex account')
@@ -578,6 +588,80 @@ async function runAttach(options: { container?: string }) {
 			await execa('docker', [ 'rm', '-f', containerName ]);
 		} catch {
 			// Container may already be removed
+		}
+	}
+}
+
+async function runPrune(options: { all?: boolean; force?: boolean }) {
+	const cwd = process.cwd();
+	const nameFilter = options.all ? 'name=^claudex-' : `name=^${getContainerPrefix(cwd)}`;
+
+	let result;
+	try {
+		result = await execa('docker', [
+			'ps',
+			'--filter',
+			nameFilter,
+			'--format',
+			'{{.Names}}\t{{.CreatedAt}}\t{{.Status}}',
+		]);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	const containerPrefix = options.all ? 'claudex-' : getContainerPrefix(cwd);
+	const lines = filterContainerLines(result.stdout.split('\n').filter(Boolean), containerPrefix);
+
+	const orphaned: string[] = [];
+	for (const line of lines) {
+		const name = line.split('\t')[0];
+		let isAttached = false;
+		try {
+			// eslint-disable-next-line no-await-in-loop
+			const pgrepResult = await execa('pgrep', [ '-f', `docker attach ${name}` ]);
+			if (pgrepResult.stdout.trim()) {
+				isAttached = true;
+			}
+		} catch {
+			// Pgrep exits non-zero when no match — container is orphaned
+		}
+
+		if (!isAttached) {
+			orphaned.push(name);
+		}
+	}
+
+	if (orphaned.length === 0) {
+		console.error('No orphaned containers to remove.');
+		return;
+	}
+
+	if (!options.force) {
+		console.error(`WARNING! This will remove ${orphaned.length} orphaned container${orphaned.length === 1 ? '' : 's'}:`);
+		for (const name of orphaned) {
+			console.error(`  ${name}`);
+		}
+
+		const rl = readline.createInterface({ input: process.stdin, output: process.stderr });
+		const answer = await new Promise<string>(resolve => {
+			rl.question('Are you sure you want to continue? [y/N] ', resolve);
+		});
+		rl.close();
+
+		if (answer.toLowerCase() !== 'y') {
+			return;
+		}
+	}
+
+	for (const name of orphaned) {
+		try {
+			// eslint-disable-next-line no-await-in-loop
+			await execa('docker', [ 'rm', '-f', name ]);
+			console.error(`Removed: ${name}`);
+		} catch (error) {
+			console.error(`Failed to remove ${name}: ${error instanceof Error ? error.message : String(error)}`);
 		}
 	}
 }
