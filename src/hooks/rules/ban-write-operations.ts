@@ -1,4 +1,8 @@
-import type { Rule } from './index.js';
+import {
+	hashAction, hasConfirmation, createConfirmationToken,
+	generateShortId, storePendingConfirmation,
+} from '../../confirm.js';
+import type { Rule, RuleResult } from './index.js';
 
 // Generic write-action words matched against tokenized MCP tool names
 export const writeActionWords = new Set([
@@ -60,6 +64,46 @@ function checkMcpTool(toolName: string): string | undefined {
 	return undefined;
 }
 
+async function requireConfirmation(
+	actionIdentity: string,
+	description: string,
+	context: { sessionId: string; transcriptPath: string },
+): Promise<RuleResult> {
+	const actionHash = hashAction(actionIdentity);
+
+	if (await hasConfirmation(actionHash, context.sessionId)) {
+		return { type: 'pass' };
+	}
+
+	const token = await createConfirmationToken(
+		actionHash,
+		`${description} (write operation)`,
+		context.transcriptPath,
+		context.sessionId,
+	);
+
+	const shortId = generateShortId();
+	await storePendingConfirmation(shortId, token);
+
+	return {
+		type: 'violation',
+		messages: [
+			`❌ ${description} (write subcommand) — this is a write operation that acts on behalf of the user`,
+			'',
+			'Did the user explicitly ask you to perform this action? If yes, confirm with:',
+			`  claudex confirm ${shortId} '<proof>'`,
+			'',
+			'The <proof> must be a VERBATIM quote from the user that SPECIFICALLY',
+			'asks for this write operation.',
+			'A generic instruction like "implement this feature" is NOT sufficient —',
+			'the user must have explicitly asked for this action.',
+			'',
+			'If the user did not explicitly ask for this, do NOT confirm.',
+			'Instead, ask the user whether they want you to proceed.',
+		],
+	};
+}
+
 export const banWriteOperations: Rule = {
 	meta: {
 		name: 'ban-write-operations',
@@ -71,10 +115,7 @@ export const banWriteOperations: Rule = {
 	async fn(context) {
 		const mcpMatch = checkMcpTool(context.toolName);
 		if (mcpMatch) {
-			return {
-				type: 'ask',
-				reason: `${mcpMatch} — this is a write operation that acts on behalf of the user`,
-			};
+			return requireConfirmation(context.toolName, mcpMatch, context);
 		}
 
 		if (context.toolName !== 'Bash' || !context.command) {
@@ -83,10 +124,7 @@ export const banWriteOperations: Rule = {
 
 		const bashMatch = await context.helpers.getWriteOperation(context.command);
 		if (bashMatch) {
-			return {
-				type: 'ask',
-				reason: `${bashMatch} — this is a write operation that acts on behalf of the user`,
-			};
+			return requireConfirmation(context.command, bashMatch, context);
 		}
 
 		return { type: 'pass' };

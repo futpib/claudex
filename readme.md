@@ -504,7 +504,7 @@ Or in `config.json`:
 | `banAbsolutePaths` | Ban absolute paths under cwd in Bash commands (use relative paths) |
 | `banHomeDirAbsolutePaths` | Ban absolute paths under home directory in Bash commands (use `~/...`) |
 | `banWrongPackageManager` | Ban using wrong package manager for the project |
-| `banWriteOperations` | Require explicit user approval before HTTP write operations, GraphQL mutations, or MCP write tools |
+| `banWriteOperations` | Require proof confirmation (`claudex confirm`) before HTTP write operations, GraphQL mutations, or MCP write tools |
 | `preferLocalGithubRepo` | Block fetching files from GitHub when the repo is already cloned locally as a sibling directory |
 | `preferGhx` | Use `ghx` instead of `gh` when `ghx` is available |
 | `suggestCommandSubstitute` | When a command is not found but an equivalent is available, suggest it (e.g. pip → uv) |
