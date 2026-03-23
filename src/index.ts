@@ -311,13 +311,6 @@ export async function main() {
 			await runMv(source, destination, options);
 		});
 
-	const memoryCommand = program
-		.command('memory')
-		.description('Memory and transcript tools');
-
-	const { buildMemorySearchCommand } = await import('./memory-search/index.js');
-	memoryCommand.addCommand(buildMemorySearchCommand());
-
 	program
 		.command('confirm')
 		.description('Confirm a pending action by its short ID')
@@ -327,7 +320,7 @@ export async function main() {
 			const {
 				loadPendingConfirmation, verifyConfirmationToken, storeConfirmation,
 			} = await import('./confirm.js');
-			const { buildToolUseMap, extractContent } = await import('./memory-search/parser.js');
+			const { buildToolUseMap, extractContent } = await import('./transcript/parser.js');
 
 			let token;
 			try {
