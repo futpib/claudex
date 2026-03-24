@@ -56,6 +56,8 @@ RUN --mount=type=cache,target=/var/cache/pacman/pkg \
 		useradd -m -G wheel builder; \
 		echo '%wheel ALL=(ALL) NOPASSWD: ALL' >> /etc/sudoers; \
 		chmod 777 /tmp/yay-build; \
+		chmod 777 /var/cache/pacman/pkg; \
+		chmod 777 /var/lib/pacman/sync; \
 		for pkg in ${PACKAGES}; do \
 			cached=$(find /var/cache/pacman/pkg -maxdepth 1 -name "${pkg}-[0-9]*.pkg.tar*" ! -name "*.sig" -print -quit 2>/dev/null); \
 			if [ -n "${cached}" ]; then \
