@@ -58,7 +58,7 @@ test('findRunningContainer uses prefix anchor in docker filter', async t => {
 test('findRunningContainer throws when no containers found', async t => {
 	const execaStub = createExecaStub('');
 	const error = await t.throwsAsync(async () => findRunningContainer('/home/user/code/iroh', undefined, execaStub));
-	t.is(error?.message, 'No running claudex containers found for iroh. Start one with: claudex');
+	t.is(error?.message, 'No running claudex containers found for /home/user/code/iroh. Start one with: claudex');
 });
 
 test('findRunningContainer throws when multiple containers found', async t => {

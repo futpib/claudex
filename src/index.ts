@@ -406,7 +406,7 @@ export async function findRunningContainer(cwd: string, specificName?: string, e
 	const lines = await listContainers({ cwd, execaFn });
 
 	if (lines.length === 0) {
-		throw new Error(`No running claudex containers found for ${cwdBasename}. Start one with: claudex`);
+		throw new Error(`No running claudex containers found for ${cwd}. Start one with: claudex`);
 	}
 
 	if (lines.length > 1) {
@@ -511,7 +511,7 @@ async function runPs(options: { all?: boolean }) {
 	if (lines.length === 0) {
 		console.error(options.all
 			? 'No running claudex containers found.'
-			: `No running claudex containers found for ${path.basename(cwd)}.`);
+			: `No running claudex containers found for ${cwd}.`);
 		return;
 	}
 
