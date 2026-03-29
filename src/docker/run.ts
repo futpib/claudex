@@ -236,6 +236,7 @@ export async function runDockerContainer(parameters: {
 		'run',
 		'-d',
 		'-it',
+		'--log-driver=none',
 		...(dockerSudo ? [] : [ '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges' ]),
 		...(config.dockerIpcPrivate === false ? [] : [ '--ipc=private' ]),
 		...(config.dockerPidsLimit === false ? [] : [ '--pids-limit', String(await getDockerPidsLimit()) ]),
