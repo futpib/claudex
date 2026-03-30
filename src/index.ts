@@ -417,7 +417,7 @@ export async function findRunningContainer(cwd: string, specificName?: string, e
 			const relative = dt?.isValid ? dt.toRelative() : created;
 			return relative ? `  ${name}  (created ${relative})` : `  ${name}`;
 		}).join('\n');
-		throw new Error(`Multiple running claudex containers found for ${cwdBasename}:\n${list}\n\nSpecify one with --container <name>`);
+		throw new Error(`Multiple running claudex containers found for ${cwdBasename}:\n${list}\n\nSpecify one with: claudex attach <name>`);
 	}
 
 	return lines[0].split('\t')[0];

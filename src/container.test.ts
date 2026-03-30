@@ -67,7 +67,7 @@ test('findRunningContainer throws when multiple containers found', async t => {
 	t.truthy(error?.message.includes('Multiple running claudex containers found for iroh'));
 	t.truthy(error?.message.includes('claudex-iroh-abc123'));
 	t.truthy(error?.message.includes('claudex-iroh-def456'));
-	t.truthy(error?.message.includes('--container'));
+	t.truthy(error?.message.includes('claudex attach <name>'));
 	t.truthy(error?.message.includes('created '));
 });
 
