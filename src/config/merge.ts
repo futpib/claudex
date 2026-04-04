@@ -461,10 +461,10 @@ function resolveProfiles(
 		}
 	}
 
-	// Apply profiles first, then overlay the explicit config on top
-	// This way explicit project/group fields override profile defaults
+	// Apply profiles on top of root config, so profile PATH entries
+	// take priority over root but are overridden by group/project
 	const { profiles: _, ...mergedWithoutProfiles } = merged;
-	const result = mergeBaseConfigs(profilesMerged, mergedWithoutProfiles);
+	const result = mergeBaseConfigs(mergedWithoutProfiles, profilesMerged);
 
 	return { config: result, profileVolumes };
 }
@@ -498,27 +498,45 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 	// Determine resolution path (git root or cwd if not in git)
 	const resolutionPath = gitRoot ?? expandedCwd;
 
-	// Build merge chain: root → group → worktree parent → project
+	// Build merge chain: root → profiles → group → worktree parent → project
 	let merged: ClaudexConfig = extractBaseConfig(rootConfig);
 
-	if (worktreeParent) {
-		const parentProjectMatch = findMatchingProject(rootConfig, worktreeParent);
-		if (parentProjectMatch) {
-			merged = mergeProjectConfig(rootConfig, merged, parentProjectMatch.config);
+	// Collect all profile names from all levels before merging,
+	// so we can resolve profiles between root and group/project.
+	const allProfileNames = [ ...(merged.profiles ?? []) ];
+
+	const worktreeParentMatch = worktreeParent ? findMatchingProject(rootConfig, worktreeParent) : undefined;
+	const projectMatch = findMatchingProject(rootConfig, resolutionPath);
+
+	for (const match of [ worktreeParentMatch, projectMatch ]) {
+		if (match) {
+			if (match.config.group) {
+				const groupConfig = resolveGroup(rootConfig, match.config.group);
+				if (groupConfig?.profiles) {
+					allProfileNames.push(...groupConfig.profiles);
+				}
+			}
+
+			if (match.config.profiles) {
+				allProfileNames.push(...match.config.profiles);
+			}
 		}
 	}
 
-	const projectMatch = findMatchingProject(rootConfig, resolutionPath);
+	// Capture deduplicated profile names
+	const profiles = dedupeStrings(allProfileNames);
+
+	// Resolve profiles on top of root, before group/project overlays
+	const { config: afterProfiles, profileVolumes } = resolveProfiles(rootConfig, { ...merged, profiles });
+	merged = afterProfiles;
+
+	if (worktreeParentMatch) {
+		merged = mergeProjectConfig(rootConfig, merged, worktreeParentMatch.config);
+	}
+
 	if (projectMatch) {
 		merged = mergeProjectConfig(rootConfig, merged, projectMatch.config);
 	}
-
-	// Capture profile names before resolveProfiles strips them
-	const { profiles } = merged;
-
-	// Resolve profile references into the merged config
-	const { config: resolvedConfig, profileVolumes } = resolveProfiles(rootConfig, merged);
-	merged = resolvedConfig;
 
 	// Auto-share volumes between group members (shareVolumes defaults to true)
 	if (merged.shareVolumes !== false && projectMatch?.config.group) {

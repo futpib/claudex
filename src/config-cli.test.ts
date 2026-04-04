@@ -1755,3 +1755,45 @@ test('profile scope resolves file when profile exists in specific config file', 
 		t.pass('config.json correctly does not exist');
 	}
 });
+
+// --- PATH merge order across all config levels ---
+
+test('merged PATH order is project:group:profile:root', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-path-order-');
+
+	const claudexDir = path.join(handle.configDir, 'claudex');
+	const configJsonDirectory = path.join(claudexDir, 'config.json.d');
+	await mkdir(configJsonDirectory, { recursive: true });
+
+	// Write config with all 4 levels specifying different PATH entries
+	/* eslint-disable @typescript-eslint/naming-convention */
+	await writeFile(
+		path.join(configJsonDirectory, '50-test.json'),
+		JSON.stringify({
+			env: { PATH: '/root-path' },
+			profileDefinitions: {
+				rbenv: {
+					env: { PATH: '/profile-path' },
+				},
+			},
+			groupDefinitions: {
+				mygroup: {
+					env: { PATH: '/group-path' },
+				},
+			},
+			projects: {
+				[project.dir]: {
+					group: 'mygroup',
+					profiles: [ 'rbenv' ],
+					env: { PATH: '/project-path' },
+				},
+			},
+		}),
+	);
+	/* eslint-enable @typescript-eslint/naming-convention */
+
+	const result = await runConfigWithDir(handle.configDir, [ 'get', '--project', project.dir, 'env.PATH' ]);
+	t.is(result.exitCode, 0);
+	t.is(result.stdout.trim(), '/project-path:/group-path:/profile-path:/root-path');
+});
