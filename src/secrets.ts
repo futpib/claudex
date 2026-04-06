@@ -25,8 +25,10 @@ async function isGitleaksAvailable(): Promise<boolean> {
 /**
  * Check if a value looks like a secret using gitleaks.
  * If gitleaks is not installed, assumes the value is a secret (safe default).
+ * Passing the key alongside the value gives gitleaks the context it needs
+ * (many rules match on `KEY=value` patterns, not bare values).
  */
-export async function isSecret(value: string): Promise<boolean> {
+export async function isSecret(key: string, value: string): Promise<boolean> {
 	if (!await isGitleaksAvailable()) {
 		// Safe default: assume everything is a secret
 		return true;
@@ -35,7 +37,7 @@ export async function isSecret(value: string): Promise<boolean> {
 	try {
 		// Gitleaks stdin exits with 0 if no secrets found, non-zero if secrets found
 		await execa('gitleaks', [ 'stdin', '--no-banner' ], {
-			input: value,
+			input: `${key}="${value}"`,
 		});
 		return false;
 	} catch {
@@ -45,12 +47,11 @@ export async function isSecret(value: string): Promise<boolean> {
 }
 
 /**
- * Check multiple values for secrets in parallel.
- * Returns a Map of value -> isSecret.
+ * Check multiple key-value pairs for secrets in parallel.
+ * Returns a Map of key -> isSecret.
  */
-export async function checkSecrets(values: string[]): Promise<Map<string, boolean>> {
-	const uniqueValues = [ ...new Set(values) ];
-	const results = await Promise.all(uniqueValues.map(async value => [ value, await isSecret(value) ] as const));
+export async function checkSecrets(entries: Array<[string, string]>): Promise<Map<string, boolean>> {
+	const results = await Promise.all(entries.map(async ([ key, value ]) => [ key, await isSecret(key, value) ] as const));
 	return new Map(results);
 }
 
@@ -67,15 +68,14 @@ export function shieldValue(value: string, isSecretValue: boolean): string {
 
 /**
  * Shield environment variables, checking each value with gitleaks.
- * Returns entries formatted as "KEY=value" or "KEY=sh****ed" for secrets.
+ * Returns entries formatted as "KEY=value" or "KEY=****" for secrets.
  */
 export async function shieldEnvVars(env: Record<string, string>): Promise<string[]> {
 	const entries = Object.entries(env);
-	const values = entries.map(([ _, value ]) => value);
-	const secretMap = await checkSecrets(values);
+	const secretMap = await checkSecrets(entries);
 
 	return entries.map(([ key, value ]) => {
-		const isSecretValue = secretMap.get(value) ?? true;
+		const isSecretValue = secretMap.get(key) ?? true;
 		return `${key}=${shieldValue(value, isSecretValue)}`;
 	});
 }
