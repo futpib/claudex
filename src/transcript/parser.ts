@@ -127,6 +127,12 @@ function * extractFromEntry(
 
 			break;
 		}
+
+		case 'queue-operation': {
+			yield * extractFromQueueOperationEntry(entry, context);
+
+			break;
+		}
 	// No default
 	}
 }
@@ -263,6 +269,26 @@ function * extractFromAssistantEntry(
 				};
 			}
 		}
+	}
+}
+
+function * extractFromQueueOperationEntry(
+	entry: Record<string, unknown>,
+	context: ExtractContext,
+): Generator<ExtractedContent> {
+	if (entry.operation !== 'enqueue') {
+		return;
+	}
+
+	if (!context.targets.has('queue-operation')) {
+		return;
+	}
+
+	const content = entry.content;
+	if (typeof content === 'string') {
+		yield {
+			target: 'queue-operation', text: content, sessionId: context.sessionId, timestamp: context.timestamp,
+		};
 	}
 }
 
