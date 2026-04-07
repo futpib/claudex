@@ -80,6 +80,7 @@ type MainOptions = {
 	env: string[];
 	sshKey: string[];
 	dockerArg: string[];
+	dockerArgs: string | undefined;
 	launcher: string | undefined;
 	model: string | undefined;
 	account: string | undefined;
@@ -98,6 +99,7 @@ export async function main() {
 		.option('--docker-sudo', 'Allow sudo inside the container (less secure)')
 		.option('--docker-insecure', 'Disable all Docker hardening (caps, no-new-privileges, ipc, pids-limit)')
 		.option('--docker-arg <arg>', 'Pass extra argument to docker run (repeatable)', collect, [])
+		.option('--docker-args <args>', 'Extra arguments to pass to docker run (space-separated)')
 		.option('--allow-unsafe-directory', 'Skip directory safety checks (home, hidden, unowned, no .git)')
 		.option('--package <name>', 'Add pacman package to install in Docker (repeatable)', collect, [])
 		.option('--volume <spec>', 'Add volume mount: path or host:container (repeatable)', collect, [])
@@ -738,11 +740,14 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		volume: cliVolumes,
 		env: cliEnv,
 		sshKey: cliSshKeys,
-		dockerArg: cliDockerArgs,
+		dockerArg: cliDockerArg,
+		dockerArgs: cliDockerArgsString,
 		launcher: cliLauncher,
 		model: cliModel,
 		account: cliAccount,
 	} = options;
+
+	const cliDockerArgs = [ ...cliDockerArg, ...(cliDockerArgsString ? cliDockerArgsString.split(' ') : []) ];
 
 	// Read config early for hook/mcp gating
 	const earlyConfig = await getMergedConfig(process.cwd());
