@@ -73,11 +73,13 @@ type MainOptions = {
 	dockerNoCache: boolean;
 	dockerSkipBuild: boolean;
 	dockerSudo: boolean;
+	dockerInsecure: boolean;
 	allowUnsafeDirectory: boolean;
 	package: string[];
 	volume: string[];
 	env: string[];
 	sshKey: string[];
+	dockerArg: string[];
 	launcher: string | undefined;
 	model: string | undefined;
 	account: string | undefined;
@@ -94,6 +96,8 @@ export async function main() {
 		.option('--docker-no-cache', 'Build the Docker image without cache')
 		.option('--docker-skip-build, --docker-no-build', 'Skip Docker image build and use existing image')
 		.option('--docker-sudo', 'Allow sudo inside the container (less secure)')
+		.option('--docker-insecure', 'Disable all Docker hardening (caps, no-new-privileges, ipc, pids-limit)')
+		.option('--docker-arg <arg>', 'Pass extra argument to docker run (repeatable)', collect, [])
 		.option('--allow-unsafe-directory', 'Skip directory safety checks (home, hidden, unowned, no .git)')
 		.option('--package <name>', 'Add pacman package to install in Docker (repeatable)', collect, [])
 		.option('--volume <spec>', 'Add volume mount: path or host:container (repeatable)', collect, [])
@@ -728,11 +732,13 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		dockerNoCache,
 		dockerSkipBuild,
 		dockerSudo,
+		dockerInsecure,
 		allowUnsafeDirectory,
 		package: cliPackages,
 		volume: cliVolumes,
 		env: cliEnv,
 		sshKey: cliSshKeys,
+		dockerArg: cliDockerArgs,
 		launcher: cliLauncher,
 		model: cliModel,
 		account: cliAccount,
@@ -852,6 +858,8 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			cliSshKeys,
 			cliModel,
 			dockerSudo,
+			dockerInsecure,
+			cliDockerArgs,
 			useDockerShell,
 			dockerPull,
 			dockerNoCache,

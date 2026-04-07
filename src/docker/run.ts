@@ -118,6 +118,8 @@ export async function runDockerContainer(parameters: {
 	cliSshKeys: string[];
 	cliModel: string | undefined;
 	dockerSudo: boolean;
+	dockerInsecure: boolean;
+	cliDockerArgs: string[];
 	useDockerShell: boolean;
 	dockerPull: boolean;
 	dockerNoCache: boolean;
@@ -127,7 +129,7 @@ export async function runDockerContainer(parameters: {
 }): Promise<DockerRunResult> {
 	const {
 		cwd, account, profileVolumes, launcherDef, cliPackages, cliVolumes, cliEnv, cliSshKeys,
-		cliModel, dockerSudo, useDockerShell, dockerPull, dockerNoCache, dockerSkipBuild, claudeArgs, cliInDockerPath,
+		cliModel, dockerSudo, dockerInsecure, cliDockerArgs, useDockerShell, dockerPull, dockerNoCache, dockerSkipBuild, claudeArgs, cliInDockerPath,
 	} = parameters;
 	const config = { ...parameters.config };
 
@@ -237,9 +239,10 @@ export async function runDockerContainer(parameters: {
 		'-d',
 		'-it',
 		'--log-driver=none',
-		...(dockerSudo ? [] : [ '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges' ]),
-		...(config.dockerIpcPrivate === false ? [] : [ '--ipc=private' ]),
-		...(config.dockerPidsLimit === false ? [] : [ '--pids-limit', String(await getDockerPidsLimit()) ]),
+		...(dockerSudo || dockerInsecure ? [] : [ '--cap-drop', 'ALL', '--security-opt', 'no-new-privileges' ]),
+		...(dockerInsecure || config.dockerIpcPrivate === false ? [] : [ '--ipc=private' ]),
+		...(dockerInsecure || config.dockerPidsLimit === false ? [] : [ '--pids-limit', String(await getDockerPidsLimit()) ]),
+		...cliDockerArgs,
 		'--name',
 		containerName,
 		'-v',

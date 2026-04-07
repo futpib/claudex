@@ -67,6 +67,8 @@ claudex --docker-exec-root
 | `--docker-no-cache` | Build image without Docker cache |
 | `--docker-skip-build` | Skip Docker image build and use existing image |
 | `--docker-sudo` | Allow sudo inside the container |
+| `--docker-insecure` | Disable all Docker hardening (caps, no-new-privileges, ipc, pids-limit) |
+| `--docker-arg <arg>` | Pass extra argument to `docker run` (repeatable) |
 | `--container <name>` | Target a specific container by name |
 | `--allow-unsafe-directory` | Skip directory safety checks |
 | `--package <name>` | Install pacman package in Docker (repeatable) |
@@ -81,7 +83,7 @@ claudex --docker-exec-root
 
 By default, claudex refuses to run in unsafe directories (home directory, hidden directories, unowned directories, directories without `.git`). A temporary directory is created automatically in these cases. Use `--allow-unsafe-directory` to override.
 
-Containers run with `--cap-drop ALL --security-opt no-new-privileges` unless `--docker-sudo` is passed.
+Containers run with `--cap-drop ALL --security-opt no-new-privileges --ipc=private --pids-limit` unless `--docker-sudo` or `--docker-insecure` is passed. `--docker-insecure` disables all hardening; `--docker-sudo` only disables capability dropping and no-new-privileges. Use `--docker-arg` to pass arbitrary arguments to `docker run` (e.g. `--docker-arg --privileged` or `--docker-arg --cap-add=CAP_PERFMON`).
 
 ### Co-Authorship Proof System
 
