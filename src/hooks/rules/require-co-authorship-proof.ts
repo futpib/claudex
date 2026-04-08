@@ -35,7 +35,7 @@ export const requireCoAuthorshipProof: Rule = {
 		);
 
 		const shortId = generateShortId();
-		await storePendingConfirmation(shortId, token);
+		await storePendingConfirmation(shortId, token, context.command);
 
 		return {
 			type: 'violation',
@@ -44,7 +44,7 @@ export const requireCoAuthorshipProof: Rule = {
 				'1. FIRST run \'git diff --cached\' to see what changes are being committed',
 				'2. ACTUALLY check the session transcript - did Claude Code make these specific changes?',
 				'3. If Claude Code genuinely co-authored, confirm with:',
-				`   claudex confirm ${shortId} '<describe what Claude Code changed in this session>'`,
+				`   claudex confirm ${shortId} '<describe what Claude Code changed in this session>' --exec`,
 				'4. If Claude Code did NOT make these changes, remove Co-authored-by and try again.',
 			],
 		};

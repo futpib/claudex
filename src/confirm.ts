@@ -71,13 +71,27 @@ export function generateShortId(): string {
 	return crypto.randomBytes(6).toString('hex');
 }
 
-export async function storePendingConfirmation(shortId: string, token: string): Promise<void> {
+type PendingConfirmation = {
+	token: string;
+	command?: string;
+};
+
+export async function storePendingConfirmation(shortId: string, token: string, command?: string): Promise<void> {
 	await fs.mkdir(pendingDir, { recursive: true });
-	await fs.writeFile(path.join(pendingDir, `${shortId}.jwt`), token);
+	const data: PendingConfirmation = { token, command };
+	await fs.writeFile(path.join(pendingDir, `${shortId}.json`), JSON.stringify(data));
 }
 
-export async function loadPendingConfirmation(shortId: string): Promise<string> {
-	return fs.readFile(path.join(pendingDir, `${shortId}.jwt`), 'utf8');
+export async function loadPendingConfirmation(shortId: string): Promise<PendingConfirmation> {
+	const filePath = path.join(pendingDir, `${shortId}.json`);
+	try {
+		const content = await fs.readFile(filePath, 'utf8');
+		return JSON.parse(content) as PendingConfirmation;
+	} catch {
+		// Fallback for old .jwt files
+		const jwt = await fs.readFile(path.join(pendingDir, `${shortId}.jwt`), 'utf8');
+		return { token: jwt };
+	}
 }
 
 type StoredConfirmation = {

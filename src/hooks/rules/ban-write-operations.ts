@@ -67,7 +67,7 @@ function checkMcpTool(toolName: string): string | undefined {
 async function requireConfirmation(
 	actionIdentity: string,
 	description: string,
-	context: { sessionId: string; transcriptPath: string },
+	context: { sessionId: string; transcriptPath: string; command?: string },
 ): Promise<RuleResult> {
 	const actionHash = hashAction(actionIdentity);
 
@@ -83,7 +83,7 @@ async function requireConfirmation(
 	);
 
 	const shortId = generateShortId();
-	await storePendingConfirmation(shortId, token);
+	await storePendingConfirmation(shortId, token, context.command);
 
 	return {
 		type: 'violation',
@@ -91,7 +91,7 @@ async function requireConfirmation(
 			`❌ ${description} (write subcommand) — this is a write operation that acts on behalf of the user`,
 			'',
 			'Did the user explicitly ask you to perform this action? If yes, confirm with:',
-			`  claudex confirm ${shortId} '<proof>'`,
+			`  claudex confirm ${shortId} '<proof>' --exec`,
 			'',
 			'The <proof> must be a VERBATIM quote from the user that SPECIFICALLY',
 			'asks for this write operation.',

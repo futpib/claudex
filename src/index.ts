@@ -322,20 +322,23 @@ export async function main() {
 		.description('Confirm a pending action by its short ID')
 		.argument('<id>', 'Short confirmation ID')
 		.argument('<proof>', 'Proof text with exact quote from the user')
-		.action(async (shortId: string, proof: string) => {
+		.option('--exec', 'Execute the confirmed command after storing confirmation')
+		.action(async (shortId: string, proof: string, options: { exec?: boolean }) => {
 			const {
 				loadPendingConfirmation, verifyConfirmationToken, storeConfirmation,
 			} = await import('./confirm.js');
 			const { buildToolUseMap, extractContent } = await import('./transcript/parser.js');
 
-			let token;
+			let pending;
 			try {
-				token = await loadPendingConfirmation(shortId);
+				pending = await loadPendingConfirmation(shortId);
 			} catch {
 				console.error(`❌ Unknown confirmation ID: ${shortId}`);
 				process.exitCode = 1;
 				return;
 			}
+
+			const { token, command } = pending;
 
 			let payload;
 			try {
@@ -376,6 +379,18 @@ export async function main() {
 
 			await storeConfirmation(actionHash, sessionId, token, proof);
 			console.log(`✅ Confirmation stored for action ${actionHash.slice(0, 12)}...`);
+
+			if (options.exec) {
+				if (!command) {
+					console.error('❌ No command stored for this confirmation.');
+					process.exitCode = 1;
+					return;
+				}
+
+				console.log(`▶ Executing: ${command}`);
+				const result = await execa('sh', [ '-c', command ], { stdio: 'inherit', reject: false });
+				process.exitCode = result.exitCode ?? 0;
+			}
 		});
 
 	await program.parseAsync(process.argv);

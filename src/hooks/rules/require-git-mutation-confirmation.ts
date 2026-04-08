@@ -107,14 +107,14 @@ export const requireGitMutationConfirmation: Rule = {
 		);
 
 		const shortId = generateShortId();
-		await storePendingConfirmation(shortId, token);
+		await storePendingConfirmation(shortId, token, context.command);
 
 		return {
 			type: 'violation',
 			messages: [
 				`⚠️  This is a git mutation: ${context.command}`,
 				`Did the user explicitly ask you to "${mutation}"? If yes, confirm with:`,
-				`  claudex confirm ${shortId} '<proof>'`,
+				`  claudex confirm ${shortId} '<proof>' --exec`,
 				'',
 				'The <proof> must be a VERBATIM quote from the user that SPECIFICALLY',
 				`mentions "${mutation}" (or a synonym like "push it", "commit this", etc.).`,
