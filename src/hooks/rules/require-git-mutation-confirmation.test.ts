@@ -148,10 +148,46 @@ test('blocks git branch -D', async t => {
 	assertBlocked(t, result, 'git mutation');
 });
 
-test('blocks git reset', async t => {
+test('blocks git reset --hard', async t => {
 	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
 	const result = await runHook(
 		createBashToolInput('git reset --hard HEAD~1'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
+});
+
+test('blocks git reset --soft', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git reset --soft HEAD~1'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
+});
+
+test('blocks git reset --mixed', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git reset --mixed HEAD~1'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
+});
+
+test('blocks git reset with commit ref', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git reset HEAD~1'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
+});
+
+test('blocks bare git reset', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git reset'),
 		env(config),
 	);
 	assertBlocked(t, result, 'git mutation');
@@ -202,6 +238,42 @@ test('allows git fetch', async t => {
 		env(config),
 	);
 	t.is(result.exitCode, 0);
+});
+
+test('allows git reset -- path (unstaging)', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git reset -- file.txt'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git reset HEAD -- path (unstaging)', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git reset HEAD -- file.txt'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git reset -- multiple paths', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git reset -- file1.txt file2.txt'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('blocks git reset --hard even with -- separator', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git reset --hard -- file.txt'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
 });
 
 test('allows git pull', async t => {

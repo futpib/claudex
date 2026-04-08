@@ -10,7 +10,6 @@ const gitMutationSubcommands = new Set([
 	'merge',
 	'rebase',
 	'tag',
-	'reset',
 ]);
 
 const gitMutationMultiWordSubcommands = [
@@ -18,6 +17,30 @@ const gitMutationMultiWordSubcommands = [
 	'branch -d',
 	'branch -D',
 ];
+
+/**
+ * `git reset -- <paths>` only unstages files — it never moves HEAD or
+ * discards working-tree changes, so it is safe to run without confirmation.
+ *
+ * We treat a reset as safe (path-only) when:
+ *   1. It contains a bare `--` separator (everything after is paths), AND
+ *   2. It has no mode flags that would make it a commit reset.
+ *
+ * Any other `git reset` (with --hard, --soft, --mixed, --merge, --keep,
+ * or without `--`) is treated as a mutation that requires confirmation.
+ */
+function isSafeGitReset(args: string): boolean {
+	const parts = args.split(/\s+/);
+
+	const modeFlags = new Set([ '--hard', '--soft', '--mixed', '--merge', '--keep' ]);
+	for (const part of parts) {
+		if (modeFlags.has(part)) {
+			return false;
+		}
+	}
+
+	return parts.includes('--');
+}
 
 function isGitMutation(command: string): string | undefined {
 	const normalized = command.trim();
@@ -35,6 +58,16 @@ function isGitMutation(command: string): string | undefined {
 	}
 
 	const subcommand = rest.split(/\s/)[0];
+
+	if (subcommand === 'reset') {
+		const resetArgs = rest.slice('reset'.length).trimStart();
+		if (isSafeGitReset(resetArgs)) {
+			return undefined;
+		}
+
+		return 'reset';
+	}
+
 	if (subcommand && gitMutationSubcommands.has(subcommand)) {
 		return subcommand;
 	}
