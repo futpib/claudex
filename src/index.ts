@@ -84,6 +84,7 @@ type MainOptions = {
 	launcher: string | undefined;
 	model: string | undefined;
 	account: string | undefined;
+	noAccount: boolean;
 };
 
 export async function main() {
@@ -109,6 +110,7 @@ export async function main() {
 		.option('--launcher <name>', 'Select launcher by name (e.g. "ollama")')
 		.option('--model <name>', 'Override the launcher\'s default model')
 		.option('--account <name>', 'Use a specific claudex account')
+		.option('--no-account', 'Ignore configured account and use default')
 		.allowUnknownOption()
 		.passThroughOptions()
 		.argument('[claude-args...]')
@@ -760,6 +762,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		launcher: cliLauncher,
 		model: cliModel,
 		account: cliAccount,
+		noAccount,
 	} = options;
 
 	const cliDockerArgs = [ ...cliDockerArg, ...(cliDockerArgsString ? cliDockerArgsString.split(' ') : []) ];
@@ -769,7 +772,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const hooksResolved = resolveHooks(earlyConfig.config.hooks);
 	const mcpServersResolved = resolveMcpServers(earlyConfig.config.mcpServers);
 
-	const account = cliAccount ?? earlyConfig.account;
+	const account = noAccount ? undefined : (cliAccount ?? earlyConfig.account);
 	const accountPaths = getAccountPaths(account);
 	await ensureAccountDirs(accountPaths);
 
