@@ -67,8 +67,24 @@ test('findRunningContainer throws when multiple containers found', async t => {
 	t.truthy(error?.message.includes('Multiple running claudex containers found for iroh'));
 	t.truthy(error?.message.includes('claudex-iroh-abc123'));
 	t.truthy(error?.message.includes('claudex-iroh-def456'));
-	t.truthy(error?.message.includes('claudex attach <name>'));
 	t.truthy(error?.message.includes('created '));
+});
+
+test('findRunningContainer suggests the caller command in multi-container error', async t => {
+	const execaStub = createExecaStub('claudex-iroh-abc123\t2026-03-02 17:00:00 +0000 +00\nclaudex-iroh-def456\t2026-03-02 16:00:00 +0000 +00');
+
+	const attachError = await t.throwsAsync(async () => findRunningContainer('/home/user/code/iroh', undefined, execaStub, 'attach'));
+	t.truthy(attachError?.message.includes('claudex attach <name>'), 'attach caller should suggest claudex attach');
+
+	const execError = await t.throwsAsync(async () => findRunningContainer('/home/user/code/iroh', undefined, execaStub, 'exec'));
+	t.truthy(execError?.message.includes('claudex exec <name>'), 'exec caller should suggest claudex exec');
+	t.false(execError?.message.includes('claudex attach'), 'exec error should not mention attach');
+
+	const execRootError = await t.throwsAsync(async () => findRunningContainer('/home/user/code/iroh', undefined, execaStub, 'exec --root'));
+	t.truthy(execRootError?.message.includes('claudex exec --root <name>'), 'exec --root caller should suggest claudex exec --root');
+
+	const installError = await t.throwsAsync(async () => findRunningContainer('/home/user/code/iroh', undefined, execaStub, 'install'));
+	t.truthy(installError?.message.includes('--container'), 'install caller should suggest --container flag');
 });
 
 test('findRunningContainer does not match containers from similarly-named projects', async t => {

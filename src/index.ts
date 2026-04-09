@@ -416,7 +416,23 @@ export function filterContainerLines(lines: string[], prefix: string): string[] 
 	});
 }
 
-export async function findRunningContainer(cwd: string, specificName?: string, execaFn: ExecaFn = execa): Promise<string> {
+export type FindContainerCaller = 'attach' | 'exec' | 'exec --root' | 'install';
+
+function disambiguationHint(caller: FindContainerCaller): string {
+	switch (caller) {
+		case 'install': {
+			return 'Specify one with: claudex install --container <name> <packages...>';
+		}
+
+		case 'attach':
+		case 'exec':
+		case 'exec --root': {
+			return `Specify one with: claudex ${caller} <name>`;
+		}
+	}
+}
+
+export async function findRunningContainer(cwd: string, specificName?: string, execaFn: ExecaFn = execa, caller: FindContainerCaller = 'attach'): Promise<string> {
 	if (specificName) {
 		// Verify the specific container is running
 		const result = await execaFn('docker', [ 'ps', '--filter', `name=^${specificName}$`, '--format', '{{.Names}}' ]);
@@ -443,7 +459,7 @@ export async function findRunningContainer(cwd: string, specificName?: string, e
 			const relative = dt?.isValid ? dt.toRelative() : created;
 			return relative ? `  ${name}  (created ${relative})` : `  ${name}`;
 		}).join('\n');
-		throw new Error(`Multiple running claudex containers found for ${cwdBasename}:\n${list}\n\nSpecify one with: claudex attach <name>`);
+		throw new Error(`Multiple running claudex containers found for ${cwdBasename}:\n${list}\n\n${disambiguationHint(caller)}`);
 	}
 
 	return lines[0].split('\t')[0];
@@ -454,7 +470,7 @@ async function runInstall(packages: string[], options: { save: boolean; containe
 
 	let containerName: string;
 	try {
-		containerName = await findRunningContainer(cwd, options.container);
+		containerName = await findRunningContainer(cwd, options.container, execa, 'install');
 	} catch (error) {
 		console.error(error instanceof Error ? error.message : String(error));
 		// eslint-disable-next-line unicorn/no-process-exit
@@ -594,7 +610,7 @@ async function runAttach(options: { container?: string }) {
 
 	let containerName: string;
 	try {
-		containerName = await findRunningContainer(cwd, options.container);
+		containerName = await findRunningContainer(cwd, options.container, execa, 'attach');
 	} catch (error) {
 		console.error(error instanceof Error ? error.message : String(error));
 		// eslint-disable-next-line unicorn/no-process-exit
@@ -623,7 +639,7 @@ async function runExec(container: string | undefined, options: { root?: boolean 
 
 	let containerName: string;
 	try {
-		containerName = await findRunningContainer(cwd, container);
+		containerName = await findRunningContainer(cwd, container, execa, options.root ? 'exec --root' : 'exec');
 	} catch (error) {
 		console.error(error instanceof Error ? error.message : String(error));
 		// eslint-disable-next-line unicorn/no-process-exit
