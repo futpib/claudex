@@ -45,14 +45,14 @@ claudex -p 'fix the tests'
 # Run directly on the host (no Docker)
 claudex --no-docker
 
-# Launch a shell inside the container
+# Start a new container with a bash shell instead of the launcher
 claudex --docker-shell
 
-# Exec into a running container for the current directory
-claudex --docker-exec
+# Exec a bash shell into an already-running container for the current directory
+claudex exec
 
 # Exec into a running container as root
-claudex --docker-exec-root
+claudex exec --root
 ```
 
 ### CLI Flags
@@ -60,9 +60,7 @@ claudex --docker-exec-root
 | Flag | Description |
 |---|---|
 | `--no-docker` | Run Claude Code directly on the host |
-| `--docker-shell` | Launch bash inside the container |
-| `--docker-exec` | Exec into a running container |
-| `--docker-exec-root` | Exec into a running container as root with full privileges |
+| `--docker-shell` | Start a new container with a bash shell instead of the launcher |
 | `--docker-pull` | Pull the latest base image when building |
 | `--docker-no-cache` | Build image without Docker cache |
 | `--docker-skip-build` | Skip Docker image build and use existing image |
@@ -70,7 +68,6 @@ claudex --docker-exec-root
 | `--docker-insecure` | Disable all Docker hardening (caps, no-new-privileges, ipc, pids-limit) |
 | `--docker-arg <arg>` | Pass extra argument to `docker run` (repeatable) |
 | `--docker-args <args>` | Extra arguments to pass to `docker run` (space-separated) |
-| `--container <name>` | Target a specific container by name |
 | `--allow-unsafe-directory` | Skip directory safety checks |
 | `--package <name>` | Install pacman package in Docker (repeatable) |
 | `--volume <spec>` | Mount volume: `path` or `host:container` (repeatable) |
@@ -440,6 +437,19 @@ claudex attach
 
 # Attach to a specific container by name
 claudex attach claudex-myproject-abc123
+```
+
+### Exec into a Running Container
+
+```bash
+# Exec a bash shell into a running container for the current directory
+claudex exec
+
+# Target a specific container by name
+claudex exec claudex-myproject-abc123
+
+# Exec as root with full privileges
+claudex exec --root
 ```
 
 ### Moving a Project

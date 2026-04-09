@@ -66,9 +66,6 @@ function collect(value: string, previous: string[]) {
 type MainOptions = {
 	docker: boolean;
 	dockerShell: boolean;
-	dockerExec: boolean;
-	dockerExecRoot: boolean;
-	container: string | undefined;
 	dockerPull: boolean;
 	dockerNoCache: boolean;
 	dockerSkipBuild: boolean;
@@ -90,10 +87,7 @@ type MainOptions = {
 export async function main() {
 	const program = new Command('claudex')
 		.option('--no-docker', 'Run Claude Code directly on the host instead of in Docker')
-		.option('--docker-shell', 'Launch a bash shell inside the Docker container')
-		.option('--docker-exec', 'Exec into a running claudex container for current directory')
-		.option('--docker-exec-root', 'Exec into a running claudex container as root with full privileges')
-		.option('--container <name>', 'Target a specific container')
+		.option('--docker-shell', 'Start a new container and launch a bash shell in it instead of the launcher (use "claudex exec" to shell into an already-running container)')
 		.option('--docker-pull', 'Pull the latest base image when building')
 		.option('--docker-no-cache', 'Build the Docker image without cache')
 		.option('--docker-skip-build, --docker-no-build', 'Skip Docker image build and use existing image')
@@ -300,6 +294,15 @@ export async function main() {
 		.argument('[container]', 'Target a specific container by name')
 		.action(async (container: string | undefined) => {
 			await runAttach({ container });
+		});
+
+	program
+		.command('exec')
+		.description('Exec a bash shell into a running claudex container for current directory')
+		.argument('[container]', 'Target a specific container by name')
+		.option('--root', 'Exec as root with full privileges')
+		.action(async (container: string | undefined, options: { root?: boolean }) => {
+			await runExec(container, options);
 		});
 
 	program
@@ -615,6 +618,29 @@ async function runAttach(options: { container?: string }) {
 	}
 }
 
+async function runExec(container: string | undefined, options: { root?: boolean }) {
+	const cwd = process.cwd();
+
+	let containerName: string;
+	try {
+		containerName = await findRunningContainer(cwd, container);
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	const execArgs = options.root
+		? [ 'exec', '-it', '--privileged', '--user', 'root', containerName, 'bash' ]
+		: [ 'exec', '-it', containerName, 'bash' ];
+
+	await execa('docker', execArgs, {
+		stdin: process.stdin,
+		stdout: process.stdout,
+		stderr: process.stderr,
+	});
+}
+
 async function runPrune(options: { all?: boolean; force?: boolean }) {
 	const lines = await listContainers(options);
 
@@ -744,9 +770,6 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const {
 		docker: useDocker,
 		dockerShell: useDockerShell,
-		dockerExec: useDockerExec,
-		dockerExecRoot: useDockerExecRoot,
-		container: specificContainer,
 		dockerPull,
 		dockerNoCache,
 		dockerSkipBuild,
@@ -809,20 +832,6 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			console.error(`Creating temporary directory: ${temporaryDirCreated}`);
 			cwd = temporaryDirCreated;
 		}
-	}
-
-	// Handle --docker-exec / --docker-exec-root: exec into a running container
-	if (useDockerExec || useDockerExecRoot) {
-		const containerName = await findRunningContainer(cwd, specificContainer);
-		const execArgs = useDockerExecRoot
-			? [ 'exec', '-it', '--privileged', '--user', 'root', containerName, 'bash' ]
-			: [ 'exec', '-it', containerName, 'bash' ];
-		await execa('docker', execArgs, {
-			stdin: process.stdin,
-			stdout: process.stdout,
-			stderr: process.stderr,
-		});
-		return;
 	}
 
 	let claudeChildProcess;

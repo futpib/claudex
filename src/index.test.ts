@@ -23,8 +23,6 @@ test('--help exits 0 and lists all options', async t => {
 	for (const flag of [
 		'--no-docker',
 		'--docker-shell',
-		'--docker-exec',
-		'--docker-exec-root',
 		'--docker-pull',
 		'--docker-no-cache',
 		'--docker-skip-build',
@@ -46,6 +44,14 @@ test('--help lists config and install subcommands', async t => {
 	const { stdout } = await runCli([ '--help' ]);
 	t.regex(stdout, /config\b/);
 	t.regex(stdout, /install\b/);
+	t.regex(stdout, /exec\b/);
+});
+
+test('exec --help exits 0 and lists options', async t => {
+	const { exitCode, stdout } = await runCli([ 'exec', '--help' ]);
+	t.is(exitCode, 0);
+	t.true(stdout.includes('--root'), 'exec help should mention --root');
+	t.true(stdout.includes('container'), 'exec help should mention container argument');
 });
 
 test('install --help exits 0 and lists options', async t => {
