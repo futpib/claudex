@@ -1,5 +1,18 @@
 import path from 'node:path';
+import os from 'node:os';
 import type { Rule } from './index.js';
+
+function expandTilde(filePath: string): string {
+	if (filePath.startsWith('~/')) {
+		return path.join(os.homedir(), filePath.slice(2));
+	}
+
+	if (filePath === '~') {
+		return os.homedir();
+	}
+
+	return filePath;
+}
 
 export const banAbsolutePaths: Rule = {
 	meta: {
@@ -16,7 +29,8 @@ export const banAbsolutePaths: Rule = {
 
 		const result = await context.helpers.findAbsolutePathUnderCwd(context.command, context.cwd);
 		if (result) {
-			const relativePath = './' + path.relative(context.cwd, result);
+			const expanded = expandTilde(result);
+			const relativePath = './' + path.relative(context.cwd, expanded);
 			return {
 				type: 'violation',
 				messages: [

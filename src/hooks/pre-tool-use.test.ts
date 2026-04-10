@@ -3,7 +3,7 @@ import path from 'node:path';
 import {
 	mkdir, mkdtemp, rm, writeFile,
 } from 'node:fs/promises';
-import { tmpdir } from 'node:os';
+import os, { tmpdir } from 'node:os';
 import { execa } from 'execa';
 import test from 'ava';
 
@@ -1230,6 +1230,73 @@ test('allows grep when hooks not configured', async t => {
 
 	const result = await runHook(
 		createBashToolInput('grep -r "TODO" src/'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 0);
+});
+
+// --- ban-absolute-paths (tilde expansion) ---
+
+test('rejects tilde path under cwd', async t => {
+	const parentDir = await mkdtemp(path.join(tmpdir(), 'claudex-test-'));
+	const projectDir = path.join(parentDir, 'EKA2L1');
+	await mkdir(projectDir, { recursive: true });
+	await using config = await createHooksConfig({ banAbsolutePaths: true });
+
+	try {
+		const result = await runHook(
+			createBashToolInput(`ninja -C ${projectDir}/build-wasm -t targets`),
+			projectDir,
+			{
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: config.configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('Absolute path under cwd is not allowed'));
+		t.true(result.stderr.includes('./build-wasm'));
+	} finally {
+		await rm(parentDir, { recursive: true });
+	}
+});
+
+test('rejects tilde path under cwd when using ~ notation', async t => {
+	const homeDir = os.homedir();
+	const projectDir = path.join(homeDir, '.claudex-test-tilde-abs');
+	await mkdir(projectDir, { recursive: true });
+	await using config = await createHooksConfig({ banAbsolutePaths: true });
+
+	const tildeCwd = '~/.claudex-test-tilde-abs';
+
+	try {
+		const result = await runHook(
+			createBashToolInput(`ninja -C ${tildeCwd}/build-wasm -t targets`),
+			projectDir,
+			{
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				XDG_CONFIG_HOME: config.configDir,
+			},
+		);
+
+		t.is(result.exitCode, 2);
+		t.true(result.stderr.includes('Absolute path under cwd is not allowed'));
+		t.true(result.stderr.includes('./build-wasm'));
+	} finally {
+		await rm(projectDir, { recursive: true });
+	}
+});
+
+test('allows relative path with banAbsolutePaths', async t => {
+	await using config = await createHooksConfig({ banAbsolutePaths: true });
+
+	const result = await runHook(
+		createBashToolInput('ninja -C ./build-wasm -t targets'),
 		undefined,
 		{
 			// eslint-disable-next-line @typescript-eslint/naming-convention

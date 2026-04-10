@@ -1,4 +1,5 @@
 import path from 'node:path';
+import os from 'node:os';
 import { runParser, stringParserInputCompanion } from '@futpib/parser';
 import { runUnparser } from '@futpib/parser/build/unparser.js';
 import { stringUnparserOutputCompanion } from '@futpib/parser/build/unparserOutputCompanion.js';
@@ -571,6 +572,23 @@ export async function getGitCommandWithoutC(command: string): Promise<string | u
  * Uses the AST to only check actual command arguments, not string contents.
  * Returns the absolute path if found, undefined otherwise.
  */
+function expandTilde(filePath: string): string {
+	if (filePath.startsWith('~/')) {
+		return path.join(os.homedir(), filePath.slice(2));
+	}
+
+	if (filePath === '~') {
+		return os.homedir();
+	}
+
+	return filePath;
+}
+
+function isPathUnderCwd(value: string, cwd: string, cwdWithSlash: string): boolean {
+	const expanded = expandTilde(value);
+	return expanded === cwd || expanded.startsWith(cwdWithSlash);
+}
+
 export async function findAbsolutePathUnderCwd(command: string, cwd: string): Promise<string | undefined> {
 	const ast = await parseBashCommand(command);
 	if (!ast) {
@@ -584,7 +602,7 @@ export async function findAbsolutePathUnderCwd(command: string, cwd: string): Pr
 		// Check command name
 		if (cmd.name) {
 			const name = getWordLiteralValue(cmd.name);
-			if (name && (name === cwd || name.startsWith(cwdWithSlash))) {
+			if (name && isPathUnderCwd(name, cwd, cwdWithSlash)) {
 				found = name;
 				return true;
 			}
@@ -593,7 +611,7 @@ export async function findAbsolutePathUnderCwd(command: string, cwd: string): Pr
 		// Check arguments
 		for (const arg of cmd.args) {
 			const value = getWordLiteralValue(arg);
-			if (value && (value === cwd || value.startsWith(cwdWithSlash))) {
+			if (value && isPathUnderCwd(value, cwd, cwdWithSlash)) {
 				found = value;
 				return true;
 			}

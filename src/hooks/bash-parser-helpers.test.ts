@@ -1,3 +1,4 @@
+import os from 'node:os';
 import test from 'ava';
 import {
 	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, hasYarnCwdFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget, getChainedCommandStrings, getGitCommandWithoutC, getCargoManifestPathInfo, getYarnCwdInfo,
@@ -315,6 +316,21 @@ EOF
 
 test('findAbsolutePathUnderCwd - does not match cwd as prefix of longer path', async t => {
 	t.is(await findAbsolutePathUnderCwd('cat /home/user/project-other/file.ts', '/home/user/project'), undefined);
+});
+
+test('findAbsolutePathUnderCwd - detects tilde path under cwd', async t => {
+	const cwd = os.homedir() + '/code/EKA2L1';
+	t.is(await findAbsolutePathUnderCwd('ninja -C ~/code/EKA2L1/build-wasm -t targets', cwd), '~/code/EKA2L1/build-wasm');
+});
+
+test('findAbsolutePathUnderCwd - detects tilde path equal to cwd', async t => {
+	const cwd = os.homedir() + '/code/EKA2L1';
+	t.is(await findAbsolutePathUnderCwd('ninja -C ~/code/EKA2L1 -t targets', cwd), '~/code/EKA2L1');
+});
+
+test('findAbsolutePathUnderCwd - ignores tilde path outside cwd', async t => {
+	const cwd = os.homedir() + '/code/EKA2L1';
+	t.is(await findAbsolutePathUnderCwd('ninja -C ~/code/other-project/build -t targets', cwd), undefined);
 });
 
 test('findAbsolutePathUnderHome - detects absolute path argument under home', async t => {
