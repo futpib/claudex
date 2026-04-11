@@ -1758,6 +1758,48 @@ test('profile scope resolves file when profile exists in specific config file', 
 
 // --- PATH merge order across all config levels ---
 
+// --- Invalid JSON config error handling ---
+
+test('fails with meaningful error when config.json contains invalid JSON', async t => {
+	await using handle = await createTemporaryConfigDir();
+
+	const claudexDir = path.join(handle.configDir, 'claudex');
+	await mkdir(claudexDir, { recursive: true });
+	await writeFile(path.join(claudexDir, 'config.json'), 'not valid json{{{');
+
+	const result = await runConfigWithDir(handle.configDir, [ 'get', 'packages' ]);
+	t.not(result.exitCode, 0);
+	t.regex(result.stderr, /Invalid JSON/);
+	t.regex(result.stderr, /config\.json/);
+});
+
+test('fails with meaningful error when config.json.d file contains invalid JSON', async t => {
+	await using handle = await createTemporaryConfigDir();
+
+	const claudexDir = path.join(handle.configDir, 'claudex');
+	const configJsonDirectory = path.join(claudexDir, 'config.json.d');
+	await mkdir(configJsonDirectory, { recursive: true });
+	await writeFile(path.join(configJsonDirectory, '50-broken.json'), '{ bad json }');
+
+	const result = await runConfigWithDir(handle.configDir, [ 'get', 'packages' ]);
+	t.not(result.exitCode, 0);
+	t.regex(result.stderr, /Invalid JSON/);
+	t.regex(result.stderr, /50-broken\.json/);
+});
+
+test('fails with meaningful error when config contains invalid schema', async t => {
+	await using handle = await createTemporaryConfigDir();
+
+	const claudexDir = path.join(handle.configDir, 'claudex');
+	await mkdir(claudexDir, { recursive: true });
+	await writeFile(path.join(claudexDir, 'config.json'), JSON.stringify({ packages: 'not-an-array' }));
+
+	const result = await runConfigWithDir(handle.configDir, [ 'get', 'packages' ]);
+	t.not(result.exitCode, 0);
+	t.regex(result.stderr, /Invalid config/);
+	t.regex(result.stderr, /config\.json/);
+});
+
 test('merged PATH order is project:group:profile:root', async t => {
 	await using handle = await createTemporaryConfigDir();
 	await using project = await createTemporaryDir('claudex-path-order-');

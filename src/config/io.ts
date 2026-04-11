@@ -1,9 +1,24 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { paths } from '../paths.js';
-import { expandTilde } from '../utils.js';
+import { isErrnoException, expandTilde } from '../utils.js';
 import { mergeRootConfigs } from './merge.js';
 import { rootConfigSchema, type RootConfig } from './schema.js';
+
+function parseConfigFile(filePath: string, content: string): RootConfig {
+	let json: unknown;
+	try {
+		json = JSON.parse(content);
+	} catch (error) {
+		throw new Error(`Invalid JSON in ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+	}
+
+	try {
+		return rootConfigSchema.parse(json);
+	} catch (error) {
+		throw new Error(`Invalid config in ${filePath}: ${error instanceof Error ? error.message : String(error)}`);
+	}
+}
 
 type ReadRootConfigResult = {
 	config: RootConfig;
@@ -21,10 +36,12 @@ export async function readRootConfig(): Promise<ReadRootConfigResult> {
 	// Read main config.json
 	try {
 		const content = await fs.readFile(configPath, 'utf8');
-		merged = rootConfigSchema.parse(JSON.parse(content));
+		merged = parseConfigFile(configPath, content);
 		configFiles.push(configPath);
-	} catch {
-		// Doesn't exist or invalid
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
 	}
 
 	// Read all .json files from config.json.d/
@@ -34,18 +51,16 @@ export async function readRootConfig(): Promise<ReadRootConfigResult> {
 
 		for (const file of jsonFiles) {
 			const filePath = path.join(configJsonDirectoryPath, file);
-			try {
-				// eslint-disable-next-line no-await-in-loop
-				const content = await fs.readFile(filePath, 'utf8');
-				const parsed = rootConfigSchema.parse(JSON.parse(content));
-				merged = mergeRootConfigs(merged, parsed);
-				configFiles.push(filePath);
-			} catch {
-				// Skip invalid files
-			}
+			// eslint-disable-next-line no-await-in-loop
+			const content = await fs.readFile(filePath, 'utf8');
+			const parsed = parseConfigFile(filePath, content);
+			merged = mergeRootConfigs(merged, parsed);
+			configFiles.push(filePath);
 		}
-	} catch {
-		// Directory doesn't exist
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
 	}
 
 	return { config: merged, configFiles };
@@ -57,7 +72,7 @@ export function getConfigDir(): string {
 
 export async function readSingleConfigFile(filePath: string): Promise<RootConfig> {
 	const content = await fs.readFile(filePath, 'utf8');
-	return rootConfigSchema.parse(JSON.parse(content));
+	return parseConfigFile(filePath, content);
 }
 
 export async function writeSingleConfigFile(filePath: string, config: RootConfig): Promise<void> {
@@ -78,9 +93,11 @@ export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
 
 	try {
 		const content = await fs.readFile(configPath, 'utf8');
-		entries.push({ path: configPath, config: rootConfigSchema.parse(JSON.parse(content)) });
-	} catch {
-		// Doesn't exist or invalid
+		entries.push({ path: configPath, config: parseConfigFile(configPath, content) });
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
 	}
 
 	try {
@@ -89,16 +106,14 @@ export async function readAllConfigFiles(): Promise<ConfigFileEntry[]> {
 
 		for (const file of jsonFiles) {
 			const filePath = path.join(configJsonDirectoryPath, file);
-			try {
-				// eslint-disable-next-line no-await-in-loop
-				const content = await fs.readFile(filePath, 'utf8');
-				entries.push({ path: filePath, config: rootConfigSchema.parse(JSON.parse(content)) });
-			} catch {
-				// Skip invalid files
-			}
+			// eslint-disable-next-line no-await-in-loop
+			const content = await fs.readFile(filePath, 'utf8');
+			entries.push({ path: filePath, config: parseConfigFile(filePath, content) });
 		}
-	} catch {
-		// Directory doesn't exist
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
 	}
 
 	return entries;
