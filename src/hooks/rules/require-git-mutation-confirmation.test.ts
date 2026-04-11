@@ -112,10 +112,46 @@ test('blocks git rebase', async t => {
 	assertBlocked(t, result, 'git mutation');
 });
 
-test('blocks git tag', async t => {
+test('blocks git tag (create)', async t => {
 	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
 	const result = await runHook(
 		createBashToolInput('git tag v1.0.0'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
+});
+
+test('blocks git tag -d (delete)', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag -d v1.0.0'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
+});
+
+test('blocks git tag --delete', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag --delete v1.0.0'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
+});
+
+test('blocks git tag -a (annotated create)', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag -a v1.0.0 -m "release"'),
+		env(config),
+	);
+	assertBlocked(t, result, 'git mutation');
+});
+
+test('blocks git tag -s (signed create)', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag -s v1.0.0'),
 		env(config),
 	);
 	assertBlocked(t, result, 'git mutation');
@@ -274,6 +310,87 @@ test('blocks git reset --hard even with -- separator', async t => {
 		env(config),
 	);
 	assertBlocked(t, result, 'git mutation');
+});
+
+test('allows bare git tag (lists tags)', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git tag -l', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag -l'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git tag --list', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag --list'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git tag -l with pattern', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag -l "v1.*"'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git tag --list with options', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag --list --sort=-creatordate'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git tag -l --contains', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag -l --contains HEAD'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git tag -v (verify)', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag -v v1.0.0'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git tag --verify', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag --verify v1.0.0'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows git tag -n -l (list with messages)', async t => {
+	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
+	const result = await runHook(
+		createBashToolInput('git tag -n -l'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
 });
 
 test('allows git pull', async t => {

@@ -9,7 +9,6 @@ const gitMutationSubcommands = new Set([
 	'push',
 	'merge',
 	'rebase',
-	'tag',
 ]);
 
 const gitMutationMultiWordSubcommands = [
@@ -17,6 +16,23 @@ const gitMutationMultiWordSubcommands = [
 	'branch -d',
 	'branch -D',
 ];
+
+/**
+ * `git tag -l`/`--list` lists tags and `git tag -v`/`--verify` verifies
+ * signatures — both are read-only.  Bare `git tag` (no arguments) also
+ * lists tags.  Any other form (create / delete / sign) is a mutation.
+ */
+function isSafeGitTag(args: string): boolean {
+	const parts = args.split(/\s+/).filter(Boolean);
+
+	if (parts.length === 0) {
+		// Bare `git tag` — lists all tags
+		return true;
+	}
+
+	const readOnlyFlags = new Set([ '-l', '--list', '-v', '--verify' ]);
+	return parts.some(p => readOnlyFlags.has(p));
+}
 
 /**
  * `git reset -- <paths>` only unstages files — it never moves HEAD or
@@ -66,6 +82,15 @@ function isGitMutation(command: string): string | undefined {
 		}
 
 		return 'reset';
+	}
+
+	if (subcommand === 'tag') {
+		const tagArgs = rest.slice('tag'.length).trimStart();
+		if (isSafeGitTag(tagArgs)) {
+			return undefined;
+		}
+
+		return 'tag';
 	}
 
 	if (subcommand && gitMutationSubcommands.has(subcommand)) {
