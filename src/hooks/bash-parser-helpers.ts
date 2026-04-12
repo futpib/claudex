@@ -1128,7 +1128,22 @@ const genericWriteFlags = new Set([
 	'--method',
 ]);
 
+// Short flags like -d, -F, -T are ambiguous for unknown commands
+// (e.g. tmux -d means "detached", not "data").
+// Only flag them when a URL-like argument is present, suggesting an HTTP client.
+const ambiguousShortWriteFlags = new Set([
+	'-d',
+	'-F',
+	'-T',
+]);
+
+function hasUrlLikeArg(args: string[]): boolean {
+	return args.some(arg => /^https?:\/\//.test(arg));
+}
+
 function checkGenericWrite(name: string, args: string[]): string | undefined {
+	const urlPresent = hasUrlLikeArg(args);
+
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 
@@ -1155,8 +1170,13 @@ function checkGenericWrite(name: string, args: string[]): string | undefined {
 			}
 		}
 
-		// Any other write-implying flag
-		if (genericWriteFlags.has(arg)) {
+		// Ambiguous short flags only match when a URL is present
+		if (ambiguousShortWriteFlags.has(arg) && urlPresent) {
+			return `${name} with write flag (${arg})`;
+		}
+
+		// Unambiguous write-implying flags
+		if (genericWriteFlags.has(arg) && !ambiguousShortWriteFlags.has(arg)) {
 			return `${name} with write flag (${arg})`;
 		}
 

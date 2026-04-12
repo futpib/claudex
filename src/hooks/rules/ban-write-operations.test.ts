@@ -745,6 +745,24 @@ test('rejects unknown command with mutation in args', async t => {
 	assertViolation(t, result);
 });
 
+test('rejects unknown command with -d flag and URL', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('xh -d \'{"key":"value"}\' https://api.example.com/endpoint'),
+		env(config),
+	);
+	assertViolation(t, result);
+});
+
+test('allows unknown command with -d flag but no URL', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('tmux new-session -d -s test "sleep 3600"'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
 test('allows unknown command without write flags', async t => {
 	await using config = await createHooksConfig({ banWriteOperations: true });
 	const result = await runHook(
