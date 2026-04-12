@@ -1498,6 +1498,216 @@ test('add stays on project when project already has own value for field', async 
 	t.is(typed.groupDefinitions.mygroup.packages, undefined);
 });
 
+test('set redirects to group when group has value and project does not', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-set-group-redirect-');
+
+	// Set up a group with settingSources and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+	await runConfigWithDir(handle.configDir, [ 'set', '--group', 'mygroup', 'settingSources', 'user' ]);
+
+	// Run set from the project cwd without explicit scope
+	const result = await runConfigWithDir(handle.configDir, [ 'set', 'settingSources', 'none' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { settingSources?: string }>;
+		projects: Record<string, { group: string; settingSources?: string }>;
+	};
+
+	// Value should be on the group, not the project
+	t.is(typed.groupDefinitions.mygroup.settingSources, 'none');
+	t.is(typed.projects[project.dir]?.settingSources, undefined);
+});
+
+test('set stays on project when neither project nor group has value for field', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-set-group-neither-');
+
+	// Set up a group without settingSources and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+
+	// Run set from the project cwd without explicit scope
+	const result = await runConfigWithDir(handle.configDir, [ 'set', 'settingSources', 'none' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { settingSources?: string }>;
+		projects: Record<string, { group: string; settingSources?: string }>;
+	};
+
+	// Value should be on the project since group has no settingSources either
+	t.is(typed.projects[project.dir]?.settingSources, 'none');
+	t.is(typed.groupDefinitions.mygroup.settingSources, undefined);
+});
+
+test('set stays on project when project already has own value for field', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-set-group-own-');
+
+	// Set up a group and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+
+	// Give the project its own settingSources
+	await runConfigWithDir(handle.configDir, [ 'set', '--project', project.dir, 'settingSources', 'user' ]);
+
+	// Run set from the project cwd without explicit scope
+	const result = await runConfigWithDir(handle.configDir, [ 'set', 'settingSources', 'none' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { settingSources?: string }>;
+		projects: Record<string, { group: string; settingSources?: string }>;
+	};
+
+	// Value should stay on the project since it already had its own
+	t.is(typed.projects[project.dir]?.settingSources, 'none');
+	t.is(typed.groupDefinitions.mygroup.settingSources, undefined);
+});
+
+test('remove redirects to group when group has value and project does not', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-remove-group-redirect-');
+
+	// Set up a group with packages and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+	await runConfigWithDir(handle.configDir, [ 'add', '--group', 'mygroup', 'packages', 'gcc', 'mold' ]);
+
+	// Run remove from the project cwd without explicit scope
+	const result = await runConfigWithDir(handle.configDir, [ 'remove', 'packages', 'gcc' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { packages?: string[] }>;
+		projects: Record<string, { group: string; packages?: string[] }>;
+	};
+
+	// gcc should be removed from the group
+	t.deepEqual(typed.groupDefinitions.mygroup.packages, [ 'mold' ]);
+	t.is(typed.projects[project.dir]?.packages, undefined);
+});
+
+test('remove stays on project when neither project nor group has value for field', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-remove-group-neither-');
+
+	// Set up a group without packages and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+
+	// Run remove from the project cwd — no packages exist anywhere, should be a no-op
+	const result = await runConfigWithDir(handle.configDir, [ 'remove', 'packages', 'gcc' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { packages?: string[] }>;
+		projects: Record<string, { group: string; packages?: string[] }>;
+	};
+
+	// Neither should have packages
+	t.is(typed.groupDefinitions.mygroup.packages, undefined);
+	t.is(typed.projects[project.dir]?.packages, undefined);
+});
+
+test('remove stays on project when project already has own value for field', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-remove-group-own-');
+
+	// Set up a group and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+
+	// Give the project its own packages
+	await runConfigWithDir(handle.configDir, [ 'add', '--project', project.dir, 'packages', 'gcc', 'mold' ]);
+
+	// Run remove from the project cwd without explicit scope
+	const result = await runConfigWithDir(handle.configDir, [ 'remove', 'packages', 'gcc' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { packages?: string[] }>;
+		projects: Record<string, { group: string; packages?: string[] }>;
+	};
+
+	// Should remove from the project since it has its own value
+	t.deepEqual(typed.projects[project.dir]?.packages, [ 'mold' ]);
+	t.is(typed.groupDefinitions.mygroup.packages, undefined);
+});
+
+test('unset stays on project when neither project nor group has value for field', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-unset-group-neither-');
+
+	// Set up a group without settingSources and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+
+	// Run unset from the project cwd — no value exists anywhere, should be a no-op
+	const result = await runConfigWithDir(handle.configDir, [ 'unset', 'settingSources' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { settingSources?: string }>;
+		projects: Record<string, { group: string; settingSources?: string }>;
+	};
+
+	// Neither should have settingSources
+	t.is(typed.groupDefinitions.mygroup.settingSources, undefined);
+	t.is(typed.projects[project.dir]?.settingSources, undefined);
+});
+
+test('unset stays on project when project already has own value for field', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-unset-group-own-');
+
+	// Set up a group and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+
+	// Give the project its own settingSources
+	await runConfigWithDir(handle.configDir, [ 'set', '--project', project.dir, 'settingSources', 'user' ]);
+
+	// Run unset from the project cwd without explicit scope
+	const result = await runConfigWithDir(handle.configDir, [ 'unset', 'settingSources' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { settingSources?: string }>;
+		projects: Record<string, { group: string; settingSources?: string }>;
+	};
+
+	// Should remove from the project since it has its own value
+	t.is(typed.projects[project.dir]?.settingSources, undefined);
+	t.is(typed.groupDefinitions.mygroup.settingSources, undefined);
+});
+
+test('unset redirects to group when group has value and project does not', async t => {
+	await using handle = await createTemporaryConfigDir();
+	await using project = await createTemporaryDir('claudex-unset-group-redirect-');
+
+	// Set up a group with settingSources and assign the project to it
+	await runConfigWithDir(handle.configDir, [ 'group', 'mygroup', project.dir ]);
+	await runConfigWithDir(handle.configDir, [ 'set', '--group', 'mygroup', 'settingSources', 'user' ]);
+
+	// Run unset from the project cwd without explicit scope
+	const result = await runConfigWithDir(handle.configDir, [ 'unset', 'settingSources' ], project.dir);
+	t.is(result.exitCode, 0);
+
+	const config = await readJsonFile(path.join(handle.configDir, 'claudex', 'config.json'));
+	const typed = config as {
+		groupDefinitions: Record<string, { settingSources?: string }>;
+		projects: Record<string, { group: string; settingSources?: string }>;
+	};
+
+	// settingSources should be removed from the group
+	t.is(typed.groupDefinitions.mygroup.settingSources, undefined);
+	t.is(typed.projects[project.dir]?.settingSources, undefined);
+});
+
 // --- Config profile command tests ---
 
 test('config profile assigns profile to multiple projects', async t => {

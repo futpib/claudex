@@ -517,7 +517,7 @@ async function runInstall(packages: string[], options: { save: boolean; containe
 	// Persist to config unless --no-save
 	if (options.save) {
 		try {
-			await configMainFromArgv([ 'add', '--project', cwd, 'packages', ...packages ]);
+			await configMainFromArgv([ 'add', 'packages', ...packages ]);
 			console.error(`Saved packages to project config: ${packages.join(' ')}`);
 		} catch (error) {
 			console.error('Warning: failed to save packages to config:', error instanceof Error ? error.message : String(error));
@@ -556,7 +556,7 @@ async function runUninstall(packages: string[], options: { save: boolean; contai
 		for (const pkg of packages) {
 			try {
 				// eslint-disable-next-line no-await-in-loop
-				await configMainFromArgv([ 'remove', '--project', cwd, 'packages', pkg ]);
+				await configMainFromArgv([ 'remove', 'packages', pkg ]);
 			} catch {
 				// Package may not be in config — ignore
 			}

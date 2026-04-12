@@ -336,6 +336,15 @@ function resolveBooleanToDetail(field: string, currentValue: unknown): unknown {
 	return currentValue;
 }
 
+async function resolveWriteDestination(scope: Scope, file: string | undefined, keyInfo: KeyInfo): Promise<{ scope: Scope; filePath: string }> {
+	if (!file) {
+		scope = await resolveGroupScope(scope, keyInfo.field, keyInfo.subKey);
+	}
+
+	const filePath = await resolveWriteFile(scope, file);
+	return { scope, filePath };
+}
+
 async function resolveWriteFile(scope: Scope, file: string | undefined): Promise<string> {
 	const configDir = getConfigDir();
 
@@ -543,7 +552,8 @@ async function handleGet(scope: Scope, key: string): Promise<void> {
 async function handleSet(scope: Scope, key: string, value: string, file: string | undefined): Promise<void> {
 	const keyInfo = parseKey(key);
 	validateKey(keyInfo, scope);
-	const filePath = await resolveWriteFile(scope, file);
+	const { scope: resolvedScope, filePath } = await resolveWriteDestination(scope, file, keyInfo);
+	scope = resolvedScope;
 
 	let config: RootConfig;
 	try {
@@ -653,12 +663,8 @@ async function resolveGroupScope(scope: Scope, field: string, subKey: string | u
 async function handleAdd(scope: Scope, key: string, values: string[], file: string | undefined): Promise<void> {
 	const keyInfo = parseKey(key);
 	validateKey(keyInfo, scope);
-
-	if (!file) {
-		scope = await resolveGroupScope(scope, keyInfo.field, keyInfo.subKey);
-	}
-
-	const filePath = await resolveWriteFile(scope, file);
+	const { scope: resolvedScope, filePath } = await resolveWriteDestination(scope, file, keyInfo);
+	scope = resolvedScope;
 	let config: RootConfig;
 	try {
 		config = await readSingleConfigFile(filePath);
@@ -719,7 +725,8 @@ async function handleAdd(scope: Scope, key: string, values: string[], file: stri
 
 async function handleUnset(scope: Scope, key: string, value: string | undefined, file: string | undefined): Promise<void> {
 	const keyInfo = parseKey(key);
-	const filePath = await resolveWriteFile(scope, file);
+	const { scope: resolvedScope, filePath } = await resolveWriteDestination(scope, file, keyInfo);
+	scope = resolvedScope;
 
 	let config: RootConfig;
 	try {
@@ -809,7 +816,8 @@ async function handleRemove(scope: Scope, key: string, value: string | undefined
 		throw new Error('remove requires a value argument (e.g., remove packages vim or remove packages.vim)');
 	}
 
-	const filePath = await resolveWriteFile(scope, file);
+	const { scope: resolvedScope, filePath } = await resolveWriteDestination(scope, file, keyInfo);
+	scope = resolvedScope;
 
 	let config: RootConfig;
 	try {
