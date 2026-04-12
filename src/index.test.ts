@@ -44,6 +44,7 @@ test('--help lists config and install subcommands', async t => {
 	const { stdout } = await runCli([ '--help' ]);
 	t.regex(stdout, /config\b/);
 	t.regex(stdout, /install\b/);
+	t.regex(stdout, /uninstall\b/);
 	t.regex(stdout, /exec\b/);
 });
 
@@ -60,6 +61,14 @@ test('install --help exits 0 and lists options', async t => {
 	t.true(stdout.includes('--no-save'), 'install help should mention --no-save');
 	t.true(stdout.includes('--container'), 'install help should mention --container');
 	t.true(stdout.includes('packages'), 'install help should mention packages argument');
+});
+
+test('uninstall --help exits 0 and lists options', async t => {
+	const { exitCode, stdout } = await runCli([ 'uninstall', '--help' ]);
+	t.is(exitCode, 0);
+	t.true(stdout.includes('--no-save'), 'uninstall help should mention --no-save');
+	t.true(stdout.includes('--container'), 'uninstall help should mention --container');
+	t.true(stdout.includes('packages'), 'uninstall help should mention packages argument');
 });
 
 test('config --help exits 0 and lists all actions as subcommands', async t => {

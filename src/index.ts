@@ -281,6 +281,16 @@ export async function main() {
 		});
 
 	program
+		.command('uninstall')
+		.description('Uninstall packages from a running claudex container')
+		.argument('<packages...>', 'Package names to uninstall')
+		.option('--no-save', 'Skip removing packages from config')
+		.option('--container <name>', 'Target a specific container')
+		.action(async (packages: string[], options: { save: boolean; container?: string }) => {
+			await runUninstall(packages, options);
+		});
+
+	program
 		.command('ps')
 		.description('List running claudex containers for the current project')
 		.option('--all', 'Show containers for all projects, not just the current directory')
@@ -416,12 +426,13 @@ export function filterContainerLines(lines: string[], prefix: string): string[] 
 	});
 }
 
-export type FindContainerCaller = 'attach' | 'exec' | 'exec --root' | 'install';
+export type FindContainerCaller = 'attach' | 'exec' | 'exec --root' | 'install' | 'uninstall';
 
 function disambiguationHint(caller: FindContainerCaller): string {
 	switch (caller) {
-		case 'install': {
-			return 'Specify one with: claudex install --container <name> <packages...>';
+		case 'install':
+		case 'uninstall': {
+			return `Specify one with: claudex ${caller} --container <name> <packages...>`;
 		}
 
 		case 'attach':
@@ -511,6 +522,47 @@ async function runInstall(packages: string[], options: { save: boolean; containe
 		} catch (error) {
 			console.error('Warning: failed to save packages to config:', error instanceof Error ? error.message : String(error));
 		}
+	}
+}
+
+async function runUninstall(packages: string[], options: { save: boolean; container?: string }) {
+	const cwd = process.cwd();
+
+	let containerName: string;
+	try {
+		containerName = await findRunningContainer(cwd, options.container, execa, 'uninstall');
+	} catch (error) {
+		console.error(error instanceof Error ? error.message : String(error));
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	// Remove packages as privileged root
+	const uninstallArgs = [ 'exec', '--privileged', '--user', 'root', containerName, 'pacman', '-Rns', '--noconfirm', ...packages ];
+	console.error(`+ docker ${uninstallArgs.join(' ')}`);
+	try {
+		await execa('docker', uninstallArgs, {
+			stdout: process.stdout,
+			stderr: process.stderr,
+		});
+	} catch {
+		console.error('Package removal failed.');
+		// eslint-disable-next-line unicorn/no-process-exit
+		process.exit(1);
+	}
+
+	// Remove from config unless --no-save
+	if (options.save) {
+		for (const pkg of packages) {
+			try {
+				// eslint-disable-next-line no-await-in-loop
+				await configMainFromArgv([ 'remove', '--project', cwd, 'packages', pkg ]);
+			} catch {
+				// Package may not be in config — ignore
+			}
+		}
+
+		console.error(`Removed packages from project config: ${packages.join(' ')}`);
 	}
 }
 
