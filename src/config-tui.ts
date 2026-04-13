@@ -241,7 +241,9 @@ async function computePlacement(
 			file: projectEntry.path,
 			label: `Project (${collapseHomedir(projectPath)}) in ${collapseHomedir(projectEntry.path)}`,
 		});
-	} else {
+	}
+
+	if (!projectEntry || projectEntry.path !== defaultFile) {
 		all.push({
 			scope: { type: 'project', path: projectPath },
 			file: defaultFile,
@@ -256,7 +258,9 @@ async function computePlacement(
 				file: groupEntry.path,
 				label: `Group "${groupName}" in ${collapseHomedir(groupEntry.path)}`,
 			});
-		} else {
+		}
+
+		if (!groupEntry || groupEntry.path !== defaultFile) {
 			all.push({
 				scope: { type: 'group', name: groupName },
 				file: defaultFile,
@@ -271,13 +275,26 @@ async function computePlacement(
 			file: globalEntry.path,
 			label: `Global in ${collapseHomedir(globalEntry.path)}`,
 		});
-	} else {
+	}
+
+	if (!globalEntry || globalEntry.path !== defaultFile) {
 		all.push({
 			scope: { type: 'global' },
 			file: defaultFile,
 			label: `Global (new) in ${collapseHomedir(defaultFile)}`,
 		});
 	}
+
+	// Sort so (new) options come after existing ones
+	all.sort((a, b) => {
+		const aNew = a.label.includes('(new)');
+		const bNew = b.label.includes('(new)');
+		if (aNew !== bNew) {
+			return aNew ? 1 : -1;
+		}
+
+		return 0;
+	});
 
 	// Smart suggestion priority:
 	// 1. If key exists at project scope → suggest that
