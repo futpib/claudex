@@ -402,7 +402,7 @@ export async function runDockerContainer(parameters: {
 	if (useDockerShell) {
 		realEntrypointCmd = 'exec bash';
 	} else {
-		const entrypointArgs = [ cliInDockerPath, ...claudeSpecificArgs, ...claudeArgs ];
+		const entrypointArgs = [ cliInDockerPath, 'in-docker', ...claudeSpecificArgs, ...claudeArgs ];
 		const escapedArgs = entrypointArgs.map(a => `'${a.replaceAll('\'', String.raw`'\''`)}'`).join(' ');
 		realEntrypointCmd = `exec node ${escapedArgs}`;
 	}

@@ -107,7 +107,7 @@ export const ClaudexPlugin = async () => ({
 		});
 
 		try {
-			await execa('claudex-hook-pre-tool-use', { input: hookInput, timeout: 10_000 });
+			await execa('claudex', [ 'hook', 'pre-tool-use' ], { input: hookInput, timeout: 10_000 });
 		} catch (error) {
 			const { exitCode, stderr } = error as { exitCode?: number; stderr?: string };
 			if (exitCode === 2) {
@@ -128,7 +128,7 @@ export const ClaudexPlugin = async () => ({
 		});
 
 		try {
-			await execa('claudex-hook-stop', { input: hookInput, timeout: 10_000 });
+			await execa('claudex', [ 'hook', 'stop' ], { input: hookInput, timeout: 10_000 });
 		} catch (error) {
 			const { stderr } = error as { stderr?: string };
 			console.error('[claudex] stop hook error:', stderr ?? (error as Error).message ?? error);
@@ -152,7 +152,7 @@ export const ClaudexPlugin = async () => ({
 		});
 
 		try {
-			await execa('claudex-hook-user-prompt-submit', { input: hookInput, timeout: 10_000 });
+			await execa('claudex', [ 'hook', 'user-prompt-submit' ], { input: hookInput, timeout: 10_000 });
 		} catch (error) {
 			const { stderr } = error as { stderr?: string };
 			console.error('[claudex] user-prompt-submit hook error:', stderr ?? (error as Error).message ?? error);

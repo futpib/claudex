@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-/* eslint-disable @typescript-eslint/naming-convention */
+/* eslint-disable @typescript-eslint/naming-convention, unicorn/no-process-exit */
 
 import process from 'node:process';
 import { z } from 'zod';
@@ -13,7 +12,7 @@ const stopInputSchema = z.object({
 	hook_event_name: z.literal('Stop'),
 });
 
-async function main() {
+export async function main() {
 	const input = await readStdin();
 	parseJsonWithSchema(input, stopInputSchema);
 
@@ -27,5 +26,3 @@ async function main() {
 
 	process.exit(0);
 }
-
-await main();

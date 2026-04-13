@@ -6,7 +6,7 @@
   "type": "module",
   "scripts": {
     "dev": "tsc --watch",
-    "build": "tsc",
+    "build": "tsc && chmod +x build/cli.js",
     "test": "xo && c8 ava",
     "prepack": "yarn build"
   },
@@ -21,13 +21,7 @@
     "verbose": true
   },
   "bin": {
-    "claudex": "./build/cli.js",
-    "claudex-hook-notification": "./build/hooks/notification.js",
-    "claudex-hook-pre-tool-use": "./build/hooks/pre-tool-use.js",
-    "claudex-hook-stop": "./build/hooks/stop.js",
-    "claudex-hook-user-prompt-submit": "./build/hooks/user-prompt-submit.js",
-    "claudex-in-docker": "./build/cli-in-docker.js",
-    "claudex-mcp": "./build/mcp/cli.js"
+    "claudex": "./build/cli.js"
   },
   "devDependencies": {
     "@ava/typescript": "^6.0.0",

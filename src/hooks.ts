@@ -30,39 +30,67 @@ export const claudeSettingsSchema = z.object({
 
 type ClaudeSettings = z.infer<typeof claudeSettingsSchema>;
 
-async function findHookPath(command: string): Promise<string | undefined> {
-	try {
-		const result = await execa('which', [ command ]);
-		return result.stdout.trim();
-	} catch {
-		return undefined;
-	}
+async function findClaudexPath(): Promise<string> {
+	const result = await execa('which', [ 'claudex' ]);
+	return result.stdout.trim();
+}
+
+function hookCommand(claudexPath: string, hookName: string): string {
+	return `${claudexPath} hook ${hookName}`;
 }
 
 async function setupHook(
 	settings: ClaudeSettings,
 	hookType: 'PreToolUse' | 'UserPromptSubmit' | 'Notification' | 'Stop',
-	hookPath: string,
+	command: string,
 ): Promise<boolean> {
 	if (!settings.hooks![hookType]) {
 		settings.hooks![hookType] = [];
 	}
 
 	const hasHook = settings.hooks![hookType].some(entry =>
-		entry.hooks.some(hook => hook.command === hookPath));
+		entry.hooks.some(hook => hook.command === command));
 
 	if (!hasHook) {
 		settings.hooks![hookType].push({
 			matcher: '.*',
 			hooks: [ {
 				type: 'command',
-				command: hookPath,
+				command,
 			} ],
 		});
 		return true;
 	}
 
 	return false;
+}
+
+function removeOldHooks(settings: ClaudeSettings): boolean {
+	if (!settings.hooks) {
+		return false;
+	}
+
+	let removed = false;
+	const hookTypes = [ 'PreToolUse', 'UserPromptSubmit', 'Notification', 'Stop' ] as const;
+	for (const hookType of hookTypes) {
+		const groups = settings.hooks[hookType];
+		if (!groups) {
+			continue;
+		}
+
+		for (const group of groups) {
+			const before = group.hooks.length;
+			group.hooks = group.hooks.filter(hook =>
+				!hook.command.includes('claudex-hook-'));
+			if (group.hooks.length < before) {
+				removed = true;
+			}
+		}
+
+		settings.hooks[hookType] = groups.filter(g => g.hooks.length > 0);
+	}
+
+	return removed;
 }
 
 export async function ensureHookSetup(claudeConfigDir?: string) {
@@ -85,40 +113,16 @@ export async function ensureHookSetup(claudeConfigDir?: string) {
 
 	settings = claudeSettingsSchema.parse(parseJson(content));
 
-	const [ preToolUsePath, userPromptSubmitPath ] = await Promise.all([
-		findHookPath('claudex-hook-pre-tool-use'),
-		findHookPath('claudex-hook-user-prompt-submit'),
-	]);
-
-	invariant(preToolUsePath, 'claudex-hook-pre-tool-use executable must be found');
-	invariant(userPromptSubmitPath, 'claudex-hook-user-prompt-submit executable must be found');
+	const claudexPath = await findClaudexPath();
+	invariant(claudexPath, 'claudex executable must be found');
 
 	settings.hooks ??= {};
-	let needsUpdate = false;
+	let needsUpdate = removeOldHooks(settings);
 
-	if (preToolUsePath) {
-		needsUpdate = await setupHook(settings, 'PreToolUse', preToolUsePath) || needsUpdate;
-	}
-
-	if (userPromptSubmitPath) {
-		needsUpdate = await setupHook(settings, 'UserPromptSubmit', userPromptSubmitPath) || needsUpdate;
-	}
-
-	const [ notificationPath, stopPath ] = await Promise.all([
-		findHookPath('claudex-hook-notification'),
-		findHookPath('claudex-hook-stop'),
-	]);
-
-	invariant(notificationPath, 'claudex-hook-notification executable must be found');
-	invariant(stopPath, 'claudex-hook-stop executable must be found');
-
-	if (notificationPath) {
-		needsUpdate = await setupHook(settings, 'Notification', notificationPath) || needsUpdate;
-	}
-
-	if (stopPath) {
-		needsUpdate = await setupHook(settings, 'Stop', stopPath) || needsUpdate;
-	}
+	needsUpdate = await setupHook(settings, 'PreToolUse', hookCommand(claudexPath, 'pre-tool-use')) || needsUpdate;
+	needsUpdate = await setupHook(settings, 'UserPromptSubmit', hookCommand(claudexPath, 'user-prompt-submit')) || needsUpdate;
+	needsUpdate = await setupHook(settings, 'Notification', hookCommand(claudexPath, 'notification')) || needsUpdate;
+	needsUpdate = await setupHook(settings, 'Stop', hookCommand(claudexPath, 'stop')) || needsUpdate;
 
 	if (needsUpdate) {
 		await fs.writeFile(settingsPath, JSON.stringify(settings, null, 2));

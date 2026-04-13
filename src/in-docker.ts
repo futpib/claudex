@@ -35,16 +35,7 @@ async function setupHookSymlinks() {
 		const currentFileUrl = import.meta.url;
 		const currentFilePath = fileURLToPath(currentFileUrl);
 		const buildDir = path.dirname(currentFilePath);
-		const hooksDir = path.join(buildDir, 'hooks');
-
-		// Mapping of hook command names to their actual files
-		const hookNameMap: Record<string, string> = {
-			'claudex-hook-pre-tool-use': 'pre-tool-use.js',
-			'claudex-hook-user-prompt-submit': 'user-prompt-submit.js',
-			'claudex-hook-notification': 'notification.js',
-			'claudex-hook-stop': 'stop.js',
-			'claudex-submit-co-authorship-proof': 'submit-co-authorship-proof.js',
-		};
+		const cliPath = path.join(buildDir, 'cli.js');
 
 		// Collect all hook commands from settings
 		const hookCommands = new Set<string>();
@@ -58,39 +49,35 @@ async function setupHookSymlinks() {
 			}
 		}
 
-		// Create symlinks for each hook command
+		// Create symlinks for claudex binary references in hook commands
 		for (const hookCommand of hookCommands) {
 			try {
-				const hookBasename = path.basename(hookCommand);
-				const targetFile = hookNameMap[hookBasename];
-
-				if (!targetFile) {
-					console.warn(`Unknown hook: ${hookBasename}`);
-					continue;
-				}
-
-				const targetPath = path.join(hooksDir, targetFile);
+				// Hook commands are now "claudex hook <name>" or "/path/to/claudex hook <name>"
+				// We need to ensure the claudex binary path is available
+				const parts = hookCommand.split(' ');
+				const claudexBin = parts[0];
 
 				// Create parent directories if they don't exist
-				const hookDir = path.dirname(hookCommand);
+				const hookDir = path.dirname(claudexBin);
 				// eslint-disable-next-line no-await-in-loop
 				await fs.mkdir(hookDir, { recursive: true });
 
 				// Remove existing symlink/file if it exists
 				try {
 					// eslint-disable-next-line no-await-in-loop
-					await fs.unlink(hookCommand);
+					await fs.unlink(claudexBin);
 				} catch {
 					// Ignore if file doesn't exist
 				}
 
-				// Create symlink
+				// Create a wrapper script that invokes node with the CLI entry point
+				const wrapperContent = `#!/bin/sh\nexec node ${cliPath} "$@"\n`;
 				// eslint-disable-next-line no-await-in-loop
-				await fs.symlink(targetPath, hookCommand);
+				await fs.writeFile(claudexBin, wrapperContent, { mode: 0o755 });
 			} catch (error) {
 				// Skip this hook if we can't create it (e.g., permission denied)
 				if (error instanceof Error) {
-					console.warn(`Warning: Could not create hook symlink at ${hookCommand}: ${error.message}`);
+					console.warn(`Warning: Could not create hook wrapper at ${hookCommand}: ${error.message}`);
 				}
 			}
 		}

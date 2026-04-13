@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-/* eslint-disable @typescript-eslint/naming-convention */
+/* eslint-disable @typescript-eslint/naming-convention, unicorn/no-process-exit */
 
 import process from 'node:process';
 import { z } from 'zod';
@@ -16,7 +15,7 @@ const userPromptSubmitInputSchema = z.object({
 	prompt: z.string(),
 });
 
-async function main() {
+export async function main() {
 	const input = await readStdin();
 	const hookInput = parseJsonWithSchema(input, userPromptSubmitInputSchema);
 	const sessionId = hookInput.session_id || '';
@@ -40,5 +39,3 @@ async function main() {
 
 	process.exit(0);
 }
-
-await main();

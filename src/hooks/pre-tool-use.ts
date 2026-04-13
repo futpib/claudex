@@ -1,5 +1,4 @@
-#!/usr/bin/env node
-
+/* eslint-disable unicorn/no-process-exit */
 import process from 'node:process';
 import { getMergedConfig, resolveHooks } from '../config/index.js';
 import {
@@ -32,7 +31,7 @@ function handleAskResult(reason: string, permissionMode: string): never {
 	process.exit(0);
 }
 
-async function main() {
+export async function main() {
 	const input = await readStdin();
 
 	const preToolUseHookInput = parseJsonWithSchema(input, preToolUseHookInputSchema);
@@ -120,5 +119,3 @@ async function main() {
 
 	process.exit(0);
 }
-
-await main();

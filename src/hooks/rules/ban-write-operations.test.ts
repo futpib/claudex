@@ -7,7 +7,7 @@ import { tmpdir } from 'node:os';
 import { execa } from 'execa';
 import test, { type ExecutionContext } from 'ava';
 
-const hookPath = path.join(import.meta.dirname, '../../../build/hooks/pre-tool-use.js');
+const cliPath = path.join(import.meta.dirname, '../../../build/cli.js');
 
 type HookResult = {
 	exitCode: number;
@@ -33,7 +33,7 @@ async function createHooksConfig(hooks: Record<string, boolean>) {
 }
 
 async function runHook(input: Record<string, unknown>, env?: Record<string, string>): Promise<HookResult> {
-	const result = await execa('node', [ hookPath ], {
+	const result = await execa('node', [ cliPath, 'hook', 'pre-tool-use' ], {
 		input: JSON.stringify(input),
 		reject: false,
 		env: { ...process.env, ...env },

@@ -931,7 +931,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			console.error(`Profiles: ${profiles.join(', ')}`);
 		}
 
-		const cliInDockerPath = path.join(projectRoot, 'build', 'cli-in-docker.js');
+		const cliInDockerPath = path.join(projectRoot, 'build', 'cli.js');
 
 		const isClaude = isClaudeCodeLauncher(launcherDef);
 		const dockerClaudeArgs = [
