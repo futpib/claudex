@@ -51,6 +51,7 @@ export const baseConfigSchema = z.object({
 	dockerIpcPrivate: z.boolean().optional(), // Default true - use --ipc=private for IPC namespace isolation
 	dockerPidsLimit: z.boolean().optional(), // Default true - limit container PIDs to host pid_max / 16
 	account: z.string().optional(),
+	claudeArgs: z.array(z.string()).optional(), // Extra arguments passed to claude on startup
 });
 
 // Launcher definition schema - extends base config with launcher-specific fields

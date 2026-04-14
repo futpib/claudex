@@ -935,6 +935,7 @@ export function getKeyEntries(): KeyEntry[] {
 		notifications: 'boolean',
 		hooksDescriptions: 'boolean',
 		profiles: 'string[]',
+		claudeArgs: 'string[]',
 	};
 
 	for (const field of validTopLevelKeys) {

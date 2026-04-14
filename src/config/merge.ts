@@ -192,6 +192,12 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 
 	const account = overlay.account ?? base.account;
 
+	// ClaudeArgs: concatenate preserving order (like init/startup commands)
+	const claudeArgs = [
+		...(base.claudeArgs ?? []),
+		...(overlay.claudeArgs ?? []),
+	];
+
 	return {
 		profiles: profiles.length > 0 ? profiles : undefined,
 		packages: packages.length > 0 ? packages : undefined,
@@ -222,6 +228,7 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		dockerIpcPrivate,
 		dockerPidsLimit,
 		account,
+		claudeArgs: claudeArgs.length > 0 ? claudeArgs : undefined,
 	};
 }
 
@@ -407,6 +414,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		dockerIpcPrivate: config.dockerIpcPrivate,
 		dockerPidsLimit: config.dockerPidsLimit,
 		account: config.account,
+		claudeArgs: config.claudeArgs,
 		// Profiles references are consumed during resolution and not carried to final output
 	};
 }
