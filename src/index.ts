@@ -871,7 +871,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		console.error(`Account: ${account}`);
 	}
 
-	await ensureHookSetup(accountPaths.claudeConfigDir);
+	await ensureHookSetup(accountPaths.claudeConfigDir, earlyConfig.config.claudeSettings);
 
 	// Resolve launcher name early for opencode plugin setup
 	const effectiveLauncherName = cliLauncher ?? earlyConfig.config.launcher;

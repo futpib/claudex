@@ -26,7 +26,7 @@ export const claudeSettingsSchema = z.object({
 		Notification: z.array(hookGroupSchema).optional(),
 		Stop: z.array(hookGroupSchema).optional(),
 	}).optional(),
-});
+}).loose();
 
 type ClaudeSettings = z.infer<typeof claudeSettingsSchema>;
 
@@ -93,7 +93,35 @@ function removeOldHooks(settings: ClaudeSettings): boolean {
 	return removed;
 }
 
-export async function ensureHookSetup(claudeConfigDir?: string) {
+function applyClaudeSettingsOverlay(
+	settings: ClaudeSettings,
+	overlay: Record<string, unknown> | undefined,
+): boolean {
+	if (!overlay) {
+		return false;
+	}
+
+	const record = settings as Record<string, unknown>;
+	let changed = false;
+	for (const [ key, value ] of Object.entries(overlay)) {
+		// Skip `hooks` — claudex manages that key, overriding it would clobber the setup below
+		if (key === 'hooks') {
+			continue;
+		}
+
+		if (JSON.stringify(record[key]) !== JSON.stringify(value)) {
+			record[key] = value;
+			changed = true;
+		}
+	}
+
+	return changed;
+}
+
+export async function ensureHookSetup(
+	claudeConfigDir?: string,
+	claudeSettingsOverlay?: Record<string, unknown>,
+) {
 	const claudeDir = claudeConfigDir ?? path.join(os.homedir(), '.claude');
 	const settingsPath = path.join(claudeDir, 'settings.json');
 
@@ -118,6 +146,8 @@ export async function ensureHookSetup(claudeConfigDir?: string) {
 
 	settings.hooks ??= {};
 	let needsUpdate = removeOldHooks(settings);
+
+	needsUpdate = applyClaudeSettingsOverlay(settings, claudeSettingsOverlay) || needsUpdate;
 
 	needsUpdate = await setupHook(settings, 'PreToolUse', hookCommand(claudexPath, 'pre-tool-use')) || needsUpdate;
 	needsUpdate = await setupHook(settings, 'UserPromptSubmit', hookCommand(claudexPath, 'user-prompt-submit')) || needsUpdate;

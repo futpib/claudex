@@ -29,6 +29,16 @@ function sortEnv(env: Record<string, string>): Record<string, string> {
 	return sortedEnv;
 }
 
+function sortRecord<T>(record: Record<string, T>): Record<string, T> {
+	const sortedKeys = Object.keys(record).sort((a, b) => a.localeCompare(b));
+	const sorted: Record<string, T> = {};
+	for (const key of sortedKeys) {
+		sorted[key] = record[key];
+	}
+
+	return sorted;
+}
+
 function dedupeStrings(array: string[]): string[] {
 	return [ ...new Set(array) ];
 }
@@ -198,6 +208,18 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		...(overlay.claudeArgs ?? []),
 	];
 
+	// ClaudeEnv: shallow merge, overlay wins per-key (like env, minus PATH special-casing)
+	const claudeEnv = {
+		...base.claudeEnv,
+		...overlay.claudeEnv,
+	};
+
+	// ClaudeSettings: shallow merge, overlay wins per-key
+	const claudeSettings = {
+		...base.claudeSettings,
+		...overlay.claudeSettings,
+	};
+
 	return {
 		profiles: profiles.length > 0 ? profiles : undefined,
 		packages: packages.length > 0 ? packages : undefined,
@@ -229,6 +251,8 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		dockerPidsLimit,
 		account,
 		claudeArgs: claudeArgs.length > 0 ? claudeArgs : undefined,
+		claudeEnv: Object.keys(claudeEnv).length > 0 ? claudeEnv : undefined,
+		claudeSettings: Object.keys(claudeSettings).length > 0 ? claudeSettings : undefined,
 	};
 }
 
@@ -415,6 +439,8 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		dockerPidsLimit: config.dockerPidsLimit,
 		account: config.account,
 		claudeArgs: config.claudeArgs,
+		claudeEnv: config.claudeEnv ? sortEnv(config.claudeEnv) : undefined,
+		claudeSettings: config.claudeSettings ? sortRecord(config.claudeSettings) : undefined,
 		// Profiles references are consumed during resolution and not carried to final output
 	};
 }

@@ -52,6 +52,8 @@ export const baseConfigSchema = z.object({
 	dockerPidsLimit: z.boolean().optional(), // Default true - limit container PIDs to host pid_max / 16
 	account: z.string().optional(),
 	claudeArgs: z.array(z.string()).optional(), // Extra arguments passed to claude on startup
+	claudeEnv: z.record(z.string(), z.string()).optional(), // Env vars passed only when launcher is claude
+	claudeSettings: z.record(z.string(), z.unknown()).optional(), // Top-level entries merged into Claude's settings.json
 });
 
 // Launcher definition schema - extends base config with launcher-specific fields
@@ -115,7 +117,7 @@ export const fixedSubKeyFields: Record<string, Set<string>> = {
 	ssh: new Set([ 'keys', 'hosts' ]),
 };
 
-export const recordFields = new Set([ 'env', 'extraHosts' ]);
+export const recordFields = new Set([ 'env', 'extraHosts', 'claudeEnv', 'claudeSettings' ]);
 
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {

@@ -270,7 +270,16 @@ const numberCoercionFields = new Set(Object.entries(baseConfigSchema.shape)
 	.filter(([ , schema ]) => schema.safeParse([ 1 ]).success)
 	.map(([ key ]) => key));
 
-function coerceValue(field: string, value: string): string | number | boolean {
+function coerceValue(field: string, value: string): unknown {
+	// ClaudeSettings holds arbitrary JSON values (booleans, numbers, objects, arrays, strings)
+	if (field === 'claudeSettings') {
+		try {
+			return JSON.parse(value) as unknown;
+		} catch {
+			return value;
+		}
+	}
+
 	if (numberCoercionFields.has(field)) {
 		const number_ = Number(value);
 		if (!Number.isInteger(number_) || number_ <= 0) {
@@ -936,6 +945,8 @@ export function getKeyEntries(): KeyEntry[] {
 		hooksDescriptions: 'boolean',
 		profiles: 'string[]',
 		claudeArgs: 'string[]',
+		claudeEnv: 'record',
+		claudeSettings: 'record',
 	};
 
 	for (const field of validTopLevelKeys) {
@@ -943,9 +954,15 @@ export function getKeyEntries(): KeyEntry[] {
 
 		switch (field) {
 			case 'env':
-			case 'extraHosts': {
-				const placeholder = field === 'env' ? '<KEY>' : '<HOST>';
+			case 'extraHosts':
+			case 'claudeEnv': {
+				const placeholder = field === 'extraHosts' ? '<HOST>' : '<KEY>';
 				entries.push({ key: `${field}.${placeholder}`, type: 'string' });
+				break;
+			}
+
+			case 'claudeSettings': {
+				entries.push({ key: 'claudeSettings.<KEY>', type: 'any' });
 				break;
 			}
 

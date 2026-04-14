@@ -287,22 +287,35 @@ export async function runDockerContainer(parameters: {
 		}
 	}
 
+	const isClaude = isClaudeCodeLauncher(launcherDef);
+
+	function resolveEnvEntry(key: string, value: string): string | undefined {
+		const match = /^\${(.+)}$/.exec(value);
+		if (match) {
+			const hostVarName = match[1];
+			return process.env[hostVarName];
+		}
+
+		return key === 'PATH' ? expandPathEnv(value) : value;
+	}
+
 	// Resolve environment variables from config
 	const resolvedEnv: Record<string, string> = {};
 	if (config.env) {
 		for (const [ key, value ] of Object.entries(config.env)) {
-			// Check if value is a reference to host environment variable
-			const match = /^\${(.+)}$/.exec(value);
-			if (match) {
-				const hostVarName = match[1];
-				const hostValue = process.env[hostVarName];
-				if (hostValue !== undefined) {
-					resolvedEnv[key] = hostValue;
-				}
-				// Skip if host variable is not defined
-			} else {
-				// Use literal value, expand ~/ in PATH
-				resolvedEnv[key] = key === 'PATH' ? expandPathEnv(value) : value;
+			const resolved = resolveEnvEntry(key, value);
+			if (resolved !== undefined) {
+				resolvedEnv[key] = resolved;
+			}
+		}
+	}
+
+	// ClaudeEnv applies only when launcher is claude
+	if (isClaude && config.claudeEnv) {
+		for (const [ key, value ] of Object.entries(config.claudeEnv)) {
+			const resolved = resolveEnvEntry(key, value);
+			if (resolved !== undefined) {
+				resolvedEnv[key] = resolved;
 			}
 		}
 	}
@@ -383,8 +396,6 @@ export async function runDockerContainer(parameters: {
 	}
 
 	dockerArgs.push('-w', cwd);
-
-	const isClaude = isClaudeCodeLauncher(launcherDef);
 
 	// Claude-specific args: --setting-sources, --add-dir, permission flags
 	const claudeSpecificArgs: string[] = [];
