@@ -598,6 +598,96 @@ async function isContainerAttached(name: string): Promise<boolean> {
 	}
 }
 
+async function isContainerRunning(name: string): Promise<boolean> {
+	try {
+		const result = await execa('docker', [ 'inspect', '--format', '{{.State.Running}}', name ]);
+		return result.stdout.trim() === 'true';
+	} catch {
+		return false;
+	}
+}
+
+type AttachOutcome = 'detach' | 'die' | 'unknown';
+
+// Subscribes to `docker events` for die/detach events on the container. Runs
+// for the lifetime of the attach — call stop() once the attach child exits
+// to read whichever event fired (if any). Detach events are per-client, so
+// multiple clients each see their own detach event; die fires once for all.
+function watchAttachEvents(containerName: string): {
+	stop: () => Promise<AttachOutcome>;
+} {
+	let outcome: AttachOutcome = 'unknown';
+	const child = execa('docker', [
+		'events',
+		'--filter', `container=${containerName}`,
+		'--filter', 'event=die',
+		'--filter', 'event=detach',
+		'--format', '{{.Status}}',
+	]);
+
+	child.stdout?.setEncoding('utf8');
+	child.stdout?.on('data', (chunk: string) => {
+		for (const line of chunk.split('\n')) {
+			const event = line.trim();
+			if (event === 'die') {
+				outcome = 'die';
+			} else if (event === 'detach' && outcome === 'unknown') {
+				outcome = 'detach';
+			}
+		}
+	});
+	child.catch(() => {
+		// Killing the events subscription throws; ignore
+	});
+
+	return {
+		async stop() {
+			child.kill('SIGTERM');
+			try {
+				await child;
+			} catch {
+				// Expected on SIGTERM
+			}
+
+			return outcome;
+		},
+	};
+}
+
+// Cleanup rule for the PRIMARY attach (the `claudex` run that created the
+// container). This process owns the container's lifecycle.
+async function cleanupOrDetachPrimary(containerName: string, outcome: AttachOutcome): Promise<void> {
+	if (outcome === 'detach') {
+		console.error(`Detached from ${containerName}. Re-attach with: claudex attach ${containerName}`);
+		return;
+	}
+
+	// outcome === 'die' or 'unknown' — if unknown, fall back to state check
+	if (outcome === 'unknown' && await isContainerRunning(containerName)) {
+		console.error(`Detached from ${containerName}. Re-attach with: claudex attach ${containerName}`);
+		return;
+	}
+
+	try {
+		await execa('docker', [ 'rm', '-f', containerName ]);
+	} catch {
+		// Container may already be removed
+	}
+}
+
+// Cleanup rule for SECONDARY attach (`claudex attach` re-attach). Never
+// removes the container — the primary owns that decision. If the container
+// exited while we were attached, inform the user; otherwise it's a normal
+// detach.
+function reportSecondaryOutcome(containerName: string, outcome: AttachOutcome): void {
+	if (outcome === 'die') {
+		console.error(`Container ${containerName} exited. Remove it with: claudex prune`);
+		return;
+	}
+
+	console.error(`Detached from ${containerName}. Re-attach with: claudex attach ${containerName}`);
+}
+
 async function runPs(options: { all?: boolean }) {
 	const cwd = process.cwd();
 	const lines = await listContainers(options);
@@ -671,19 +761,19 @@ async function runAttach(options: { container?: string }) {
 
 	console.error(`Attaching to ${containerName}...`);
 
+	const events = watchAttachEvents(containerName);
 	try {
 		await execa('docker', [ 'attach', containerName ], {
 			stdin: process.stdin,
 			stdout: process.stdout,
 			stderr: process.stderr,
 		});
-	} finally {
-		try {
-			await execa('docker', [ 'rm', '-f', containerName ]);
-		} catch {
-			// Container may already be removed
-		}
+	} catch {
+		// docker attach exits 1 on clean detach (Ctrl+P Ctrl+Q); defer to event check
 	}
+
+	const outcome = await events.stop();
+	reportSecondaryOutcome(containerName, outcome);
 }
 
 async function runExec(container: string | undefined, options: { root?: boolean }) {
@@ -904,6 +994,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	let claudeChildProcess;
 	let dockerContainerName: string | undefined;
+	let dockerAttachEvents: ReturnType<typeof watchAttachEvents> | undefined;
 	let sshAgent: SshAgentInfo | undefined;
 	let hostSocket: { socketPath: string; cleanup: () => Promise<void> } | undefined;
 	let cleanupHostPortProxies: (() => void) | undefined;
@@ -968,6 +1059,10 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			claudeArgs: dockerClaudeArgs,
 			cliInDockerPath,
 		}));
+
+		if (dockerContainerName) {
+			dockerAttachEvents = watchAttachEvents(dockerContainerName);
+		}
 	} else {
 		// Load config for settingSources even in non-Docker mode
 		const { config, profileVolumes } = await getMergedConfig(cwd);
@@ -1012,14 +1107,14 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	try {
 		await claudeChildProcess;
+	} catch {
+		// docker attach exits non-zero on clean detach (Ctrl+P Ctrl+Q); defer to event check
 	} finally {
-		// Cleanup Docker container if we started one (in case attach didn't clean up)
-		if (dockerContainerName) {
-			try {
-				await execa('docker', [ 'rm', '-f', dockerContainerName ]);
-			} catch {
-				// Container may already be removed
-			}
+		// If the user detached, leave the container for re-attach.
+		// If the entrypoint exited, remove the container.
+		if (dockerContainerName && dockerAttachEvents) {
+			const outcome = await dockerAttachEvents.stop();
+			await cleanupOrDetachPrimary(dockerContainerName, outcome);
 		}
 
 		// Remind user about temp directory
