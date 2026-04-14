@@ -34,6 +34,7 @@ export const banGitC: Rule = {
 				type: 'violation',
 				messages: [
 					'❌ git -C is not needed here',
+					`cwd: ${context.cwd}`,
 					`The target directory "${gitChangeDirPath}" is already the current working directory.`,
 					'Please run the git command directly without -C.',
 				],
@@ -45,6 +46,7 @@ export const banGitC: Rule = {
 			type: 'violation',
 			messages: [
 				'❌ git -C is not allowed',
+				`cwd: ${context.cwd}`,
 				'Running git commands in a different directory is not permitted.',
 				'Please change directory first, then run the git command:',
 				`  Bash(cd ${gitChangeDirPath})`,

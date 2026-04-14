@@ -61,6 +61,7 @@ export const banWrongPackageManager: Rule = {
 			type: 'violation',
 			messages: [
 				`❌ Wrong package manager: ${wrongCommands.join(', ')} used in a ${detectedPm} project`,
+				`cwd: ${context.cwd}`,
 				`This project uses ${detectedPm} (detected from lock file). Use ${[ ...allowed ].join('/')} instead.`,
 			],
 		};

@@ -19,6 +19,7 @@ export const banCargoManifestPath: Rule = {
 				type: 'violation',
 				messages: [
 					'❌ cargo --manifest-path is not allowed',
+					`cwd: ${context.cwd}`,
 					'Running cargo commands with a different manifest path is not permitted.',
 					'Please change directory first, then run the cargo command:',
 					`  Bash(cd ${cargoInfo.path})`,
@@ -32,6 +33,7 @@ export const banCargoManifestPath: Rule = {
 				type: 'violation',
 				messages: [
 					'❌ cargo --manifest-path is not allowed',
+					`cwd: ${context.cwd}`,
 					'Running cargo commands with a different manifest path is not permitted.',
 				],
 			};

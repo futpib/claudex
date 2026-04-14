@@ -35,6 +35,7 @@ export const banCommandChaining: Rule = {
 					type: 'violation',
 					messages: [
 						'❌ cd is not needed here',
+						`cwd: ${context.cwd}`,
 						`The target directory "${cdTarget}" is already the current working directory.`,
 						'Please run the command directly without cd.',
 					],

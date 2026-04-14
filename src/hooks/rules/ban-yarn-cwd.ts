@@ -19,6 +19,7 @@ export const banYarnCwd: Rule = {
 				type: 'violation',
 				messages: [
 					'❌ yarn --cwd is not allowed',
+					`cwd: ${context.cwd}`,
 					'Running yarn commands with a different working directory is not permitted.',
 					'Please change directory first, then run the yarn command:',
 					`  Bash(cd ${yarnInfo.path})`,
@@ -32,6 +33,7 @@ export const banYarnCwd: Rule = {
 				type: 'violation',
 				messages: [
 					'❌ yarn --cwd is not allowed',
+					`cwd: ${context.cwd}`,
 					'Running yarn commands with a different working directory is not permitted.',
 				],
 			};

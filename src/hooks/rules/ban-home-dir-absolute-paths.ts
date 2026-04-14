@@ -24,6 +24,7 @@ export const banHomeDirAbsolutePaths: Rule = {
 				type: 'violation',
 				messages: [
 					`❌ Home directory absolute path is not allowed: ${result}`,
+					`cwd: ${context.cwd}`,
 					`Use tilde expansion instead: ${tildePath}`,
 				],
 			};

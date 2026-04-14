@@ -51,6 +51,7 @@ export const preferLocalGithubRepo: Rule = {
 			type: 'violation',
 			messages: [
 				`❌ The repository "${repoName}" is cloned locally at ${collapseHomedir(siblingDir)}`,
+				`cwd: ${context.cwd}`,
 				'Read the files directly from the local directory instead of fetching from GitHub.',
 			],
 		};

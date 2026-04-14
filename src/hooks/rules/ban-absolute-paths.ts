@@ -35,6 +35,7 @@ export const banAbsolutePaths: Rule = {
 				type: 'violation',
 				messages: [
 					`❌ Absolute path under cwd is not allowed: ${result}`,
+					`cwd: ${context.cwd}`,
 					`Use relative path instead: ${relativePath}`,
 				],
 			};
