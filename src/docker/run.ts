@@ -16,7 +16,10 @@ import { paths } from '../paths.js';
 import { startHostSocketServer } from '../host-socket/server.js';
 import { type SshAgentInfo, startSshAgent } from '../ssh/agent.js';
 import { startHostPortProxies } from '../port-proxy/host.js';
-import { ensureDockerImage, getDockerImageMeta, refreshDockerDigestsInBackground, refreshDockerStagesInBackground } from './build.js';
+import {
+	ensureDockerImage, getDockerImageMeta,
+	refreshDockerImageInBackground,
+} from './build.js';
 
 // Path where Claude Code is installed in the Docker container (must match Dockerfile)
 const claudeCodeBinPath = '/opt/claude-code/.local/bin';
@@ -223,8 +226,7 @@ export async function runDockerContainer(parameters: {
 	} else {
 		const result = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
 		({ username, projectRoot, imageName } = result);
-		void refreshDockerStagesInBackground(result.dockerfileContent);
-		void refreshDockerDigestsInBackground();
+		void refreshDockerImageInBackground(cwd, config);
 	}
 
 	const randomSuffix = Math.random().toString(36).slice(2, 8);
