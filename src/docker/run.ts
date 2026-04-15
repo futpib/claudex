@@ -425,10 +425,11 @@ export async function runDockerContainer(parameters: {
 	dockerArgs.push('--entrypoint', 'sh', imageName, '-c', 'mkfifo /tmp/.claudex-cmd && IFS= read -r cmd < /tmp/.claudex-cmd && exec sh -c "$cmd"');
 
 	// Step 1: Start container in detached mode — PID 1 blocks on FIFO
-	await execa('docker', dockerArgs, {
-		stdout: process.stdout,
+	const runResult = await execa('docker', dockerArgs, {
 		stderr: process.stderr,
 	});
+	const containerId = runResult.stdout.trim();
+	console.error(`Container: ${containerName} (${containerId.slice(0, 12)})`);
 
 	// Step 2: Run root startup commands via docker exec
 	if (config.rootStartupCommands && config.rootStartupCommands.length > 0) {
