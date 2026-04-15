@@ -41,6 +41,76 @@ const refreshTargets: RefreshTarget[] = [
 	{ name: 'yay', dockerTarget: 'yay-builder', getLatestVersion: getLatestYayVersion },
 ];
 
+// Image refs we pin to cached digests. BuildKit otherwise re-resolves these
+// against the registry on every build, even on a full cache hit.
+const pinnedImageRefs = [
+	'archlinux:latest',
+	'docker/dockerfile:1',
+] as const;
+
+const digestCacheFile = 'image-digests.json';
+
+function escapeRegExp(value: string): string {
+	return value.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+}
+
+async function readCachedDigests(): Promise<Record<string, string>> {
+	try {
+		const content = await fs.readFile(path.join(paths.cache, digestCacheFile), 'utf8');
+		const parsed = JSON.parse(content) as unknown;
+		if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+			return parsed as Record<string, string>;
+		}
+	} catch {
+		// missing or malformed — treat as empty cache
+	}
+
+	return {};
+}
+
+async function writeCachedDigests(digests: Record<string, string>): Promise<void> {
+	await fs.mkdir(paths.cache, { recursive: true });
+	const finalPath = path.join(paths.cache, digestCacheFile);
+	// Atomic write: concurrent claudex launches (across projects or within one)
+	// all share this cache file. Rename is atomic on POSIX, so readers never
+	// see a truncated file; last writer wins, and since writers are producing
+	// the same upstream-resolved digests, "losing" the race is harmless.
+	const tmpPath = `${finalPath}.${process.pid}.${Date.now()}.tmp`;
+	await fs.writeFile(tmpPath, JSON.stringify(digests, null, 2));
+	await fs.rename(tmpPath, finalPath);
+}
+
+export function pinDockerfile(content: string, digests: Record<string, string>): string {
+	let result = content;
+	for (const ref of pinnedImageRefs) {
+		const digest = digests[ref];
+		if (!digest) {
+			continue;
+		}
+
+		// Append @<digest> to occurrences of the ref that aren't followed by
+		// another ref-like character (avoids matching longer tags that share
+		// a prefix, e.g. `docker/dockerfile:10` vs `docker/dockerfile:1`).
+		const pattern = new RegExp(`${escapeRegExp(ref)}(?![\\w.:@/-])`, 'g');
+		result = result.replaceAll(pattern, `${ref}@${digest}`);
+	}
+
+	return result;
+}
+
+async function resolveImageDigest(ref: string): Promise<string | undefined> {
+	try {
+		const { stdout } = await execa('docker', [
+			'buildx', 'imagetools', 'inspect', ref,
+			'--format', '{{.Manifest.Digest}}',
+		], { timeout: 15_000 });
+		const digest = stdout.trim();
+		return /^sha256:[a-f0-9]+$/.test(digest) ? digest : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
 export function getDockerImageMeta(cwd: string) {
 	const userInfo = os.userInfo();
 	const userId = userInfo.uid;
@@ -104,9 +174,11 @@ export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull
 	};
 
 	const dockerfileContent = await fs.readFile(dockerfilePath, 'utf8');
+	const cachedDigests = await readCachedDigests();
+	const pinnedDockerfile = pinDockerfile(dockerfileContent, cachedDigests);
 
-	const runBuild = async (args: string[]) => execa('docker', args, {
-		input: dockerfileContent,
+	const runBuild = async (args: string[], input: string) => execa('docker', args, {
+		input,
 		stdout: process.stdout,
 		stderr: process.stderr,
 		env: {
@@ -117,19 +189,38 @@ export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull
 	});
 
 	try {
-		await runBuild([ ...buildFlags(noCache), ...commonArgs ]);
+		await runBuild([ ...buildFlags(noCache), ...commonArgs ], pinnedDockerfile);
 	} catch (error) {
 		if (noCache) {
 			throw error;
 		}
 
+		// Stale digest cache can cause the pinned build to fail with "manifest
+		// not found"; retry with the unpinned Dockerfile so the registry can
+		// re-resolve the current digest.
 		console.error('Docker build failed, retrying with --no-cache...');
-		await runBuild([ ...buildFlags(true), ...commonArgs ]);
+		await runBuild([ ...buildFlags(true), ...commonArgs ], dockerfileContent);
 	}
 
 	return {
 		userId, username, projectRoot, imageName, dockerfileContent,
 	};
+}
+
+export async function refreshDockerDigestsInBackground(): Promise<void> {
+	try {
+		const current = await readCachedDigests();
+		const resolved: Record<string, string> = { ...current };
+		await Promise.all(pinnedImageRefs.map(async ref => {
+			const digest = await resolveImageDigest(ref);
+			if (digest) {
+				resolved[ref] = digest;
+			}
+		}));
+		await writeCachedDigests(resolved);
+	} catch {
+		// best-effort — next launch will retry
+	}
 }
 
 export async function refreshDockerStagesInBackground(dockerfileContent: string) {
