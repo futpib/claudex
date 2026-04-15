@@ -63,39 +63,45 @@ export function getDockerImageMeta(cwd: string) {
 export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull = false, noCache = false) {
 	const { userId, username, projectRoot, dockerfilePath, imageName } = getDockerImageMeta(cwd);
 
-	// Always build image (Docker cache makes this fast if nothing changed)
-	const buildArgs = [
-		'build',
-	];
-
-	if (pull) {
-		buildArgs.push('--pull');
-	}
-
-	if (noCache) {
-		buildArgs.push('--no-cache');
-	}
-
-	buildArgs.push(
+	const commonArgs: string[] = [
 		'--build-arg',
 		`USER_ID=${userId}`,
 		'--build-arg',
 		`USERNAME=${username}`,
-	);
+	];
 
 	if (config.packages && config.packages.length > 0) {
-		buildArgs.push('--build-arg', `PACKAGES=${config.packages.join(' ')}`);
+		commonArgs.push('--build-arg', `PACKAGES=${config.packages.join(' ')}`);
 	}
 
 	if (config.rootInitCommands && config.rootInitCommands.length > 0) {
-		buildArgs.push('--build-arg', `ROOT_INIT_COMMANDS=${JSON.stringify(config.rootInitCommands)}`);
+		commonArgs.push('--build-arg', `ROOT_INIT_COMMANDS=${JSON.stringify(config.rootInitCommands)}`);
 	}
 
 	if (config.userInitCommands && config.userInitCommands.length > 0) {
-		buildArgs.push('--build-arg', `USER_INIT_COMMANDS=${JSON.stringify(config.userInitCommands)}`);
+		commonArgs.push('--build-arg', `USER_INIT_COMMANDS=${JSON.stringify(config.userInitCommands)}`);
 	}
 
-	buildArgs.push('-t', imageName, '-');
+	commonArgs.push('-t', imageName, '-');
+
+	// Without --pull=false, BuildKit contacts the registry on every build to
+	// re-resolve mutable tags (e.g. archlinux:latest), adding seconds of latency
+	// even on a full cache hit. Skip that unless the caller explicitly wants a
+	// pull, or is rebuilding without cache (where fresh bases are expected).
+	const buildFlags = (useNoCache: boolean): string[] => {
+		const flags = [ 'build' ];
+		if (pull) {
+			flags.push('--pull');
+		} else if (!useNoCache) {
+			flags.push('--pull=false');
+		}
+
+		if (useNoCache) {
+			flags.push('--no-cache');
+		}
+
+		return flags;
+	};
 
 	const dockerfileContent = await fs.readFile(dockerfilePath, 'utf8');
 
@@ -111,14 +117,14 @@ export async function ensureDockerImage(cwd: string, config: ClaudexConfig, pull
 	});
 
 	try {
-		await runBuild(buildArgs);
+		await runBuild([ ...buildFlags(noCache), ...commonArgs ]);
 	} catch (error) {
 		if (noCache) {
 			throw error;
 		}
 
 		console.error('Docker build failed, retrying with --no-cache...');
-		await runBuild([ ...buildArgs, '--no-cache' ]);
+		await runBuild([ ...buildFlags(true), ...commonArgs ]);
 	}
 
 	return {
