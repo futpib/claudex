@@ -1128,15 +1128,6 @@ const genericWriteFlags = new Set([
 	'--method',
 ]);
 
-// Short flags like -d, -F, -T are ambiguous for unknown commands
-// (e.g. tmux -d means "detached", not "data").
-// Only flag them when a URL-like argument is present, suggesting an HTTP client.
-const ambiguousShortWriteFlags = new Set([
-	'-d',
-	'-F',
-	'-T',
-]);
-
 function hasUrlLikeArg(args: string[]): boolean {
 	return args.some(arg => /^https?:\/\//.test(arg));
 }
@@ -1147,7 +1138,7 @@ function checkGenericWrite(name: string, args: string[]): string | undefined {
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
 
-		// -X / --request with write method
+		// -X / --request with write method (HTTP verb is unambiguous on its own)
 		if ((arg === '-X' || arg === '--request') && i + 1 < args.length) {
 			const method = args[i + 1]?.toLowerCase();
 			if (method && writeMethods.has(method)) {
@@ -1170,19 +1161,16 @@ function checkGenericWrite(name: string, args: string[]): string | undefined {
 			}
 		}
 
-		// Ambiguous short flags only match when a URL is present
-		if (ambiguousShortWriteFlags.has(arg) && urlPresent) {
-			return `${name} with write flag (${arg})`;
-		}
-
-		// Unambiguous write-implying flags
-		if (genericWriteFlags.has(arg) && !ambiguousShortWriteFlags.has(arg)) {
+		// Payload-shaped flags (--json, --data, -d, -F, -T, etc.) are ambiguous
+		// for unknown commands — many non-HTTP CLIs reuse them for output format
+		// or input paths. Only flag when a URL-like arg is also present.
+		if (urlPresent && genericWriteFlags.has(arg)) {
 			return `${name} with write flag (${arg})`;
 		}
 
 		// --post-data=..., --post-file=..., --body-data=..., --body-file=...
-		if (arg.startsWith('--post-data=') || arg.startsWith('--post-file=')
-			|| arg.startsWith('--body-data=') || arg.startsWith('--body-file=')) {
+		if (urlPresent && (arg.startsWith('--post-data=') || arg.startsWith('--post-file=')
+			|| arg.startsWith('--body-data=') || arg.startsWith('--body-file='))) {
 			return `${name} with write flag (${arg.split('=')[0]})`;
 		}
 

@@ -763,6 +763,24 @@ test('allows unknown command with -d flag but no URL', async t => {
 	t.is(result.exitCode, 0);
 });
 
+test('allows unknown command with --json flag but no URL (output format)', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('pnpx tsx bin/datadog-dbm-cli.ts --from 24h --limit 2 --json'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
+test('allows unknown command with --data flag but no URL', async t => {
+	await using config = await createHooksConfig({ banWriteOperations: true });
+	const result = await runHook(
+		createBashToolInput('mytool --data input.csv --output report.json'),
+		env(config),
+	);
+	t.is(result.exitCode, 0);
+});
+
 test('allows unknown command without write flags', async t => {
 	await using config = await createHooksConfig({ banWriteOperations: true });
 	const result = await runHook(
