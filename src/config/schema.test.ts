@@ -13,5 +13,4 @@ test('builtinLauncherDefinitions includes claude and ollama', t => {
 	t.truthy(builtinLauncherDefinitions.codex);
 	t.deepEqual(builtinLauncherDefinitions.codex.command, [ 'codex' ]);
 	t.deepEqual(builtinLauncherDefinitions.codex.packages, [ 'openai-codex' ]);
-	t.deepEqual(builtinLauncherDefinitions.codex.volumes, [ '~/.codex' ]);
 });

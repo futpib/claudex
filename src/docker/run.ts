@@ -8,7 +8,7 @@ import {
 	type Volume, type ClaudexConfig, type LauncherDefinition,
 } from '../config/index.js';
 import { getAccountPaths, ensureAccountDirs } from '../account.js';
-import { isClaudeCodeLauncher } from '../launcher.js';
+import { isClaudeCodeLauncher, isCodexLauncher } from '../launcher.js';
 import { getGitWorktreeParentPath } from '../git.js';
 import { getSshKeys, getSshHosts, getFilteredKnownHosts } from '../ssh/known-hosts.js';
 import { shieldEnvVars } from '../secrets.js';
@@ -233,9 +233,42 @@ export async function runDockerContainer(parameters: {
 	const containerName = `${getContainerPrefix(cwd)}${randomSuffix}`;
 	const homeDir = os.homedir();
 
+	const isClaude = isClaudeCodeLauncher(launcherDef);
+	const isCodex = isCodexLauncher(launcherDef);
+
 	const accountPaths = getAccountPaths(account);
-	await ensureAccountDirs(accountPaths);
-	const { claudeConfigDir } = accountPaths;
+	await ensureAccountDirs(accountPaths, { claude: isClaude, codex: isCodex });
+	const { claudeConfigDir, codexConfigDir } = accountPaths;
+
+	const claudeMountArgs = isClaude
+		? (account
+			? [
+				'-v',
+				`${claudeConfigDir}:${claudeConfigDir}`,
+				'-e',
+				`CLAUDE_CONFIG_DIR=${claudeConfigDir}`,
+			]
+			: [
+				'-v',
+				`${claudeConfigDir}:/home/${username}/.claude`,
+				'-v',
+				`${path.join(homeDir, '.claude.json')}:/home/${username}/.claude.json`,
+			])
+		: [];
+
+	const codexMountArgs = isCodex
+		? (account
+			? [
+				'-v',
+				`${codexConfigDir}:${codexConfigDir}`,
+				'-e',
+				`CODEX_HOME=${codexConfigDir}`,
+			]
+			: [
+				'-v',
+				`${codexConfigDir}:/home/${username}/.codex`,
+			])
+		: [];
 
 	const dockerArgs = [
 		'run',
@@ -250,19 +283,8 @@ export async function runDockerContainer(parameters: {
 		containerName,
 		'-v',
 		`${cwd}:${cwd}`,
-		...(account
-			? [
-				'-v',
-				`${claudeConfigDir}:${claudeConfigDir}`,
-				'-e',
-				`CLAUDE_CONFIG_DIR=${claudeConfigDir}`,
-			]
-			: [
-				'-v',
-				`${claudeConfigDir}:/home/${username}/.claude`,
-				'-v',
-				`${path.join(homeDir, '.claude.json')}:/home/${username}/.claude.json`,
-			]),
+		...claudeMountArgs,
+		...codexMountArgs,
 		'-v',
 		`${projectRoot}:${projectRoot}`,
 		'-v',
@@ -289,8 +311,6 @@ export async function runDockerContainer(parameters: {
 			dockerArgs.push('-v', `${expandedVolume.host}:${expandedVolume.container}`);
 		}
 	}
-
-	const isClaude = isClaudeCodeLauncher(launcherDef);
 
 	function resolveEnvEntry(key: string, value: string): string | undefined {
 		const match = /^\${(.+)}$/.exec(value);

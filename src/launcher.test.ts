@@ -1,6 +1,6 @@
 import test from 'ava';
 import { type LauncherDefinition } from './config/index.js';
-import { buildLauncherCommand, resolveLauncherDefinition } from './launcher.js';
+import { buildLauncherCommand, resolveLauncherDefinition, isClaudeCodeLauncher, isCodexLauncher } from './launcher.js';
 
 // --- buildLauncherCommand ---
 
@@ -93,4 +93,23 @@ test('resolveLauncherDefinition config command overrides built-in command', t =>
 	t.deepEqual(def.command, [ 'custom-ollama', 'launch' ]);
 	// Built-in base config fields still apply
 	t.deepEqual(def.packages, [ 'ollama' ]);
+});
+
+// --- isClaudeCodeLauncher / isCodexLauncher ---
+
+test('isClaudeCodeLauncher true for undefined, [claude], and ollama launch X', t => {
+	t.true(isClaudeCodeLauncher(undefined));
+	t.true(isClaudeCodeLauncher({ command: [ 'claude' ] }));
+	t.true(isClaudeCodeLauncher({ command: [ 'ollama', 'launch', 'claude' ] }));
+	t.true(isClaudeCodeLauncher({ command: [ 'ollama', 'launch', 'qwen3-coder:480b' ] }));
+	t.false(isClaudeCodeLauncher({ command: [ 'codex' ] }));
+	t.false(isClaudeCodeLauncher({ command: [ 'opencode' ] }));
+	t.false(isClaudeCodeLauncher({ command: [ 'ollama', 'serve' ] }));
+});
+
+test('isCodexLauncher true only for [codex]', t => {
+	t.false(isCodexLauncher(undefined));
+	t.true(isCodexLauncher({ command: [ 'codex' ] }));
+	t.false(isCodexLauncher({ command: [ 'claude' ] }));
+	t.false(isCodexLauncher({ command: [ 'ollama', 'launch', 'claude' ] }));
 });

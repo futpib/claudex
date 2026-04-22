@@ -23,7 +23,7 @@ import { isErrnoException, collapseHomedir, expandTilde } from './utils.js';
 import { getAccountPaths, ensureAccountDirs } from './account.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, getContainerPrefix, runDockerContainer } from './docker/run.js';
-import { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher } from './launcher.js';
+import { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher, isCodexLauncher } from './launcher.js';
 
 async function ensureMcpServerConfig(projectRoot: string, claudeConfigDir?: string) {
 	const claudeJsonPath = claudeConfigDir
@@ -955,17 +955,25 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	const account = noAccount ? undefined : (cliAccount ?? earlyConfig.account);
 	const accountPaths = getAccountPaths(account);
-	await ensureAccountDirs(accountPaths);
+
+	const earlyLauncherName = cliLauncher ?? earlyConfig.config.launcher;
+	const earlyLauncherDef = earlyLauncherName
+		? resolveLauncherDefinition(earlyLauncherName, earlyConfig.launcherDefinitions)
+		: undefined;
+	const earlyIsClaude = isClaudeCodeLauncher(earlyLauncherDef);
+	const earlyIsCodex = isCodexLauncher(earlyLauncherDef);
+
+	await ensureAccountDirs(accountPaths, { claude: earlyIsClaude, codex: earlyIsCodex });
 
 	if (account) {
 		console.error(`Account: ${account}`);
 	}
 
-	await ensureHookSetup(accountPaths.claudeConfigDir, earlyConfig.config.claudeSettings);
+	if (earlyIsClaude) {
+		await ensureHookSetup(accountPaths.claudeConfigDir, earlyConfig.config.claudeSettings);
+	}
 
-	// Resolve launcher name early for opencode plugin setup
-	const effectiveLauncherName = cliLauncher ?? earlyConfig.config.launcher;
-	if (effectiveLauncherName === 'opencode') {
+	if (earlyLauncherName === 'opencode') {
 		const { ensureOpenCodePluginSetup } = await import('./hooks.js');
 		await ensureOpenCodePluginSetup();
 	}
@@ -999,11 +1007,9 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	let hostSocket: { socketPath: string; cleanup: () => Promise<void> } | undefined;
 	let cleanupHostPortProxies: (() => void) | undefined;
 
-	// Resolve launcher definition
-	const launcherName = cliLauncher ?? earlyConfig.config.launcher;
-	let launcherDef: LauncherDefinition | undefined;
+	const launcherName = earlyLauncherName;
+	const launcherDef: LauncherDefinition | undefined = earlyLauncherDef;
 	if (launcherName) {
-		launcherDef = resolveLauncherDefinition(launcherName, earlyConfig.launcherDefinitions);
 		console.error(`Launcher: ${launcherName}`);
 	}
 

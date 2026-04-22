@@ -103,7 +103,6 @@ export const builtinLauncherDefinitions: Record<string, LauncherDefinition> = {
 	codex: {
 		command: [ 'codex' ],
 		packages: [ 'openai-codex' ],
-		volumes: [ '~/.codex' ],
 	},
 };
 

@@ -5,7 +5,24 @@ export function isClaudeCodeLauncher(def: LauncherDefinition | undefined): boole
 		return true;
 	}
 
-	return def.command.length === 1 && def.command[0] === 'claude';
+	if (def.command.length === 1 && def.command[0] === 'claude') {
+		return true;
+	}
+
+	// `ollama launch X` wraps Claude Code, so it's still a Claude launcher.
+	if (def.command.length >= 2 && def.command[0] === 'ollama' && def.command[1] === 'launch') {
+		return true;
+	}
+
+	return false;
+}
+
+export function isCodexLauncher(def: LauncherDefinition | undefined): boolean {
+	if (!def) {
+		return false;
+	}
+
+	return def.command.length === 1 && def.command[0] === 'codex';
 }
 
 export function resolveLauncherDefinition(
