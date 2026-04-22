@@ -1031,9 +1031,11 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const cliInDockerPath = path.join(projectRoot, 'build', 'cli.js');
 
 		const isClaude = isClaudeCodeLauncher(launcherDef);
+		const isCodex = isCodexLauncher(launcherDef);
 		const dockerClaudeArgs = [
 			...(isClaude && config.dockerDangerouslySkipPermissions ? [ '--dangerously-skip-permissions' ] : []),
 			...(isClaude && config.dockerAllowDangerouslySkipPermissions ? [ '--allow-dangerously-skip-permissions' ] : []),
+			...(isCodex && config.dockerDangerouslySkipPermissions ? [ '--dangerously-bypass-approvals-and-sandbox' ] : []),
 			...(isClaude ? (config.claudeArgs ?? []) : []),
 			...claudeArgs,
 		];
