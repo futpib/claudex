@@ -1028,7 +1028,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const dockerClaudeArgs = [
 			...(isClaude && config.dockerDangerouslySkipPermissions ? [ '--dangerously-skip-permissions' ] : []),
 			...(isClaude && config.dockerAllowDangerouslySkipPermissions ? [ '--allow-dangerously-skip-permissions' ] : []),
-			...(config.claudeArgs ?? []),
+			...(isClaude ? (config.claudeArgs ?? []) : []),
 			...claudeArgs,
 		];
 
@@ -1076,7 +1076,11 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			claudeFullArgs.push('--setting-sources', settingSources, ...addDirArgs);
 		}
 
-		claudeFullArgs.push(...(config.claudeArgs ?? []), ...claudeArgs);
+		if (isClaude && config.claudeArgs) {
+			claudeFullArgs.push(...config.claudeArgs);
+		}
+
+		claudeFullArgs.push(...claudeArgs);
 
 		if (launcherDef) {
 			const { command: launcherCmd, args: launcherArgs } = buildLauncherCommand(launcherDef, cliModel, claudeFullArgs);
