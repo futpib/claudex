@@ -73,7 +73,7 @@ claudex exec --root
 | `--volume <spec>` | Mount volume: `path` or `host:container` (repeatable) |
 | `--env <spec>` | Set env var: `KEY=value` or `KEY` for passthrough (repeatable) |
 | `--ssh-key <path>` | Add SSH key to agent (repeatable) |
-| `--launcher <name>` | Select launcher by name (e.g. `ollama`, `opencode`) |
+| `--launcher <name>` | Select launcher by name (e.g. `ollama`, `opencode`, `codex`) |
 | `--model <name>` | Override the launcher's default model |
 | `--account <name>` | Use a specific claudex account (isolated Claude config) |
 

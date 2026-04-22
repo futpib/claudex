@@ -50,8 +50,8 @@ export function buildLauncherCommand(
 		args.push('--model', model);
 	}
 
-	// For bare single-command launchers (claude, opencode), don't insert "--" separator
-	const isBare = def.command.length === 1 && (def.command[0] === 'claude' || def.command[0] === 'opencode');
+	// For bare single-command launchers (claude, opencode, codex), don't insert "--" separator
+	const isBare = def.command.length === 1 && (def.command[0] === 'claude' || def.command[0] === 'opencode' || def.command[0] === 'codex');
 	if (isBare) {
 		args.push(...claudeArgs);
 	} else {

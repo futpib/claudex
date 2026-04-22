@@ -100,6 +100,11 @@ export const builtinLauncherDefinitions: Record<string, LauncherDefinition> = {
 		packages: [ 'ollama' ],
 		hostPorts: [ 11_434 ],
 	},
+	codex: {
+		command: [ 'codex' ],
+		packages: [ 'openai-codex' ],
+		volumes: [ '~/.codex' ],
+	},
 };
 
 // Merged config is the same as base config (after merging root + project)

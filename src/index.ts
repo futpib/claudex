@@ -101,7 +101,7 @@ export async function main() {
 	// eslint-disable-next-line no-template-curly-in-string
 		.option('--env <spec>', 'Add env var: KEY=value or KEY for KEY=${KEY} (repeatable)', collect, [])
 		.option('--ssh-key <path>', 'Add SSH key to agent (repeatable)', collect, [])
-		.option('--launcher <name>', 'Select launcher by name (e.g. "ollama")')
+		.option('--launcher <name>', 'Select launcher by name (e.g. "ollama", "codex")')
 		.option('--model <name>', 'Override the launcher\'s default model')
 		.option('--account <name>', 'Use a specific claudex account')
 		.option('--no-account', 'Ignore configured account and use default')

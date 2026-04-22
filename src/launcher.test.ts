@@ -11,6 +11,13 @@ test('buildLauncherCommand with bare claude launcher passes args directly', t =>
 	t.deepEqual(result.args, [ '--setting-sources', 'user,local' ]);
 });
 
+test('buildLauncherCommand with bare codex launcher passes args directly', t => {
+	const def: LauncherDefinition = { command: [ 'codex' ] };
+	const result = buildLauncherCommand(def, undefined, [ 'exec', '--help' ]);
+	t.is(result.command, 'codex');
+	t.deepEqual(result.args, [ 'exec', '--help' ]);
+});
+
 test('buildLauncherCommand with non-claude launcher inserts -- separator', t => {
 	const def: LauncherDefinition = { command: [ 'ollama', 'launch', 'claude' ] };
 	const result = buildLauncherCommand(def, undefined, [ '--setting-sources', 'user,local' ]);
