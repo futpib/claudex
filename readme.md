@@ -298,6 +298,9 @@ claudex config <action> [scope flags] [key] [value]
 | `dockerAllowDangerouslySkipPermissions` | boolean | set, unset |
 | `dockerIpcPrivate` | boolean | set, unset |
 | `dockerPidsLimit` | boolean | set, unset |
+| `launcherOverrides.<launcher>.args` | string[] | set, unset |
+| `launcherOverrides.<launcher>.env.<KEY>` | string | set, unset |
+| `claudeSettings` | object | set, unset |
 
 ### Profiles
 

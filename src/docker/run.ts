@@ -8,7 +8,7 @@ import {
 	type Volume, type ClaudexConfig, type LauncherDefinition,
 } from '../config/index.js';
 import { getAccountPaths, ensureAccountDirs } from '../account.js';
-import { isClaudeCodeLauncher, isCodexLauncher } from '../launcher.js';
+import { isClaudeCodeLauncher, isCodexLauncher, resolveLauncherOverride } from '../launcher.js';
 import { getGitWorktreeParentPath } from '../git.js';
 import { getSshKeys, getSshHosts, getFilteredKnownHosts } from '../ssh/known-hosts.js';
 import { shieldEnvVars } from '../secrets.js';
@@ -115,6 +115,7 @@ export async function runDockerContainer(parameters: {
 	account: string | undefined;
 	profileVolumes: string[];
 	launcherDef: LauncherDefinition | undefined;
+	launcherName: string | undefined;
 	cliPackages: string[];
 	cliVolumes: string[];
 	cliEnv: string[];
@@ -131,7 +132,7 @@ export async function runDockerContainer(parameters: {
 	cliInDockerPath: string;
 }): Promise<DockerRunResult> {
 	const {
-		cwd, account, profileVolumes, launcherDef, cliPackages, cliVolumes, cliEnv, cliSshKeys,
+		cwd, account, profileVolumes, launcherDef, launcherName, cliPackages, cliVolumes, cliEnv, cliSshKeys,
 		cliModel, dockerSudo, dockerInsecure, cliDockerArgs, useDockerShell, dockerPull, dockerNoCache, dockerSkipBuild, claudeArgs, cliInDockerPath,
 	} = parameters;
 	const config = { ...parameters.config };
@@ -333,9 +334,11 @@ export async function runDockerContainer(parameters: {
 		}
 	}
 
-	// ClaudeEnv applies only when launcher is claude
-	if (isClaude && config.claudeEnv) {
-		for (const [ key, value ] of Object.entries(config.claudeEnv)) {
+	// Apply the active launcher's env override (includes claude-fallback for
+	// claude-wrapping launchers like `ollama launch X`).
+	const launcherOverride = resolveLauncherOverride(config.launcherOverrides, launcherName, launcherDef);
+	if (launcherOverride.env) {
+		for (const [ key, value ] of Object.entries(launcherOverride.env)) {
 			const resolved = resolveEnvEntry(key, value);
 			if (resolved !== undefined) {
 				resolvedEnv[key] = resolved;

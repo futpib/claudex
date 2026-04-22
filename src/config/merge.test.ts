@@ -77,3 +77,32 @@ test('mergeBaseConfigs leaves claudeSettings undefined when neither side sets it
 	const merged = mergeBaseConfigs({}, {});
 	t.is(merged.claudeSettings, undefined);
 });
+
+// --- mergeBaseConfigs: launcherOverrides ---
+
+test('mergeBaseConfigs concatenates launcherOverrides args per launcher', t => {
+	const base: BaseConfig = { launcherOverrides: { claude: { args: [ '--base' ] } } };
+	const overlay: BaseConfig = { launcherOverrides: { claude: { args: [ '--overlay' ] } } };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.deepEqual(merged.launcherOverrides?.claude.args, [ '--base', '--overlay' ]);
+});
+
+test('mergeBaseConfigs merges launcherOverrides env per launcher', t => {
+	const base: BaseConfig = { launcherOverrides: { codex: { env: { A: '1' } } } };
+	const overlay: BaseConfig = { launcherOverrides: { codex: { env: { B: '2' } } } };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.deepEqual(merged.launcherOverrides?.codex.env, { A: '1', B: '2' });
+});
+
+test('mergeBaseConfigs combines launchers across base and overlay', t => {
+	const base: BaseConfig = { launcherOverrides: { claude: { args: [ '--a' ] } } };
+	const overlay: BaseConfig = { launcherOverrides: { codex: { args: [ '--c' ] } } };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.deepEqual(merged.launcherOverrides?.claude.args, [ '--a' ]);
+	t.deepEqual(merged.launcherOverrides?.codex.args, [ '--c' ]);
+});
+
+test('mergeBaseConfigs leaves launcherOverrides undefined when neither side sets it', t => {
+	const merged = mergeBaseConfigs({}, {});
+	t.is(merged.launcherOverrides, undefined);
+});

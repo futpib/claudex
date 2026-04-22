@@ -23,7 +23,7 @@ import { isErrnoException, collapseHomedir, expandTilde } from './utils.js';
 import { getAccountPaths, ensureAccountDirs } from './account.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, getContainerPrefix, runDockerContainer } from './docker/run.js';
-import { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher, isCodexLauncher } from './launcher.js';
+import { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher, isCodexLauncher, resolveLauncherOverride } from './launcher.js';
 
 async function ensureMcpServerConfig(projectRoot: string, claudeConfigDir?: string) {
 	const claudeJsonPath = claudeConfigDir
@@ -1032,11 +1032,12 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 		const isClaude = isClaudeCodeLauncher(launcherDef);
 		const isCodex = isCodexLauncher(launcherDef);
+		const launcherOverride = resolveLauncherOverride(config.launcherOverrides, launcherName, launcherDef);
 		const dockerClaudeArgs = [
 			...(isClaude && config.dockerDangerouslySkipPermissions ? [ '--dangerously-skip-permissions' ] : []),
 			...(isClaude && config.dockerAllowDangerouslySkipPermissions ? [ '--allow-dangerously-skip-permissions' ] : []),
 			...(isCodex && config.dockerDangerouslySkipPermissions ? [ '--dangerously-bypass-approvals-and-sandbox' ] : []),
-			...(isClaude ? (config.claudeArgs ?? []) : []),
+			...(launcherOverride.args ?? []),
 			...claudeArgs,
 		];
 
@@ -1052,6 +1053,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			account,
 			profileVolumes,
 			launcherDef,
+			launcherName,
 			cliPackages,
 			cliVolumes,
 			cliEnv,
@@ -1084,8 +1086,9 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			claudeFullArgs.push('--setting-sources', settingSources, ...addDirArgs);
 		}
 
-		if (isClaude && config.claudeArgs) {
-			claudeFullArgs.push(...config.claudeArgs);
+		const launcherOverride = resolveLauncherOverride(config.launcherOverrides, launcherName, launcherDef);
+		if (launcherOverride.args) {
+			claudeFullArgs.push(...launcherOverride.args);
 		}
 
 		claudeFullArgs.push(...claudeArgs);

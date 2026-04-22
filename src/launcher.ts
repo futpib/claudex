@@ -1,4 +1,4 @@
-import { builtinLauncherDefinitions, type LauncherDefinition } from './config/index.js';
+import { builtinLauncherDefinitions, type LauncherDefinition, type LauncherOverride } from './config/index.js';
 
 export function isClaudeCodeLauncher(def: LauncherDefinition | undefined): boolean {
 	if (!def) {
@@ -53,6 +53,48 @@ export function resolveLauncherDefinition(
 	}
 
 	throw new Error(`Unknown launcher: ${launcherName}`);
+}
+
+// Resolve the effective args/env overrides for the active launcher.
+// For claude-wrapping launchers that aren't bare "claude" (i.e. `ollama launch X`),
+// claude overrides apply as a base and the specific launcher's overrides win on top.
+export function resolveLauncherOverride(
+	overrides: Record<string, LauncherOverride> | undefined,
+	launcherName: string | undefined,
+	def: LauncherDefinition | undefined,
+): LauncherOverride {
+	if (!overrides) {
+		return {};
+	}
+
+	const args: string[] = [];
+	const env: Record<string, string> = {};
+	const effectiveName = launcherName ?? 'claude';
+
+	if (isClaudeCodeLauncher(def) && effectiveName !== 'claude') {
+		const claude = overrides.claude;
+		if (claude?.args) {
+			args.push(...claude.args);
+		}
+
+		if (claude?.env) {
+			Object.assign(env, claude.env);
+		}
+	}
+
+	const specific = overrides[effectiveName];
+	if (specific?.args) {
+		args.push(...specific.args);
+	}
+
+	if (specific?.env) {
+		Object.assign(env, specific.env);
+	}
+
+	return {
+		args: args.length > 0 ? args : undefined,
+		env: Object.keys(env).length > 0 ? env : undefined,
+	};
 }
 
 export function buildLauncherCommand(

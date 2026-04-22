@@ -8,7 +8,7 @@ export {
 	type HooksDetail, type HooksConfig,
 	type McpServersDetail, type McpServersConfig,
 	type BaseConfig, type ProjectConfig, type RootConfig,
-	type LauncherDefinition, type ClaudexConfig,
+	type LauncherDefinition, type LauncherOverride, type ClaudexConfig,
 } from './schema.js';
 
 export {

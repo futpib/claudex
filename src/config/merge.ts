@@ -7,7 +7,7 @@ import { readRootConfig } from './io.js';
 import {
 	resolveHooks, resolveMcpServers, allMcpServerFlags,
 	type BaseConfig, type ClaudexConfig, type HooksConfig, type HooksDetail,
-	type LauncherDefinition, type McpServersConfig, type McpServersDetail,
+	type LauncherDefinition, type LauncherOverride, type McpServersConfig, type McpServersDetail,
 	type ProjectConfig, type RootConfig, type Volume,
 } from './schema.js';
 
@@ -67,6 +67,62 @@ function dedupeVolumes(volumes: Volume[]): Volume[] {
 	}
 
 	return result;
+}
+
+function mergeLauncherOverride(base: LauncherOverride, overlay: LauncherOverride): LauncherOverride {
+	const args = [ ...(base.args ?? []), ...(overlay.args ?? []) ];
+	const env = { ...base.env, ...overlay.env };
+	return {
+		args: args.length > 0 ? args : undefined,
+		env: Object.keys(env).length > 0 ? env : undefined,
+	};
+}
+
+function mergeLauncherOverrides(
+	base: Record<string, LauncherOverride> | undefined,
+	overlay: Record<string, LauncherOverride> | undefined,
+): Record<string, LauncherOverride> | undefined {
+	if (!base && !overlay) {
+		return undefined;
+	}
+
+	const merged: Record<string, LauncherOverride> = {};
+	const names = new Set([ ...Object.keys(base ?? {}), ...Object.keys(overlay ?? {}) ]);
+	for (const name of names) {
+		const baseEntry = base?.[name];
+		const overlayEntry = overlay?.[name];
+		merged[name] = baseEntry && overlayEntry
+			? mergeLauncherOverride(baseEntry, overlayEntry)
+			: (overlayEntry ?? baseEntry)!;
+	}
+
+	return Object.keys(merged).length > 0 ? merged : undefined;
+}
+
+// Fold deprecated claudeArgs/claudeEnv into launcherOverrides.claude so downstream
+// only needs to read one shape. Legacy values act as a base, so explicit
+// launcherOverrides.claude.{args,env} wins for conflicting env keys.
+function foldLegacyLauncherFields(config: BaseConfig): BaseConfig {
+	const { claudeArgs, claudeEnv, launcherOverrides, ...rest } = config;
+	if (!claudeArgs && !claudeEnv) {
+		return config;
+	}
+
+	const existing = launcherOverrides?.claude;
+	const mergedClaude = mergeLauncherOverride(
+		{ args: claudeArgs, env: claudeEnv },
+		existing ?? {},
+	);
+
+	const nextOverrides: Record<string, LauncherOverride> = {
+		...launcherOverrides,
+		claude: mergedClaude,
+	};
+
+	return {
+		...rest,
+		launcherOverrides: nextOverrides,
+	};
 }
 
 function mergeHooksConfigs(base: HooksConfig | undefined, overlay: HooksConfig | undefined): HooksConfig | undefined {
@@ -220,6 +276,8 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		...overlay.claudeSettings,
 	};
 
+	const launcherOverrides = mergeLauncherOverrides(base.launcherOverrides, overlay.launcherOverrides);
+
 	return {
 		profiles: profiles.length > 0 ? profiles : undefined,
 		packages: packages.length > 0 ? packages : undefined,
@@ -253,6 +311,7 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		claudeArgs: claudeArgs.length > 0 ? claudeArgs : undefined,
 		claudeEnv: Object.keys(claudeEnv).length > 0 ? claudeEnv : undefined,
 		claudeSettings: Object.keys(claudeSettings).length > 0 ? claudeSettings : undefined,
+		launcherOverrides,
 	};
 }
 
@@ -441,8 +500,23 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		claudeArgs: config.claudeArgs,
 		claudeEnv: config.claudeEnv ? sortEnv(config.claudeEnv) : undefined,
 		claudeSettings: config.claudeSettings ? sortRecord(config.claudeSettings) : undefined,
+		launcherOverrides: config.launcherOverrides ? sortLauncherOverrides(config.launcherOverrides) : undefined,
 		// Profiles references are consumed during resolution and not carried to final output
 	};
+}
+
+function sortLauncherOverrides(overrides: Record<string, LauncherOverride>): Record<string, LauncherOverride> {
+	const sortedKeys = Object.keys(overrides).sort((a, b) => a.localeCompare(b));
+	const sorted: Record<string, LauncherOverride> = {};
+	for (const key of sortedKeys) {
+		const entry = overrides[key];
+		sorted[key] = {
+			args: entry.args,
+			env: entry.env ? sortEnv(entry.env) : undefined,
+		};
+	}
+
+	return sorted;
 }
 
 function mergeProjectConfig(
@@ -591,9 +665,12 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 		}
 	}
 
+	// Fold deprecated claudeArgs/claudeEnv into launcherOverrides.claude before sorting
+	const normalized = foldLegacyLauncherFields(merged);
+
 	// Sort for consistent Docker cache
 	return {
-		config: sortConfig(merged),
+		config: sortConfig(normalized),
 		configFiles,
 		profileVolumes,
 		launcherDefinitions: rootConfig.launcherDefinitions,

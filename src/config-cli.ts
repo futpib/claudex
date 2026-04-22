@@ -947,6 +947,7 @@ export function getKeyEntries(): KeyEntry[] {
 		claudeArgs: 'string[]',
 		claudeEnv: 'record',
 		claudeSettings: 'record',
+		launcherOverrides: 'record',
 	};
 
 	for (const field of validTopLevelKeys) {
@@ -963,6 +964,12 @@ export function getKeyEntries(): KeyEntry[] {
 
 			case 'claudeSettings': {
 				entries.push({ key: 'claudeSettings.<KEY>', type: 'any' });
+				break;
+			}
+
+			case 'launcherOverrides': {
+				entries.push({ key: 'launcherOverrides.<launcher>.args', type: 'string[]' });
+				entries.push({ key: 'launcherOverrides.<launcher>.env.<KEY>', type: 'string' });
 				break;
 			}
 

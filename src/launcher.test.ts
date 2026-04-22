@@ -1,6 +1,6 @@
 import test from 'ava';
 import { type LauncherDefinition } from './config/index.js';
-import { buildLauncherCommand, resolveLauncherDefinition, isClaudeCodeLauncher, isCodexLauncher } from './launcher.js';
+import { buildLauncherCommand, resolveLauncherDefinition, isClaudeCodeLauncher, isCodexLauncher, resolveLauncherOverride } from './launcher.js';
 
 // --- buildLauncherCommand ---
 
@@ -112,4 +112,47 @@ test('isCodexLauncher true only for [codex]', t => {
 	t.true(isCodexLauncher({ command: [ 'codex' ] }));
 	t.false(isCodexLauncher({ command: [ 'claude' ] }));
 	t.false(isCodexLauncher({ command: [ 'ollama', 'launch', 'claude' ] }));
+});
+
+// --- resolveLauncherOverride ---
+
+test('resolveLauncherOverride returns empty when overrides undefined', t => {
+	const result = resolveLauncherOverride(undefined, 'claude', { command: [ 'claude' ] });
+	t.deepEqual(result, {});
+});
+
+test('resolveLauncherOverride picks overrides by active launcher name', t => {
+	const overrides = {
+		claude: { args: [ '--a' ], env: { A: '1' } },
+		codex: { args: [ '--b' ], env: { B: '2' } },
+	};
+	const result = resolveLauncherOverride(overrides, 'codex', { command: [ 'codex' ] });
+	t.deepEqual(result.args, [ '--b' ]);
+	t.deepEqual(result.env, { B: '2' });
+});
+
+test('resolveLauncherOverride uses claude entry when launcher name undefined', t => {
+	const overrides = { claude: { args: [ '--a' ], env: { A: '1' } } };
+	const result = resolveLauncherOverride(overrides, undefined, undefined);
+	t.deepEqual(result.args, [ '--a' ]);
+	t.deepEqual(result.env, { A: '1' });
+});
+
+test('resolveLauncherOverride layers claude base under ollama-launch wrapper', t => {
+	const overrides = {
+		claude: { args: [ '--effort', 'max' ], env: { CCD: '1' } },
+		ollama: { args: [ '--extra' ], env: { O: '2' } },
+	};
+	const result = resolveLauncherOverride(overrides, 'ollama', { command: [ 'ollama', 'launch', 'claude' ] });
+	t.deepEqual(result.args, [ '--effort', 'max', '--extra' ]);
+	t.deepEqual(result.env, { CCD: '1', O: '2' });
+});
+
+test('resolveLauncherOverride does not layer claude base under codex', t => {
+	const overrides = {
+		claude: { args: [ '--claude-flag' ] },
+		codex: { args: [ '--codex-flag' ] },
+	};
+	const result = resolveLauncherOverride(overrides, 'codex', { command: [ 'codex' ] });
+	t.deepEqual(result.args, [ '--codex-flag' ]);
 });

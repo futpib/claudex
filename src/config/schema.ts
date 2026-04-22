@@ -19,6 +19,12 @@ const hooksDetailConfigSchema = z.object(Object.fromEntries(allConfigKeys.map(ke
 
 const hooksConfigSchema = z.union([ z.literal(true), hooksDetailConfigSchema ]);
 
+// Per-launcher overrides: launcher-specific args and env. Keyed by launcher name.
+const launcherOverrideSchema = z.object({
+	args: z.array(z.string()).optional(),
+	env: z.record(z.string(), z.string()).optional(),
+});
+
 const mcpServersDetailConfigSchema = z.object({
 	claudex: z.boolean().optional(),
 });
@@ -51,9 +57,11 @@ export const baseConfigSchema = z.object({
 	dockerIpcPrivate: z.boolean().optional(), // Default true - use --ipc=private for IPC namespace isolation
 	dockerPidsLimit: z.boolean().optional(), // Default true - limit container PIDs to host pid_max / 16
 	account: z.string().optional(),
-	claudeArgs: z.array(z.string()).optional(), // Extra arguments passed to claude on startup
-	claudeEnv: z.record(z.string(), z.string()).optional(), // Env vars passed only when launcher is claude
+	launcherOverrides: z.record(z.string(), launcherOverrideSchema).optional(), // Per-launcher args/env, keyed by launcher name
 	claudeSettings: z.record(z.string(), z.unknown()).optional(), // Top-level entries merged into Claude's settings.json
+	// Deprecated: use launcherOverrides.claude.args / launcherOverrides.claude.env
+	claudeArgs: z.array(z.string()).optional(),
+	claudeEnv: z.record(z.string(), z.string()).optional(),
 });
 
 // Launcher definition schema - extends base config with launcher-specific fields
@@ -86,6 +94,7 @@ export type BaseConfig = z.infer<typeof baseConfigSchema>;
 export type ProjectConfig = z.infer<typeof projectConfigSchema>;
 export type RootConfig = z.infer<typeof rootConfigSchema>;
 export type LauncherDefinition = z.infer<typeof launcherDefinitionSchema>;
+export type LauncherOverride = z.infer<typeof launcherOverrideSchema>;
 
 export const builtinLauncherDefinitions: Record<string, LauncherDefinition> = {
 	claude: {
@@ -121,7 +130,7 @@ export const fixedSubKeyFields: Record<string, Set<string>> = {
 	ssh: new Set([ 'keys', 'hosts' ]),
 };
 
-export const recordFields = new Set([ 'env', 'extraHosts', 'claudeEnv', 'claudeSettings' ]);
+export const recordFields = new Set([ 'env', 'extraHosts', 'claudeEnv', 'claudeSettings', 'launcherOverrides' ]);
 
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {
