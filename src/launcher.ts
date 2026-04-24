@@ -1,5 +1,56 @@
-import { builtinLauncherDefinitions, type LauncherDefinition, type LauncherOverride } from './config/index.js';
+import { type LauncherDefinition, type LauncherOverride } from './config/schema.js';
+import {
+	launcherRegistry, resolveLauncherSpec, walkSpecWraps,
+	type LauncherSpec,
+} from './launchers/registry.js';
 
+export function specToDefinition(spec: LauncherSpec): LauncherDefinition {
+	const def: LauncherDefinition = { command: spec.command };
+	if (spec.model !== undefined) {
+		def.model = spec.model;
+	}
+
+	if (spec.packages?.length) {
+		def.packages = spec.packages;
+	}
+
+	if (spec.volumes?.length) {
+		def.volumes = spec.volumes;
+	}
+
+	if (spec.hostPorts?.length) {
+		def.hostPorts = spec.hostPorts;
+	}
+
+	return def;
+}
+
+export function resolveLauncherDefinition(
+	launcherName: string,
+	configLauncherDefinitions: Record<string, LauncherDefinition> | undefined,
+): LauncherDefinition {
+	const spec = resolveLauncherSpec(launcherName, configLauncherDefinitions);
+	return specToDefinition(spec);
+}
+
+// Does this launcher spec behave as a Claude Code launcher (either directly
+// or by wrapping one)? Returns true for `undefined` (the default launcher).
+export function isClaudeCodeSpec(spec: LauncherSpec | undefined): boolean {
+	if (!spec) {
+		return true;
+	}
+
+	for (const s of walkSpecWraps(spec)) {
+		if (s.name === 'claude') {
+			return true;
+		}
+	}
+
+	return false;
+}
+
+// Fallback command-pattern detector for callers that only have a raw
+// definition (no spec). Prefer isClaudeCodeSpec where the spec is available.
 export function isClaudeCodeLauncher(def: LauncherDefinition | undefined): boolean {
 	if (!def) {
 		return true;
@@ -9,7 +60,6 @@ export function isClaudeCodeLauncher(def: LauncherDefinition | undefined): boole
 		return true;
 	}
 
-	// `ollama launch X` wraps Claude Code, so it's still a Claude launcher.
 	if (def.command.length >= 2 && def.command[0] === 'ollama' && def.command[1] === 'launch') {
 		return true;
 	}
@@ -17,51 +67,13 @@ export function isClaudeCodeLauncher(def: LauncherDefinition | undefined): boole
 	return false;
 }
 
-export function isCodexLauncher(def: LauncherDefinition | undefined): boolean {
-	if (!def) {
-		return false;
-	}
-
-	return def.command.length === 1 && def.command[0] === 'codex';
-}
-
-export function resolveLauncherDefinition(
-	launcherName: string,
-	configLauncherDefinitions: Record<string, LauncherDefinition> | undefined,
-): LauncherDefinition {
-	const configDef = configLauncherDefinitions?.[launcherName];
-	const builtinDef = builtinLauncherDefinitions[launcherName];
-
-	if (configDef && builtinDef) {
-		// Config overrides built-in: merge base config fields, config command/model win
-		const { command: _bc, model: _bm, ...builtinBase } = builtinDef;
-		const { command: _cc, model: _cm, ...configBase } = configDef;
-		return {
-			...builtinBase,
-			...configBase,
-			command: configDef.command ?? builtinDef.command,
-			model: configDef.model ?? builtinDef.model,
-		};
-	}
-
-	if (configDef) {
-		return configDef;
-	}
-
-	if (builtinDef) {
-		return builtinDef;
-	}
-
-	throw new Error(`Unknown launcher: ${launcherName}`);
-}
-
-// Resolve the effective args/env overrides for the active launcher.
-// For claude-wrapping launchers that aren't bare "claude" (i.e. `ollama launch X`),
-// claude overrides apply as a base and the specific launcher's overrides win on top.
+// Apply overrides in wraps order (outer-most last) so a wrapping launcher's
+// overrides layer on top of the wrapped launcher's (e.g. ollama on top of
+// claude).
 export function resolveLauncherOverride(
 	overrides: Record<string, LauncherOverride> | undefined,
 	launcherName: string | undefined,
-	def: LauncherDefinition | undefined,
+	_def: LauncherDefinition | undefined,
 ): LauncherOverride {
 	if (!overrides) {
 		return {};
@@ -71,24 +83,19 @@ export function resolveLauncherOverride(
 	const env: Record<string, string> = {};
 	const effectiveName = launcherName ?? 'claude';
 
-	if (isClaudeCodeLauncher(def) && effectiveName !== 'claude') {
-		const claude = overrides.claude;
-		if (claude?.args) {
-			args.push(...claude.args);
+	const spec = launcherRegistry[effectiveName];
+	const fallbackSpec: LauncherSpec = { name: effectiveName, command: [ effectiveName ] };
+	const chain = spec ? [ ...walkSpecWraps(spec) ].reverse() : [ fallbackSpec ];
+
+	for (const s of chain) {
+		const entry = overrides[s.name];
+		if (entry?.args) {
+			args.push(...entry.args);
 		}
 
-		if (claude?.env) {
-			Object.assign(env, claude.env);
+		if (entry?.env) {
+			Object.assign(env, entry.env);
 		}
-	}
-
-	const specific = overrides[effectiveName];
-	if (specific?.args) {
-		args.push(...specific.args);
-	}
-
-	if (specific?.env) {
-		Object.assign(env, specific.env);
 	}
 
 	return {
@@ -97,10 +104,27 @@ export function resolveLauncherOverride(
 	};
 }
 
+function isBareLauncher(def: LauncherDefinition, launcherName: string | undefined): boolean {
+	if (launcherName) {
+		const spec = launcherRegistry[launcherName];
+		if (spec?.isBareCommand !== undefined) {
+			return spec.isBareCommand;
+		}
+	}
+
+	if (def.command.length !== 1) {
+		return false;
+	}
+
+	const fallback = launcherRegistry[def.command[0]];
+	return fallback?.isBareCommand ?? false;
+}
+
 export function buildLauncherCommand(
 	def: LauncherDefinition,
 	modelOverride: string | undefined,
 	claudeArgs: string[],
+	launcherName?: string,
 ): { command: string; args: string[] } {
 	const command = def.command[0];
 	const args = def.command.slice(1);
@@ -109,9 +133,7 @@ export function buildLauncherCommand(
 		args.push('--model', model);
 	}
 
-	// For bare single-command launchers (claude, opencode, codex), don't insert "--" separator
-	const isBare = def.command.length === 1 && (def.command[0] === 'claude' || def.command[0] === 'opencode' || def.command[0] === 'codex');
-	if (isBare) {
+	if (isBareLauncher(def, launcherName)) {
 		args.push(...claudeArgs);
 	} else {
 		args.push('--', ...claudeArgs);

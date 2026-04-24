@@ -1,14 +1,18 @@
 import process from 'node:process';
 import path from 'node:path';
-import os from 'node:os';
 import fs from 'node:fs/promises';
 import { execa, type ResultPromise } from 'execa';
 import {
 	expandVolumePaths, expandPathEnv,
 	type Volume, type ClaudexConfig, type LauncherDefinition,
 } from '../config/index.js';
-import { getAccountPaths, ensureAccountDirs } from '../account.js';
-import { isClaudeCodeLauncher, isCodexLauncher, resolveLauncherOverride } from '../launcher.js';
+import {
+	buildAccountMountPlan, ensureAccountDirsForSpec,
+	effectiveSpecField,
+	resolveLauncherSpec,
+	type LauncherSpec,
+} from '../launchers/registry.js';
+import { resolveLauncherOverride } from '../launcher.js';
 import { getGitWorktreeParentPath } from '../git.js';
 import { getSshKeys, getSshHosts, getFilteredKnownHosts } from '../ssh/known-hosts.js';
 import { shieldEnvVars } from '../secrets.js';
@@ -219,57 +223,21 @@ export async function runDockerContainer(parameters: {
 		}
 	}
 
-	let username: string;
 	let projectRoot: string;
 	let imageName: string;
 	if (dockerSkipBuild) {
-		({ username, projectRoot, imageName } = getDockerImageMeta(cwd));
+		({ projectRoot, imageName } = getDockerImageMeta(cwd));
 	} else {
 		const result = await ensureDockerImage(cwd, config, dockerPull, dockerNoCache);
-		({ username, projectRoot, imageName } = result);
+		({ projectRoot, imageName } = result);
 		void refreshDockerImageInBackground(cwd, config);
 	}
 
 	const randomSuffix = Math.random().toString(36).slice(2, 8);
 	const containerName = `${getContainerPrefix(cwd)}${randomSuffix}`;
-	const homeDir = os.homedir();
-
-	const isClaude = isClaudeCodeLauncher(launcherDef);
-	const isCodex = isCodexLauncher(launcherDef);
-
-	const accountPaths = getAccountPaths(account);
-	await ensureAccountDirs(accountPaths, { claude: isClaude, codex: isCodex });
-	const { claudeConfigDir, codexConfigDir } = accountPaths;
-
-	const claudeMountArgs = isClaude
-		? (account
-			? [
-				'-v',
-				`${claudeConfigDir}:${claudeConfigDir}`,
-				'-e',
-				`CLAUDE_CONFIG_DIR=${claudeConfigDir}`,
-			]
-			: [
-				'-v',
-				`${claudeConfigDir}:/home/${username}/.claude`,
-				'-v',
-				`${path.join(homeDir, '.claude.json')}:/home/${username}/.claude.json`,
-			])
-		: [];
-
-	const codexMountArgs = isCodex
-		? (account
-			? [
-				'-v',
-				`${codexConfigDir}:${codexConfigDir}`,
-				'-e',
-				`CODEX_HOME=${codexConfigDir}`,
-			]
-			: [
-				'-v',
-				`${codexConfigDir}:/home/${username}/.codex`,
-			])
-		: [];
+	const spec: LauncherSpec = resolveLauncherSpec(launcherName ?? 'claude', undefined);
+	await ensureAccountDirsForSpec(spec, account);
+	const accountMountPlan = buildAccountMountPlan(spec, account);
 
 	const dockerArgs = [
 		'run',
@@ -284,8 +252,7 @@ export async function runDockerContainer(parameters: {
 		containerName,
 		'-v',
 		`${cwd}:${cwd}`,
-		...claudeMountArgs,
-		...codexMountArgs,
+		...accountMountPlan.dockerArgs,
 		'-v',
 		`${projectRoot}:${projectRoot}`,
 		'-v',
@@ -416,6 +383,10 @@ export async function runDockerContainer(parameters: {
 		}
 	}
 
+	if (launcherName) {
+		dockerArgs.push('-e', `CLAUDEX_LAUNCHER_NAME=${launcherName}`);
+	}
+
 	// Pass user startup commands via env var for in-docker.ts to handle
 	if (config.userStartupCommands && config.userStartupCommands.length > 0) {
 		dockerArgs.push('-e', `CLAUDEX_USER_STARTUP_COMMANDS=${JSON.stringify(config.userStartupCommands)}`);
@@ -423,13 +394,15 @@ export async function runDockerContainer(parameters: {
 
 	dockerArgs.push('-w', cwd);
 
-	// Claude-specific args: --setting-sources, --add-dir, permission flags
+	const cliFeatures = effectiveSpecField(spec, 'cliFeatures');
 	const claudeSpecificArgs: string[] = [];
-	if (isClaude) {
+	if (cliFeatures?.settingSources) {
 		const settingSources = config.settingSources ?? 'user,local';
 		console.error(`Setting sources: ${settingSources}`);
 		claudeSpecificArgs.push('--setting-sources', settingSources);
+	}
 
+	if (cliFeatures?.addDir) {
 		const addDirArgs = await buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
 		claudeSpecificArgs.push(...addDirArgs);
 	}

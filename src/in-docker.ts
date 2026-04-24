@@ -7,7 +7,8 @@ import { execa } from 'execa';
 import { z } from 'zod';
 import { type LauncherDefinition } from './config/index.js';
 import { hookGroupSchema, ensureOpenCodePluginSetup } from './hooks.js';
-import { buildLauncherCommand, isClaudeCodeLauncher } from './launcher.js';
+import { buildLauncherCommand } from './launcher.js';
+import { effectiveSpecField, resolveLauncherSpec } from './launchers/registry.js';
 import { setupKnownHosts } from './ssh/known-hosts.js';
 import { setupHostPortForwarding } from './port-proxy/container.js';
 import { parseJsonWithSchema } from './hooks/shared.js';
@@ -112,16 +113,19 @@ export async function mainInDocker() {
 
 	const launcherCommandJson = process.env.CLAUDEX_LAUNCHER_COMMAND;
 	const launcherModel = process.env.CLAUDEX_LAUNCHER_MODEL;
+	const launcherName = process.env.CLAUDEX_LAUNCHER_NAME;
 
 	try {
 		if (launcherCommandJson) {
 			const launcherCommand = JSON.parse(launcherCommandJson) as string[];
 			const def: LauncherDefinition = { command: launcherCommand, model: launcherModel };
-			if (!isClaudeCodeLauncher(def)) {
+			const spec = launcherName ? resolveLauncherSpec(launcherName, undefined) : undefined;
+			const hookStrategy = spec ? effectiveSpecField(spec, 'hookStrategy') : undefined;
+			if (hookStrategy === 'opencode-plugin') {
 				await ensureOpenCodePluginSetup();
 			}
 
-			const { command, args } = buildLauncherCommand(def, undefined, claudeArgs);
+			const { command, args } = buildLauncherCommand(def, undefined, claudeArgs, launcherName);
 			await execa(command, args, {
 				stdin: process.stdin,
 				stdout: process.stdout,

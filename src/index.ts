@@ -20,10 +20,15 @@ import {
 } from './config-cli.js';
 import { isUnsafeDirectory } from './safety.js';
 import { isErrnoException, collapseHomedir, expandTilde } from './utils.js';
-import { getAccountPaths, ensureAccountDirs } from './account.js';
 import { type SshAgentInfo } from './ssh/agent.js';
 import { buildAddDirArgs, getContainerPrefix, runDockerContainer } from './docker/run.js';
-import { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher, isCodexLauncher, resolveLauncherOverride } from './launcher.js';
+import { resolveLauncherDefinition, buildLauncherCommand, resolveLauncherOverride } from './launcher.js';
+import {
+	launcherRegistry,
+	effectiveSpecField, ensureAccountDirsForSpec,
+	getAccountPrimaryDir, resolveLauncherSpec,
+	type LauncherSpec,
+} from './launchers/registry.js';
 
 async function ensureMcpServerConfig(projectRoot: string, claudeConfigDir?: string) {
 	const claudeJsonPath = claudeConfigDir
@@ -869,8 +874,12 @@ async function runMv(source: string, destination: string, options: { account?: s
 
 	const mergedConfig = await getMergedConfig(resolvedDestination);
 	const account = options.account ?? mergedConfig.account;
-	const accountPaths = getAccountPaths(account);
-	const projectsDir = path.join(accountPaths.claudeConfigDir, 'projects');
+	const claudeConfigDir = getAccountPrimaryDir(launcherRegistry.claude, account);
+	if (!claudeConfigDir) {
+		throw new Error('Claude launcher is missing account metadata');
+	}
+
+	const projectsDir = path.join(claudeConfigDir, 'projects');
 
 	const encodedSource = encodeProjectPath(resolvedSource);
 	const encodedDestination = encodeProjectPath(resolvedDestination);
@@ -954,26 +963,26 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const mcpServersResolved = resolveMcpServers(earlyConfig.config.mcpServers);
 
 	const account = noAccount ? undefined : (cliAccount ?? earlyConfig.account);
-	const accountPaths = getAccountPaths(account);
 
 	const earlyLauncherName = cliLauncher ?? earlyConfig.config.launcher;
+	const earlySpec: LauncherSpec = resolveLauncherSpec(earlyLauncherName ?? 'claude', earlyConfig.launcherDefinitions);
 	const earlyLauncherDef = earlyLauncherName
 		? resolveLauncherDefinition(earlyLauncherName, earlyConfig.launcherDefinitions)
 		: undefined;
-	const earlyIsClaude = isClaudeCodeLauncher(earlyLauncherDef);
-	const earlyIsCodex = isCodexLauncher(earlyLauncherDef);
 
-	await ensureAccountDirs(accountPaths, { claude: earlyIsClaude, codex: earlyIsCodex });
+	await ensureAccountDirsForSpec(earlySpec, account);
 
 	if (account) {
 		console.error(`Account: ${account}`);
 	}
 
-	if (earlyIsClaude) {
-		await ensureHookSetup(accountPaths.claudeConfigDir, earlyConfig.config.claudeSettings);
+	const earlyHookStrategy = effectiveSpecField(earlySpec, 'hookStrategy');
+	if (earlyHookStrategy === 'claude-settings') {
+		const claudeDir = getAccountPrimaryDir(launcherRegistry.claude, account);
+		await ensureHookSetup(claudeDir, earlyConfig.config.claudeSettings);
 	}
 
-	if (earlyLauncherName === 'opencode') {
+	if (earlyHookStrategy === 'opencode-plugin') {
 		const { ensureOpenCodePluginSetup } = await import('./hooks.js');
 		await ensureOpenCodePluginSetup();
 	}
@@ -982,8 +991,10 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const currentFileUrl = import.meta.url;
 	const currentFilePath = fileURLToPath(currentFileUrl);
 	const projectRoot = path.resolve(path.dirname(currentFilePath), '..');
-	if (mcpServersResolved.claudex) {
-		await ensureMcpServerConfig(projectRoot, account ? accountPaths.claudeConfigDir : undefined);
+	const earlyMcpWiring = effectiveSpecField(earlySpec, 'mcpWiring');
+	if (mcpServersResolved.claudex && earlyMcpWiring === 'claude-json') {
+		const claudeDir = account ? getAccountPrimaryDir(launcherRegistry.claude, account) : undefined;
+		await ensureMcpServerConfig(projectRoot, claudeDir);
 	}
 
 	// Check directory safety and potentially create temp directory
@@ -1030,13 +1041,12 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 		const cliInDockerPath = path.join(projectRoot, 'build', 'cli.js');
 
-		const isClaude = isClaudeCodeLauncher(launcherDef);
-		const isCodex = isCodexLauncher(launcherDef);
+		const spec = resolveLauncherSpec(launcherName ?? 'claude', earlyConfig.launcherDefinitions);
+		const permissionFlags = effectiveSpecField(spec, 'permissionFlags');
 		const launcherOverride = resolveLauncherOverride(config.launcherOverrides, launcherName, launcherDef);
 		const dockerClaudeArgs = [
-			...(isClaude && config.dockerDangerouslySkipPermissions ? [ '--dangerously-skip-permissions' ] : []),
-			...(isClaude && config.dockerAllowDangerouslySkipPermissions ? [ '--allow-dangerously-skip-permissions' ] : []),
-			...(isCodex && config.dockerDangerouslySkipPermissions ? [ '--dangerously-bypass-approvals-and-sandbox' ] : []),
+			...(permissionFlags?.dangerouslySkip && config.dockerDangerouslySkipPermissions ? [ permissionFlags.dangerouslySkip ] : []),
+			...(permissionFlags?.allowDangerouslySkip && config.dockerAllowDangerouslySkipPermissions ? [ permissionFlags.allowDangerouslySkip ] : []),
 			...(launcherOverride.args ?? []),
 			...claudeArgs,
 		];
@@ -1076,14 +1086,19 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	} else {
 		// Load config for settingSources even in non-Docker mode
 		const { config, profileVolumes } = await getMergedConfig(cwd);
-		const isClaude = isClaudeCodeLauncher(launcherDef);
+		const spec = resolveLauncherSpec(launcherName ?? 'claude', earlyConfig.launcherDefinitions);
+		const cliFeatures = effectiveSpecField(spec, 'cliFeatures');
 
 		const claudeFullArgs: string[] = [];
-		if (isClaude) {
+		if (cliFeatures?.settingSources) {
 			const settingSources = config.settingSources ?? 'user,local';
 			console.error(`Setting sources: ${settingSources}`);
+			claudeFullArgs.push('--setting-sources', settingSources);
+		}
+
+		if (cliFeatures?.addDir) {
 			const addDirArgs = await buildAddDirArgs(config, cwd, projectRoot, profileVolumes);
-			claudeFullArgs.push('--setting-sources', settingSources, ...addDirArgs);
+			claudeFullArgs.push(...addDirArgs);
 		}
 
 		const launcherOverride = resolveLauncherOverride(config.launcherOverrides, launcherName, launcherDef);
@@ -1094,7 +1109,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		claudeFullArgs.push(...claudeArgs);
 
 		if (launcherDef) {
-			const { command: launcherCmd, args: launcherArgs } = buildLauncherCommand(launcherDef, cliModel, claudeFullArgs);
+			const { command: launcherCmd, args: launcherArgs } = buildLauncherCommand(launcherDef, cliModel, claudeFullArgs, launcherName);
 			claudeChildProcess = execa(launcherCmd, launcherArgs, {
 				stdin: process.stdin,
 				stdout: process.stdout,
@@ -1110,7 +1125,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	}
 
 	try {
-		await createClaudeCodeMemory(earlyConfig.config.hooksDescriptions === false ? undefined : hooksResolved, account ? accountPaths.claudeConfigDir : undefined);
+		await createClaudeCodeMemory(earlyConfig.config.hooksDescriptions === false ? undefined : hooksResolved, account ? getAccountPrimaryDir(launcherRegistry.claude, account) : undefined);
 	} catch (error) {
 		if (!(
 			error instanceof Error
@@ -1152,5 +1167,3 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		cleanupHostPortProxies?.();
 	}
 }
-
-export { resolveLauncherDefinition, buildLauncherCommand, isClaudeCodeLauncher } from './launcher.js';

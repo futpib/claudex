@@ -1,6 +1,5 @@
 export {
 	baseConfigSchema, rootConfigSchema,
-	builtinLauncherDefinitions,
 	allMcpServerFlags,
 	validTopLevelKeys, fixedSubKeyFields, recordFields,
 	resolveHooks, resolveMcpServers,

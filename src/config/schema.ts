@@ -96,25 +96,6 @@ export type RootConfig = z.infer<typeof rootConfigSchema>;
 export type LauncherDefinition = z.infer<typeof launcherDefinitionSchema>;
 export type LauncherOverride = z.infer<typeof launcherOverrideSchema>;
 
-export const builtinLauncherDefinitions: Record<string, LauncherDefinition> = {
-	claude: {
-		command: [ 'claude' ],
-	},
-	opencode: {
-		command: [ 'opencode' ],
-		volumes: [ '~/.local/share/opencode', '~/.config/opencode' ],
-	},
-	ollama: {
-		command: [ 'ollama', 'launch', 'claude' ],
-		packages: [ 'ollama' ],
-		hostPorts: [ 11_434 ],
-	},
-	codex: {
-		command: [ 'codex' ],
-		packages: [ 'openai-codex' ],
-	},
-};
-
 // Merged config is the same as base config (after merging root + project)
 export type ClaudexConfig = BaseConfig;
 

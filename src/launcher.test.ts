@@ -1,47 +1,54 @@
 import test from 'ava';
 import { type LauncherDefinition } from './config/index.js';
-import { buildLauncherCommand, resolveLauncherDefinition, isClaudeCodeLauncher, isCodexLauncher, resolveLauncherOverride } from './launcher.js';
+import { buildLauncherCommand, resolveLauncherDefinition, isClaudeCodeLauncher, isClaudeCodeSpec, resolveLauncherOverride } from './launcher.js';
+import { launcherRegistry } from './launchers/registry.js';
 
 // --- buildLauncherCommand ---
 
 test('buildLauncherCommand with bare claude launcher passes args directly', t => {
 	const def: LauncherDefinition = { command: [ 'claude' ] };
-	const result = buildLauncherCommand(def, undefined, [ '--setting-sources', 'user,local' ]);
+	const result = buildLauncherCommand(def, undefined, [ '--setting-sources', 'user,local' ], 'claude');
 	t.is(result.command, 'claude');
 	t.deepEqual(result.args, [ '--setting-sources', 'user,local' ]);
 });
 
 test('buildLauncherCommand with bare codex launcher passes args directly', t => {
 	const def: LauncherDefinition = { command: [ 'codex' ] };
-	const result = buildLauncherCommand(def, undefined, [ 'exec', '--help' ]);
+	const result = buildLauncherCommand(def, undefined, [ 'exec', '--help' ], 'codex');
 	t.is(result.command, 'codex');
 	t.deepEqual(result.args, [ 'exec', '--help' ]);
 });
 
-test('buildLauncherCommand with non-claude launcher inserts -- separator', t => {
+test('buildLauncherCommand with ollama launcher inserts -- separator', t => {
 	const def: LauncherDefinition = { command: [ 'ollama', 'launch', 'claude' ] };
-	const result = buildLauncherCommand(def, undefined, [ '--setting-sources', 'user,local' ]);
+	const result = buildLauncherCommand(def, undefined, [ '--setting-sources', 'user,local' ], 'ollama');
 	t.is(result.command, 'ollama');
 	t.deepEqual(result.args, [ 'launch', 'claude', '--', '--setting-sources', 'user,local' ]);
 });
 
 test('buildLauncherCommand adds --model from definition', t => {
 	const def: LauncherDefinition = { command: [ 'ollama', 'launch', 'claude' ], model: 'kimi-k2.5:cloud' };
-	const result = buildLauncherCommand(def, undefined, [ 'arg1' ]);
+	const result = buildLauncherCommand(def, undefined, [ 'arg1' ], 'ollama');
 	t.is(result.command, 'ollama');
 	t.deepEqual(result.args, [ 'launch', 'claude', '--model', 'kimi-k2.5:cloud', '--', 'arg1' ]);
 });
 
 test('buildLauncherCommand model override takes precedence over definition model', t => {
 	const def: LauncherDefinition = { command: [ 'ollama', 'launch', 'claude' ], model: 'default-model' };
-	const result = buildLauncherCommand(def, 'override-model', [ 'arg1' ]);
+	const result = buildLauncherCommand(def, 'override-model', [ 'arg1' ], 'ollama');
 	t.deepEqual(result.args, [ 'launch', 'claude', '--model', 'override-model', '--', 'arg1' ]);
 });
 
 test('buildLauncherCommand with no model omits --model flag', t => {
 	const def: LauncherDefinition = { command: [ 'ollama', 'launch', 'claude' ] };
-	const result = buildLauncherCommand(def, undefined, []);
+	const result = buildLauncherCommand(def, undefined, [], 'ollama');
 	t.deepEqual(result.args, [ 'launch', 'claude', '--' ]);
+});
+
+test('buildLauncherCommand without launcher name falls back to command pattern', t => {
+	const def: LauncherDefinition = { command: [ 'claude' ] };
+	const result = buildLauncherCommand(def, undefined, [ 'arg' ]);
+	t.deepEqual(result.args, [ 'arg' ]);
 });
 
 // --- resolveLauncherDefinition ---
@@ -80,7 +87,6 @@ test('resolveLauncherDefinition merges config override with built-in', t => {
 	const def = resolveLauncherDefinition('ollama', configDefs);
 	t.deepEqual(def.command, [ 'ollama', 'launch', 'claude' ]);
 	t.is(def.model, 'qwen3-coder:480b');
-	// Built-in packages and hostPorts should be preserved
 	t.deepEqual(def.packages, [ 'ollama' ]);
 	t.deepEqual(def.hostPorts, [ 11_434 ]);
 });
@@ -91,11 +97,10 @@ test('resolveLauncherDefinition config command overrides built-in command', t =>
 	};
 	const def = resolveLauncherDefinition('ollama', configDefs);
 	t.deepEqual(def.command, [ 'custom-ollama', 'launch' ]);
-	// Built-in base config fields still apply
 	t.deepEqual(def.packages, [ 'ollama' ]);
 });
 
-// --- isClaudeCodeLauncher / isCodexLauncher ---
+// --- isClaudeCodeLauncher (legacy) / isClaudeCodeSpec ---
 
 test('isClaudeCodeLauncher true for undefined, [claude], and ollama launch X', t => {
 	t.true(isClaudeCodeLauncher(undefined));
@@ -107,11 +112,12 @@ test('isClaudeCodeLauncher true for undefined, [claude], and ollama launch X', t
 	t.false(isClaudeCodeLauncher({ command: [ 'ollama', 'serve' ] }));
 });
 
-test('isCodexLauncher true only for [codex]', t => {
-	t.false(isCodexLauncher(undefined));
-	t.true(isCodexLauncher({ command: [ 'codex' ] }));
-	t.false(isCodexLauncher({ command: [ 'claude' ] }));
-	t.false(isCodexLauncher({ command: [ 'ollama', 'launch', 'claude' ] }));
+test('isClaudeCodeSpec follows wraps chain', t => {
+	t.true(isClaudeCodeSpec(undefined));
+	t.true(isClaudeCodeSpec(launcherRegistry.claude));
+	t.true(isClaudeCodeSpec(launcherRegistry.ollama));
+	t.false(isClaudeCodeSpec(launcherRegistry.codex));
+	t.false(isClaudeCodeSpec(launcherRegistry.opencode));
 });
 
 // --- resolveLauncherOverride ---
@@ -138,7 +144,7 @@ test('resolveLauncherOverride uses claude entry when launcher name undefined', t
 	t.deepEqual(result.env, { A: '1' });
 });
 
-test('resolveLauncherOverride layers claude base under ollama-launch wrapper', t => {
+test('resolveLauncherOverride layers claude base under ollama wrapper', t => {
 	const overrides = {
 		claude: { args: [ '--effort', 'max' ], env: { CCD: '1' } },
 		ollama: { args: [ '--extra' ], env: { O: '2' } },
@@ -155,4 +161,13 @@ test('resolveLauncherOverride does not layer claude base under codex', t => {
 	};
 	const result = resolveLauncherOverride(overrides, 'codex', { command: [ 'codex' ] });
 	t.deepEqual(result.args, [ '--codex-flag' ]);
+});
+
+test('resolveLauncherOverride does not layer claude base under opencode', t => {
+	const overrides = {
+		claude: { args: [ '--claude-flag' ] },
+		opencode: { args: [ '--opencode-flag' ] },
+	};
+	const result = resolveLauncherOverride(overrides, 'opencode', { command: [ 'opencode' ] });
+	t.deepEqual(result.args, [ '--opencode-flag' ]);
 });
