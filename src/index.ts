@@ -987,14 +987,52 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		await ensureOpenCodePluginSetup();
 	}
 
-	// Ensure MCP server is configured in ~/.claude.json
+	if (earlyHookStrategy === 'codex-hooks-json') {
+		const codexDir = getAccountPrimaryDir(launcherRegistry.codex, account);
+		if (codexDir) {
+			const { ensureCodexHookSetup } = await import('./hooks.js');
+			await ensureCodexHookSetup(codexDir);
+		}
+	}
+
+	// Ensure MCP server is configured wherever the active launcher expects it.
 	const currentFileUrl = import.meta.url;
 	const currentFilePath = fileURLToPath(currentFileUrl);
 	const projectRoot = path.resolve(path.dirname(currentFilePath), '..');
 	const earlyMcpWiring = effectiveSpecField(earlySpec, 'mcpWiring');
-	if (mcpServersResolved.claudex && earlyMcpWiring === 'claude-json') {
-		const claudeDir = account ? getAccountPrimaryDir(launcherRegistry.claude, account) : undefined;
-		await ensureMcpServerConfig(projectRoot, claudeDir);
+	if (mcpServersResolved.claudex) {
+		switch (earlyMcpWiring) {
+			case 'claude-json': {
+				const claudeDir = account ? getAccountPrimaryDir(launcherRegistry.claude, account) : undefined;
+				await ensureMcpServerConfig(projectRoot, claudeDir);
+				break;
+			}
+
+			case 'opencode-config': {
+				const opencodeConfigDir = getAccountPrimaryDir(launcherRegistry.opencode, account);
+				if (opencodeConfigDir) {
+					const { ensureOpencodeMcpConfig } = await import('./hooks.js');
+					await ensureOpencodeMcpConfig(opencodeConfigDir, projectRoot);
+				}
+
+				break;
+			}
+
+			case 'codex-config': {
+				const codexDir = getAccountPrimaryDir(launcherRegistry.codex, account);
+				if (codexDir) {
+					const { ensureCodexMcpConfig } = await import('./hooks.js');
+					await ensureCodexMcpConfig(codexDir, projectRoot);
+				}
+
+				break;
+			}
+
+			case 'none':
+			case undefined: {
+				break;
+			}
+		}
 	}
 
 	// Check directory safety and potentially create temp directory

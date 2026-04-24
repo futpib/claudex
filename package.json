@@ -20,12 +20,11 @@
     },
     "verbose": true
   },
-  "bin": {
-    "claudex": "./build/cli.js"
-  },
+  "bin": "./build/cli.js",
   "devDependencies": {
     "@ava/typescript": "^6.0.0",
     "@types/diff": "^8.0.0",
+    "@types/iarna__toml": "^2.0.5",
     "@types/invariant": "^2.2.37",
     "@types/luxon": "^3.7.1",
     "@types/node": "^25.3.3",
@@ -44,6 +43,7 @@
   "packageManager": "yarn@4.9.2",
   "dependencies": {
     "@futpib/parser": "^1.0.8",
+    "@iarna/toml": "^2.2.5",
     "@inquirer/prompts": "^8.3.0",
     "@modelcontextprotocol/sdk": "^1.27.1",
     "commander": "^14.0.3",

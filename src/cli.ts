@@ -17,6 +17,12 @@ switch (subcommand) {
 				break;
 			}
 
+			case 'post-tool-use': {
+				const { main } = await import('./hooks/post-tool-use.js');
+				await main();
+				break;
+			}
+
 			case 'notification': {
 				const { main } = await import('./hooks/notification.js');
 				await main();
@@ -31,6 +37,12 @@ switch (subcommand) {
 
 			case 'user-prompt-submit': {
 				const { main } = await import('./hooks/user-prompt-submit.js');
+				await main();
+				break;
+			}
+
+			case 'session-start': {
+				const { main } = await import('./hooks/session-start.js');
 				await main();
 				break;
 			}

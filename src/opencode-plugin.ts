@@ -18,6 +18,13 @@ const toolNameMap: Record<string, string> = {
 	todowrite: 'TodoWrite',
 	task: 'Task',
 	question: 'AskUserQuestion',
+	codesearch: 'CodeSearch',
+	batch: 'Batch',
+	lsp: 'Lsp',
+	skill: 'Skill',
+	apply_patch: 'ApplyPatch',
+	invalid: 'Invalid',
+	plan_exit: 'PlanExit',
 };
 
 const argFieldMap: Record<string, Record<string, string>> = {
@@ -81,6 +88,29 @@ type ToolExecuteBeforeOutput = {
 	args: Record<string, unknown>;
 };
 
+type ToolExecuteAfterInput = {
+	tool: string;
+	sessionID: string;
+	callID: string;
+	args: Record<string, unknown>;
+};
+
+type ToolExecuteAfterOutput = {
+	title?: string;
+	output?: string;
+	metadata?: Record<string, unknown>;
+};
+
+type PermissionAskInput = {
+	id?: string;
+	sessionID?: string;
+	type?: string;
+	title?: string;
+	description?: string;
+	tool?: string;
+	metadata?: Record<string, unknown>;
+};
+
 type ChatMessageInput = {
 	sessionID: string;
 };
@@ -115,6 +145,45 @@ export const ClaudexPlugin = async () => ({
 			}
 
 			console.error('[claudex] hook error:', stderr ?? (error as Error).message ?? error);
+		}
+	},
+	async 'tool.execute.after'(input: ToolExecuteAfterInput, output: ToolExecuteAfterOutput) {
+		const claudeName = toolNameMap[input.tool] ?? input.tool;
+		const claudeArgs = mapArgs(input.tool, input.args);
+
+		const hookInput = JSON.stringify({
+			tool_name: claudeName,
+			tool_input: claudeArgs,
+			tool_response: {
+				title: output.title,
+				output: output.output,
+				metadata: output.metadata,
+			},
+			session_id: input.sessionID ?? '',
+		});
+
+		try {
+			await execa('claudex', [ 'hook', 'post-tool-use' ], { input: hookInput, timeout: 10_000 });
+		} catch (error) {
+			const { stderr } = error as { stderr?: string };
+			console.error('[claudex] post-tool-use hook error:', stderr ?? (error as Error).message ?? error);
+		}
+	},
+	async 'permission.ask'(input: PermissionAskInput) {
+		const claudeTool = input.tool ? (toolNameMap[input.tool] ?? input.tool) : undefined;
+		const hookInput = JSON.stringify({
+			session_id: input.sessionID ?? '',
+			hook_event_name: 'Notification',
+			message: input.title ?? input.description ?? `Permission requested${claudeTool ? ` for ${claudeTool}` : ''}`,
+			tool_name: claudeTool,
+			permission_type: input.type,
+		});
+
+		try {
+			await execa('claudex', [ 'hook', 'notification' ], { input: hookInput, timeout: 10_000 });
+		} catch (error) {
+			const { stderr } = error as { stderr?: string };
+			console.error('[claudex] notification hook error:', stderr ?? (error as Error).message ?? error);
 		}
 	},
 	async event(input: { event: { type: string; properties?: { sessionID?: string } } }) {

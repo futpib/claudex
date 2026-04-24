@@ -84,7 +84,7 @@ test('effectiveSpecField returns own field when set', t => {
 });
 
 test('effectiveSpecField returns undefined when missing', t => {
-	t.is(effectiveSpecField(launcherRegistry.codex, 'hookStrategy'), undefined);
+	t.is(effectiveSpecField(launcherRegistry.codex, 'cliFeatures'), undefined);
 	t.is(effectiveSpecField(launcherRegistry.opencode, 'permissionFlags'), undefined);
 });
 
@@ -110,19 +110,19 @@ test('buildAccountMountPlan for codex (no account) mounts ~/.codex', t => {
 	t.deepEqual(plan.envVars, {});
 });
 
-test('buildAccountMountPlan for opencode (no account) mounts data and config dirs', t => {
+test('buildAccountMountPlan for opencode (no account) mounts config and data dirs', t => {
 	const plan = buildAccountMountPlan(launcherRegistry.opencode, undefined);
 	const home = os.homedir();
 	t.deepEqual(plan.dockerArgs, [
 		'-v',
-		`${home}/.local/share/opencode:${home}/.local/share/opencode`,
-		'-v',
 		`${home}/.config/opencode:${home}/.config/opencode`,
+		'-v',
+		`${home}/.local/share/opencode:${home}/.local/share/opencode`,
 	]);
 	t.deepEqual(plan.envVars, {});
 	t.deepEqual(plan.dirsToCreate, [
-		`${home}/.local/share/opencode`,
 		`${home}/.config/opencode`,
+		`${home}/.local/share/opencode`,
 	]);
 });
 
@@ -163,19 +163,19 @@ test('buildAccountMountPlan for codex (account) binds account dir and exports CO
 	]);
 });
 
-test('buildAccountMountPlan for opencode (account) splits data and config subpaths', t => {
+test('buildAccountMountPlan for opencode (account) splits config and data subpaths', t => {
 	const plan = buildAccountMountPlan(launcherRegistry.opencode, 'work');
 	const accountDir = path.join(paths.config, 'accounts', 'work', 'opencode');
 	const home = os.homedir();
 	t.deepEqual(plan.dockerArgs, [
 		'-v',
-		`${accountDir}/data:${home}/.local/share/opencode`,
-		'-v',
 		`${accountDir}/config:${home}/.config/opencode`,
+		'-v',
+		`${accountDir}/data:${home}/.local/share/opencode`,
 	]);
 	t.deepEqual(plan.dirsToCreate, [
-		`${accountDir}/data`,
 		`${accountDir}/config`,
+		`${accountDir}/data`,
 	]);
 });
 
@@ -204,7 +204,7 @@ test('getAccountPrimaryDir for ollama inherits claude dir via wraps', t => {
 	t.is(getAccountPrimaryDir(launcherRegistry.ollama, undefined), path.join(os.homedir(), '.claude'));
 });
 
-test('getAccountPrimaryDir for opencode (account) returns the data subpath', t => {
+test('getAccountPrimaryDir for opencode (account) returns the config subpath', t => {
 	const accountDir = path.join(paths.config, 'accounts', 'work', 'opencode');
-	t.is(getAccountPrimaryDir(launcherRegistry.opencode, 'work'), path.join(accountDir, 'data'));
+	t.is(getAccountPrimaryDir(launcherRegistry.opencode, 'work'), path.join(accountDir, 'config'));
 });

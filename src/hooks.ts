@@ -6,6 +6,7 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod';
 import { execa } from 'execa';
 import invariant from 'invariant';
+import toml from '@iarna/toml';
 import { isErrnoException, parseJson } from './utils.js';
 
 export const hookEntrySchema = z.object({
@@ -22,6 +23,7 @@ export const claudeSettingsSchema = z.object({
 	includeCoAuthoredBy: z.boolean().optional(),
 	hooks: z.object({
 		PreToolUse: z.array(hookGroupSchema).optional(),
+		PostToolUse: z.array(hookGroupSchema).optional(),
 		UserPromptSubmit: z.array(hookGroupSchema).optional(),
 		Notification: z.array(hookGroupSchema).optional(),
 		Stop: z.array(hookGroupSchema).optional(),
@@ -41,7 +43,7 @@ function hookCommand(claudexPath: string, hookName: string): string {
 
 async function setupHook(
 	settings: ClaudeSettings,
-	hookType: 'PreToolUse' | 'UserPromptSubmit' | 'Notification' | 'Stop',
+	hookType: 'PreToolUse' | 'PostToolUse' | 'UserPromptSubmit' | 'Notification' | 'Stop',
 	command: string,
 ): Promise<boolean> {
 	if (!settings.hooks![hookType]) {
@@ -71,7 +73,7 @@ function removeOldHooks(settings: ClaudeSettings): boolean {
 	}
 
 	let removed = false;
-	const hookTypes = [ 'PreToolUse', 'UserPromptSubmit', 'Notification', 'Stop' ] as const;
+	const hookTypes = [ 'PreToolUse', 'PostToolUse', 'UserPromptSubmit', 'Notification', 'Stop' ] as const;
 	for (const hookType of hookTypes) {
 		const groups = settings.hooks[hookType];
 		if (!groups) {
@@ -150,6 +152,7 @@ export async function ensureHookSetup(
 	needsUpdate = applyClaudeSettingsOverlay(settings, claudeSettingsOverlay) || needsUpdate;
 
 	needsUpdate = await setupHook(settings, 'PreToolUse', hookCommand(claudexPath, 'pre-tool-use')) || needsUpdate;
+	needsUpdate = await setupHook(settings, 'PostToolUse', hookCommand(claudexPath, 'post-tool-use')) || needsUpdate;
 	needsUpdate = await setupHook(settings, 'UserPromptSubmit', hookCommand(claudexPath, 'user-prompt-submit')) || needsUpdate;
 	needsUpdate = await setupHook(settings, 'Notification', hookCommand(claudexPath, 'notification')) || needsUpdate;
 	needsUpdate = await setupHook(settings, 'Stop', hookCommand(claudexPath, 'stop')) || needsUpdate;
@@ -176,4 +179,161 @@ export async function ensureOpenCodePluginSetup() {
 	}
 
 	await fs.symlink(pluginSource, pluginLink);
+}
+
+export function buildMcpServerCommand(projectRoot: string): { command: string; args: string[] } {
+	return {
+		command: 'node',
+		args: [ path.join(projectRoot, 'build', 'mcp', 'cli.js') ],
+	};
+}
+
+export async function ensureOpencodeMcpConfig(configDir: string, projectRoot: string) {
+	await fs.mkdir(configDir, { recursive: true });
+	const configPath = path.join(configDir, 'opencode.json');
+
+	let existing: Record<string, unknown> = {};
+	try {
+		const content = await fs.readFile(configPath, 'utf8');
+		try {
+			existing = parseJson(content) as Record<string, unknown>;
+		} catch {
+			console.warn(`Warning: ${configPath} contains invalid JSON; overwriting.`);
+		}
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
+	}
+
+	const mcp = (existing.mcp ?? {}) as Record<string, unknown>;
+	const { command, args } = buildMcpServerCommand(projectRoot);
+	mcp.claudex = {
+		type: 'local',
+		command: [ command, ...args ],
+	};
+	existing.mcp = mcp;
+
+	await fs.writeFile(configPath, JSON.stringify(existing, null, 2));
+}
+
+// Codex hook events (matches https://developers.openai.com/codex/hooks).
+const codexHookEvents = [
+	'SessionStart',
+	'PreToolUse',
+	'PostToolUse',
+	'UserPromptSubmit',
+	'PermissionRequest',
+	'Stop',
+] as const;
+
+// Map each codex event to claudex's `claudex hook <name>` dispatcher.
+const codexEventToClaudexHook: Record<typeof codexHookEvents[number], string> = {
+	SessionStart: 'session-start',
+	PreToolUse: 'pre-tool-use',
+	PostToolUse: 'post-tool-use',
+	UserPromptSubmit: 'user-prompt-submit',
+	PermissionRequest: 'notification',
+	Stop: 'stop',
+};
+
+type CodexHookEntry = {
+	type: string;
+	command: string;
+};
+
+type CodexHookGroup = {
+	matcher?: string;
+	hooks: CodexHookEntry[];
+};
+
+type CodexHooksFile = {
+	hooks?: Partial<Record<typeof codexHookEvents[number], CodexHookGroup[]>>;
+};
+
+async function upsertCodexConfigToml(
+	codexDir: string,
+	mutate: (config: Record<string, unknown>) => void,
+): Promise<void> {
+	await fs.mkdir(codexDir, { recursive: true });
+	const configPath = path.join(codexDir, 'config.toml');
+
+	let parsed: Record<string, unknown> = {};
+	try {
+		const content = await fs.readFile(configPath, 'utf8');
+		try {
+			parsed = toml.parse(content) as Record<string, unknown>;
+		} catch (error) {
+			console.warn(`Warning: ${configPath} is not valid TOML; rewriting. (${error instanceof Error ? error.message : String(error)})`);
+		}
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
+	}
+
+	mutate(parsed);
+	await fs.writeFile(configPath, toml.stringify(parsed as toml.JsonMap));
+}
+
+export async function ensureCodexHookSetup(codexDir: string) {
+	await fs.mkdir(codexDir, { recursive: true });
+	const hooksPath = path.join(codexDir, 'hooks.json');
+
+	let existing: CodexHooksFile = {};
+	try {
+		const content = await fs.readFile(hooksPath, 'utf8');
+		try {
+			existing = parseJson(content) as CodexHooksFile;
+		} catch {
+			console.warn(`Warning: ${hooksPath} contains invalid JSON; overwriting.`);
+		}
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
+	}
+
+	const claudexPath = await findClaudexPath();
+	invariant(claudexPath, 'claudex executable must be found');
+
+	existing.hooks ??= {};
+	for (const event of codexHookEvents) {
+		const groups = existing.hooks[event] ?? [];
+		const claudexCommand = hookCommand(claudexPath, codexEventToClaudexHook[event]);
+
+		// Drop any previous claudex-owned entries, keeping user-added ones.
+		const userGroups = groups
+			.map(group => ({
+				...group,
+				hooks: group.hooks.filter(h => !h.command.startsWith(`${claudexPath} hook `)),
+			}))
+			.filter(group => group.hooks.length > 0);
+
+		userGroups.push({
+			matcher: '.*',
+			hooks: [ { type: 'command', command: claudexCommand } ],
+		});
+		existing.hooks[event] = userGroups;
+	}
+
+	await fs.writeFile(hooksPath, JSON.stringify(existing, null, 2));
+
+	await upsertCodexConfigToml(codexDir, config => {
+		const features = (config.features ?? {}) as Record<string, unknown>;
+		features.codex_hooks = true;
+		config.features = features;
+	});
+}
+
+export async function ensureCodexMcpConfig(codexDir: string, projectRoot: string) {
+	const { command, args } = buildMcpServerCommand(projectRoot);
+	await upsertCodexConfigToml(codexDir, config => {
+		const servers = (config.mcp_servers ?? {}) as Record<string, unknown>;
+		servers.claudex = {
+			command,
+			args,
+		};
+		config.mcp_servers = servers;
+	});
 }

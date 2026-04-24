@@ -31,8 +31,8 @@ export type LauncherCliFeatures = {
 	addDir?: boolean;
 };
 
-export type LauncherHookStrategy = 'claude-settings' | 'opencode-plugin' | 'none';
-export type LauncherMcpWiring = 'claude-json' | 'plugin' | 'none';
+export type LauncherHookStrategy = 'claude-settings' | 'opencode-plugin' | 'codex-hooks-json' | 'none';
+export type LauncherMcpWiring = 'claude-json' | 'opencode-config' | 'codex-config' | 'none';
 
 // Internal behavior metadata for a built-in launcher. Not user-configurable.
 export type LauncherSpec = {
@@ -86,13 +86,15 @@ export const launcherRegistry: Record<string, LauncherSpec> = {
 		isBareCommand: true,
 		account: {
 			dirName: 'opencode',
+			// Config mount comes first so getAccountPrimaryDir() returns the
+			// directory that holds opencode.json (config), not the state dir.
 			mounts: [
-				{ host: '~/.local/share/opencode', container: '~/.local/share/opencode', accountSubpath: 'data' },
 				{ host: '~/.config/opencode', container: '~/.config/opencode', accountSubpath: 'config' },
+				{ host: '~/.local/share/opencode', container: '~/.local/share/opencode', accountSubpath: 'data' },
 			],
 		},
 		hookStrategy: 'opencode-plugin',
-		mcpWiring: 'plugin',
+		mcpWiring: 'opencode-config',
 	},
 	ollama: {
 		name: 'ollama',
@@ -115,6 +117,8 @@ export const launcherRegistry: Record<string, LauncherSpec> = {
 		permissionFlags: {
 			dangerouslySkip: '--dangerously-bypass-approvals-and-sandbox',
 		},
+		hookStrategy: 'codex-hooks-json',
+		mcpWiring: 'codex-config',
 	},
 };
 
