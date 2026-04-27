@@ -933,6 +933,98 @@ async function runMv(source: string, destination: string, options: { account?: s
 	}
 }
 
+const sessionIdPattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
+
+function extractResumeSessionId(args: string[]): string | undefined {
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === '--resume' || arg === '-r') {
+			const next = args[i + 1];
+			if (next && sessionIdPattern.test(next)) {
+				return next;
+			}
+		} else if (arg.startsWith('--resume=')) {
+			const value = arg.slice('--resume='.length);
+			if (sessionIdPattern.test(value)) {
+				return value;
+			}
+		}
+	}
+
+	return undefined;
+}
+
+async function findSessionFileInOtherProjects(
+	sessionId: string,
+	projectsDir: string,
+	currentEncoded: string,
+): Promise<string | undefined> {
+	let entries: string[];
+	try {
+		entries = await fs.readdir(projectsDir);
+	} catch {
+		return undefined;
+	}
+
+	for (const entry of entries) {
+		if (entry === currentEncoded) {
+			continue;
+		}
+
+		const candidate = path.join(projectsDir, entry, `${sessionId}.jsonl`);
+		try {
+			// eslint-disable-next-line no-await-in-loop
+			await fs.access(candidate);
+			return candidate;
+		} catch {
+			// Not present here — keep looking
+		}
+	}
+
+	return undefined;
+}
+
+async function copyResumeSessionIfElsewhere(
+	claudeArgs: string[],
+	cwd: string,
+	spec: LauncherSpec,
+	account: string | undefined,
+): Promise<void> {
+	if (!walkSpecWraps(spec).some(s => s.name === 'claude')) {
+		return;
+	}
+
+	const sessionId = extractResumeSessionId(claudeArgs);
+	if (!sessionId) {
+		return;
+	}
+
+	const claudeConfigDir = getAccountPrimaryDir(launcherRegistry.claude, account);
+	if (!claudeConfigDir) {
+		return;
+	}
+
+	const projectsDir = path.join(claudeConfigDir, 'projects');
+	const currentEncoded = encodeProjectPath(cwd);
+	const targetPath = path.join(projectsDir, currentEncoded, `${sessionId}.jsonl`);
+
+	try {
+		await fs.access(targetPath);
+		return;
+	} catch {
+		// Not in current project dir — search elsewhere
+	}
+
+	const sourcePath = await findSessionFileInOtherProjects(sessionId, projectsDir, currentEncoded);
+	if (!sourcePath) {
+		return;
+	}
+
+	await fs.mkdir(path.dirname(targetPath), { recursive: true });
+	await fs.copyFile(sourcePath, targetPath);
+	console.error(`Copied session ${sessionId}: ${collapseHomedir(sourcePath)} → ${collapseHomedir(targetPath)}`);
+}
+
 async function runMain(claudeArgs: string[], options: MainOptions) {
 	const {
 		docker: useDocker,
@@ -1062,6 +1154,8 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			cwd = temporaryDirCreated;
 		}
 	}
+
+	await copyResumeSessionIfElsewhere(claudeArgs, cwd, earlySpec, account);
 
 	let claudeChildProcess;
 	let dockerContainerName: string | undefined;
