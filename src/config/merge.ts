@@ -646,9 +646,12 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 		merged = mergeProjectConfig(rootConfig, merged, projectMatch.config);
 	}
 
-	// Auto-share volumes between group members (shareVolumes defaults to true)
-	if (merged.shareVolumes !== false && projectMatch?.config.group) {
-		const siblingPaths = getGroupSiblingPaths(rootConfig, projectMatch.config.group, resolutionPath);
+	// Auto-share volumes between group members (shareVolumes defaults to true).
+	// Inside a worktree, projectMatch is undefined (the worktree path is not in
+	// projects); fall back to the parent repo's match so siblings still share.
+	const effectiveProjectMatch = projectMatch ?? worktreeParentMatch;
+	if (merged.shareVolumes !== false && effectiveProjectMatch?.config.group) {
+		const siblingPaths = getGroupSiblingPaths(rootConfig, effectiveProjectMatch.config.group, resolutionPath);
 		if (siblingPaths.length > 0) {
 			const siblingVolumes: Volume[] = siblingPaths;
 			merged = {
