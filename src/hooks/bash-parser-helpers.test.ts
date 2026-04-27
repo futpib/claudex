@@ -1,7 +1,22 @@
 import os from 'node:os';
 import test from 'ava';
 import {
-	extractCommandNames, hasChainOperators, hasGitChangeDirectoryFlag, getGitChangeDirectoryPath, hasCargoManifestPathFlag, hasYarnCwdFlag, getPipedFilterCommand, findAbsolutePathUnderCwd, findAbsolutePathUnderHome, hasBashCommandFlag, getLeadingCdTarget, getChainedCommandStrings, getGitCommandWithoutC, getCargoManifestPathInfo, getYarnCwdInfo,
+	extractCommandNames,
+	extractSimpleCommandInvocations,
+	hasChainOperators,
+	hasGitChangeDirectoryFlag,
+	getGitChangeDirectoryPath,
+	hasCargoManifestPathFlag,
+	hasYarnCwdFlag,
+	getPipedFilterCommand,
+	findAbsolutePathUnderCwd,
+	findAbsolutePathUnderHome,
+	hasBashCommandFlag,
+	getLeadingCdTarget,
+	getChainedCommandStrings,
+	getGitCommandWithoutC,
+	getCargoManifestPathInfo,
+	getYarnCwdInfo,
 } from './bash-parser-helpers.js';
 
 test('extractCommandNames - detects actual cat command', async t => {
@@ -106,6 +121,35 @@ test('extractCommandNames - detects commands in complex pipeline with redirectio
 	const commands = await extractCommandNames(input);
 	t.true(commands.has('yarn'));
 	t.true(commands.has('grep'));
+});
+
+test('extractSimpleCommandInvocations - returns name and args for a simple command', async t => {
+	const invocations = await extractSimpleCommandInvocations('npm install -g @openai/codex');
+	t.deepEqual(invocations, [ { name: 'npm', args: [ 'install', '-g', '@openai/codex' ] } ]);
+});
+
+test('extractSimpleCommandInvocations - handles multiple commands in pipeline', async t => {
+	const invocations = await extractSimpleCommandInvocations('cat file.txt | grep -v foo');
+	t.deepEqual(invocations, [
+		{ name: 'cat', args: [ 'file.txt' ] },
+		{ name: 'grep', args: [ '-v', 'foo' ] },
+	]);
+});
+
+test('extractSimpleCommandInvocations - recurses into command substitutions', async t => {
+	const invocations = await extractSimpleCommandInvocations('echo "$(npm list -g)"');
+	t.deepEqual(invocations, [
+		{ name: 'echo', args: [] },
+		{ name: 'npm', args: [ 'list', '-g' ] },
+	]);
+});
+
+test('extractSimpleCommandInvocations - handles compound statements', async t => {
+	const invocations = await extractSimpleCommandInvocations('npm install -g foo && pnpm install bar');
+	t.deepEqual(invocations, [
+		{ name: 'npm', args: [ 'install', '-g', 'foo' ] },
+		{ name: 'pnpm', args: [ 'install', 'bar' ] },
+	]);
 });
 
 test('hasChainOperators - detects && operator', async t => {

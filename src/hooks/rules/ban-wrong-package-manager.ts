@@ -31,6 +31,29 @@ function detectPackageManager(cwd: string): PackageManager | undefined {
 	return undefined;
 }
 
+function isGlobalInvocation(name: string, args: string[]): boolean {
+	if (name === 'yarn') {
+		return args[0] === 'global';
+	}
+
+	for (let i = 0; i < args.length; i++) {
+		const arg = args[i];
+		if (arg === '-g' || arg === '--global') {
+			return true;
+		}
+
+		if (arg === '--location=global') {
+			return true;
+		}
+
+		if (arg === '--location' && args[i + 1] === 'global') {
+			return true;
+		}
+	}
+
+	return false;
+}
+
 export const banWrongPackageManager: Rule = {
 	meta: {
 		name: 'ban-wrong-package-manager',
@@ -49,18 +72,30 @@ export const banWrongPackageManager: Rule = {
 			return { type: 'pass' };
 		}
 
-		const commands = await context.helpers.extractCommandNames(context.command);
+		const invocations = await context.helpers.extractSimpleCommandInvocations(context.command);
 		const allowed = allowedCommands[detectedPm];
-		const wrongCommands = [ ...commands ].filter(cmd => allPmCommands.has(cmd) && !allowed.has(cmd));
 
-		if (wrongCommands.length === 0) {
+		const wrongCommands = new Set<string>();
+		for (const { name, args } of invocations) {
+			if (!allPmCommands.has(name) || allowed.has(name)) {
+				continue;
+			}
+
+			if (isGlobalInvocation(name, args)) {
+				continue;
+			}
+
+			wrongCommands.add(name);
+		}
+
+		if (wrongCommands.size === 0) {
 			return { type: 'pass' };
 		}
 
 		return {
 			type: 'violation',
 			messages: [
-				`❌ Wrong package manager: ${wrongCommands.join(', ')} used in a ${detectedPm} project`,
+				`❌ Wrong package manager: ${[ ...wrongCommands ].join(', ')} used in a ${detectedPm} project`,
 				`cwd: ${context.cwd}`,
 				`This project uses ${detectedPm} (detected from lock file). Use ${[ ...allowed ].join('/')} instead.`,
 			],

@@ -42,7 +42,7 @@
   },
   "packageManager": "yarn@4.9.2",
   "dependencies": {
-    "@futpib/parser": "^1.0.8",
+    "@futpib/parser": "^1.0.9",
     "@iarna/toml": "^2.2.5",
     "@inquirer/prompts": "^8.3.0",
     "@modelcontextprotocol/sdk": "^1.27.1",

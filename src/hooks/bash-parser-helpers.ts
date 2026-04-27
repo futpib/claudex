@@ -81,6 +81,81 @@ function getWordPartLiteralValue(part: BashWordPart): string | undefined {
 }
 
 /**
+ * Walks the structural children of a compound command unit (any unit other than
+ * BashSimpleCommand). Calls visitCommand for each child BashCommand, visitWord
+ * for each child BashWord (e.g. case expression word, for-in words, case patterns),
+ * and visitUnit for each child BashCommandUnit (currently only function bodies).
+ */
+function forEachChildOfCompoundUnit(
+	unit: Exclude<BashCommandUnit, BashSimpleCommand>,
+	visitCommand: (command: BashCommand) => void,
+	visitWord: (word: BashWord) => void,
+	visitUnit: (unit: BashCommandUnit) => void,
+): void {
+	switch (unit.type) {
+		case 'subshell':
+		case 'braceGroup': {
+			visitCommand(unit.body);
+			break;
+		}
+
+		case 'whileLoop':
+		case 'untilLoop': {
+			visitCommand(unit.condition);
+			visitCommand(unit.body);
+			break;
+		}
+
+		case 'forInLoop': {
+			for (const word of unit.words ?? []) {
+				visitWord(word);
+			}
+
+			visitCommand(unit.body);
+			break;
+		}
+
+		case 'forArithmeticLoop': {
+			visitCommand(unit.body);
+			break;
+		}
+
+		case 'ifExpression': {
+			for (const branch of unit.branches) {
+				visitCommand(branch.condition);
+				visitCommand(branch.body);
+			}
+
+			if (unit.elseBody) {
+				visitCommand(unit.elseBody);
+			}
+
+			break;
+		}
+
+		case 'caseExpression': {
+			visitWord(unit.word);
+			for (const branch of unit.branches) {
+				for (const pattern of branch.patterns) {
+					visitWord(pattern);
+				}
+
+				if (branch.body) {
+					visitCommand(branch.body);
+				}
+			}
+
+			break;
+		}
+
+		case 'function': {
+			visitUnit(unit.body);
+			break;
+		}
+	}
+}
+
+/**
  * Extracts command names from a parsed bash command.
  * Recursively processes pipelines, lists, and command substitutions.
  */
@@ -97,33 +172,37 @@ function extractCommandNamesFromAst(command: BashCommand): Set<string> {
 }
 
 function extractCommandNamesFromUnit(unit: BashCommandUnit, commands: Set<string>): void {
-	switch (unit.type) {
-		case 'simple': {
-			if (unit.name) {
-				const name = getWordLiteralValue(unit.name);
-				if (name) {
-					commands.add(name);
-				}
+	if (unit.type === 'simple') {
+		if (unit.name) {
+			const name = getWordLiteralValue(unit.name);
+			if (name) {
+				commands.add(name);
 			}
-
-			// Check for command substitutions in arguments
-			for (const arg of unit.args) {
-				extractCommandNamesFromWord(arg, commands);
-			}
-
-			break;
 		}
 
-		case 'subshell':
-		case 'braceGroup': {
-			const subCommands = extractCommandNamesFromAst(unit.body);
-			for (const cmd of subCommands) {
-				commands.add(cmd);
-			}
-
-			break;
+		// Check for command substitutions in arguments
+		for (const arg of unit.args) {
+			extractCommandNamesFromWord(arg, commands);
 		}
+
+		return;
 	}
+
+	forEachChildOfCompoundUnit(
+		unit,
+		cmd => {
+			const subCommands = extractCommandNamesFromAst(cmd);
+			for (const c of subCommands) {
+				commands.add(c);
+			}
+		},
+		word => {
+			extractCommandNamesFromWord(word, commands);
+		},
+		child => {
+			extractCommandNamesFromUnit(child, commands);
+		},
+	);
 }
 
 function extractCommandNamesFromWord(word: BashWord, commands: Set<string>): void {
@@ -178,6 +257,101 @@ export async function extractCommandNames(command: string): Promise<Set<string>>
 	}
 
 	return extractCommandNamesFromAst(ast);
+}
+
+export type SimpleCommandInvocation = {
+	name: string;
+	args: string[];
+};
+
+function extractInvocationsFromAst(command: BashCommand, invocations: SimpleCommandInvocation[]): void {
+	for (const entry of command.entries) {
+		for (const unit of entry.pipeline.commands) {
+			extractInvocationsFromUnit(unit, invocations);
+		}
+	}
+}
+
+function extractInvocationsFromUnit(unit: BashCommandUnit, invocations: SimpleCommandInvocation[]): void {
+	if (unit.type === 'simple') {
+		if (unit.name) {
+			const name = getWordLiteralValue(unit.name);
+			if (name) {
+				const args = unit.args
+					.map(arg => getWordLiteralValue(arg) ?? '')
+					.filter(arg => arg !== '');
+				invocations.push({ name, args });
+			}
+		}
+
+		for (const arg of unit.args) {
+			extractInvocationsFromWord(arg, invocations);
+		}
+
+		return;
+	}
+
+	forEachChildOfCompoundUnit(
+		unit,
+		cmd => {
+			extractInvocationsFromAst(cmd, invocations);
+		},
+		word => {
+			extractInvocationsFromWord(word, invocations);
+		},
+		child => {
+			extractInvocationsFromUnit(child, invocations);
+		},
+	);
+}
+
+function extractInvocationsFromWord(word: BashWord, invocations: SimpleCommandInvocation[]): void {
+	for (const part of word.parts) {
+		extractInvocationsFromWordPart(part, invocations);
+	}
+}
+
+function extractInvocationsFromWordPart(part: BashWordPart, invocations: SimpleCommandInvocation[]): void {
+	switch (part.type) {
+		case 'commandSubstitution':
+		case 'backtickSubstitution':
+		case 'processSubstitution': {
+			extractInvocationsFromAst(part.command, invocations);
+			break;
+		}
+
+		case 'doubleQuoted': {
+			for (const innerPart of part.parts) {
+				extractInvocationsFromWordPart(innerPart, invocations);
+			}
+
+			break;
+		}
+
+		case 'literal':
+		case 'singleQuoted':
+		case 'variable':
+		case 'variableBraced':
+		case 'arithmeticExpansion': {
+			break;
+		}
+	}
+}
+
+/**
+ * Extracts every simple command invocation (name plus literal args) in the command,
+ * recursing into pipelines, lists, subshells, brace groups, and command substitutions.
+ * Args whose values cannot be resolved to literals (e.g. variable expansions) are dropped.
+ */
+export async function extractSimpleCommandInvocations(command: string): Promise<SimpleCommandInvocation[]> {
+	const ast = await parseBashCommand(command);
+	if (!ast) {
+		return [];
+	}
+
+	const invocations: SimpleCommandInvocation[] = [];
+	extractInvocationsFromAst(ast, invocations);
+	return invocations;
 }
 
 /**
@@ -297,6 +471,46 @@ function someSimpleCommandInUnit(
 		case 'subshell':
 		case 'braceGroup': {
 			return someSimpleCommand(unit.body, predicate);
+		}
+
+		case 'whileLoop':
+		case 'untilLoop': {
+			return someSimpleCommand(unit.condition, predicate)
+				|| someSimpleCommand(unit.body, predicate);
+		}
+
+		case 'forInLoop':
+		case 'forArithmeticLoop': {
+			return someSimpleCommand(unit.body, predicate);
+		}
+
+		case 'ifExpression': {
+			for (const branch of unit.branches) {
+				if (someSimpleCommand(branch.condition, predicate)
+					|| someSimpleCommand(branch.body, predicate)) {
+					return true;
+				}
+			}
+
+			if (unit.elseBody && someSimpleCommand(unit.elseBody, predicate)) {
+				return true;
+			}
+
+			return false;
+		}
+
+		case 'caseExpression': {
+			for (const branch of unit.branches) {
+				if (branch.body && someSimpleCommand(branch.body, predicate)) {
+					return true;
+				}
+			}
+
+			return false;
+		}
+
+		case 'function': {
+			return someSimpleCommandInUnit(unit.body, predicate);
 		}
 	}
 }

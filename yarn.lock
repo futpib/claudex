@@ -185,9 +185,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@futpib/parser@npm:^1.0.8":
-  version: 1.0.8
-  resolution: "@futpib/parser@npm:1.0.8"
+"@futpib/parser@npm:^1.0.9":
+  version: 1.0.9
+  resolution: "@futpib/parser@npm:1.0.9"
   dependencies:
     acorn: "npm:^8.15.0"
     astring: "npm:^1.9.0"
@@ -201,7 +201,7 @@ __metadata:
   peerDependenciesMeta:
     mutf-8:
       optional: true
-  checksum: 10/93b3fb1c751d8674590394eefe989be15e5a4a02f0d9e5245aaa0454fb734e778615212e28342d24638d01826a3f926a533c9645006f077d2549205bb36ed37d
+  checksum: 10/f47135f9343372ecfef2b0a105668cffa264272e5883f025c129f327602cf0877e19199bb82a4a631e6f9895c53a1fd2cf8e61bd4045fc4e87c6eb1feb34e328
   languageName: node
   linkType: hard
 
@@ -1852,7 +1852,7 @@ __metadata:
   resolution: "claudex@workspace:."
   dependencies:
     "@ava/typescript": "npm:^6.0.0"
-    "@futpib/parser": "npm:^1.0.8"
+    "@futpib/parser": "npm:^1.0.9"
     "@iarna/toml": "npm:^2.2.5"
     "@inquirer/prompts": "npm:^8.3.0"
     "@modelcontextprotocol/sdk": "npm:^1.27.1"
