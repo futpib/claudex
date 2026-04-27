@@ -4,7 +4,7 @@ import test from 'ava';
 import { paths } from '../paths.js';
 import {
 	launcherRegistry, builtinLauncherDefinitions,
-	buildAccountMountPlan, effectiveSpecField,
+	buildAccountMountPlan, combineAccountMountPlans, effectiveSpecField,
 	getAccountPrimaryDir, getLauncherSpec,
 	resolveLauncherSpec, walkSpecWraps,
 } from './registry.js';
@@ -207,4 +207,51 @@ test('getAccountPrimaryDir for ollama inherits claude dir via wraps', t => {
 test('getAccountPrimaryDir for opencode (account) returns the config subpath', t => {
 	const accountDir = path.join(paths.config, 'accounts', 'work', 'opencode');
 	t.is(getAccountPrimaryDir(launcherRegistry.opencode, 'work'), path.join(accountDir, 'config'));
+});
+
+// --- combineAccountMountPlans ---
+
+test('combineAccountMountPlans deduplicates -v entries by host:container key', t => {
+	const claudePlan = buildAccountMountPlan(launcherRegistry.claude, undefined);
+	const ollamaPlan = buildAccountMountPlan(launcherRegistry.ollama, undefined);
+	const combined = combineAccountMountPlans([ claudePlan, ollamaPlan ]);
+	const home = os.homedir();
+	t.deepEqual(combined.dockerArgs, [
+		'-v',
+		`${home}/.claude:${home}/.claude`,
+		'-v',
+		`${home}/.claude.json:${home}/.claude.json`,
+	]);
+});
+
+test('combineAccountMountPlans concatenates non-overlapping mounts and -e entries', t => {
+	const claudePlan = buildAccountMountPlan(launcherRegistry.claude, 'work');
+	const codexPlan = buildAccountMountPlan(launcherRegistry.codex, 'work');
+	const combined = combineAccountMountPlans([ claudePlan, codexPlan ]);
+	const claudeDir = path.join(paths.config, 'accounts', 'work', 'claude');
+	const codexDir = path.join(paths.config, 'accounts', 'work', 'codex');
+	t.deepEqual(combined.dockerArgs, [
+		'-v',
+		`${claudeDir}:${claudeDir}`,
+		'-e',
+		`CLAUDE_CONFIG_DIR=${claudeDir}`,
+		'-v',
+		`${codexDir}:${codexDir}`,
+		'-e',
+		`CODEX_HOME=${codexDir}`,
+	]);
+	t.deepEqual(combined.envVars, {
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		CLAUDE_CONFIG_DIR: claudeDir,
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		CODEX_HOME: codexDir,
+	});
+	t.deepEqual(combined.dirsToCreate, [ claudeDir, codexDir ]);
+});
+
+test('combineAccountMountPlans returns empty for empty input', t => {
+	const combined = combineAccountMountPlans([]);
+	t.deepEqual(combined.dockerArgs, []);
+	t.deepEqual(combined.envVars, {});
+	t.deepEqual(combined.dirsToCreate, []);
 });

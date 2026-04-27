@@ -106,3 +106,24 @@ test('mergeBaseConfigs leaves launcherOverrides undefined when neither side sets
 	const merged = mergeBaseConfigs({}, {});
 	t.is(merged.launcherOverrides, undefined);
 });
+
+// --- mergeBaseConfigs: launchers ---
+
+test('mergeBaseConfigs concatenates launchers from base and overlay', t => {
+	const base: BaseConfig = { launchers: [ 'codex' ] };
+	const overlay: BaseConfig = { launchers: [ 'opencode' ] };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.deepEqual(merged.launchers, [ 'codex', 'opencode' ]);
+});
+
+test('mergeBaseConfigs deduplicates launchers across base and overlay', t => {
+	const base: BaseConfig = { launchers: [ 'codex' ] };
+	const overlay: BaseConfig = { launchers: [ 'codex', 'opencode' ] };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.deepEqual(merged.launchers, [ 'codex', 'opencode' ]);
+});
+
+test('mergeBaseConfigs leaves launchers undefined when neither side sets it', t => {
+	const merged = mergeBaseConfigs({}, {});
+	t.is(merged.launchers, undefined);
+});

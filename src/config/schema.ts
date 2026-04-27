@@ -52,6 +52,7 @@ export const baseConfigSchema = z.object({
 	userStartupCommands: z.array(z.string()).optional(), // Commands run as user at container start, before Claude
 	profiles: z.array(z.string()).optional(), // References to named profiles defined at root level
 	launcher: z.string().optional(), // Name of launcher to use (e.g. "ollama")
+	launchers: z.array(z.string()).optional(), // Names of additional launchers to co-mount (packages + account dirs); the primary launcher comes from `launcher`
 	dockerDangerouslySkipPermissions: z.boolean().optional(),
 	dockerAllowDangerouslySkipPermissions: z.boolean().optional(),
 	dockerIpcPrivate: z.boolean().optional(), // Default true - use --ipc=private for IPC namespace isolation

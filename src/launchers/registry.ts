@@ -343,3 +343,35 @@ export async function ensureAccountDirsForSpec(
 		await fs.mkdir(dir, { recursive: true });
 	}
 }
+
+// Merge multiple mount plans into one, deduplicating bind mounts by host:container.
+// Env-var entries (-e KEY=VALUE) are kept in plan order; the last writer wins for
+// a given key in `envVars`, matching docker's effective behavior.
+export function combineAccountMountPlans(plans: AccountMountPlan[]): AccountMountPlan {
+	const seenMounts = new Set<string>();
+	const dockerArgs: string[] = [];
+	const envVars: Record<string, string> = {};
+	const dirsToCreate: string[] = [];
+
+	for (const plan of plans) {
+		for (let i = 0; i < plan.dockerArgs.length; i += 2) {
+			const flag = plan.dockerArgs[i];
+			const value = plan.dockerArgs[i + 1];
+			if (flag === '-v') {
+				if (seenMounts.has(value)) {
+					continue;
+				}
+
+				seenMounts.add(value);
+				dockerArgs.push('-v', value);
+			} else if (flag === '-e') {
+				dockerArgs.push('-e', value);
+			}
+		}
+
+		Object.assign(envVars, plan.envVars);
+		dirsToCreate.push(...plan.dirsToCreate);
+	}
+
+	return { dockerArgs, envVars, dirsToCreate };
+}

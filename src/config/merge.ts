@@ -246,6 +246,12 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 	// Launcher: overlay takes precedence if defined, otherwise use base
 	const launcher = overlay.launcher ?? base.launcher;
 
+	// Launchers (companions): dedupe-concat across base and overlay
+	const launchers = dedupeStrings([
+		...(base.launchers ?? []),
+		...(overlay.launchers ?? []),
+	]);
+
 	// DockerDangerouslySkipPermissions: overlay takes precedence if defined, otherwise use base
 	const dockerDangerouslySkipPermissions = overlay.dockerDangerouslySkipPermissions ?? base.dockerDangerouslySkipPermissions;
 
@@ -303,6 +309,7 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		notifications,
 		hooksDescriptions,
 		launcher,
+		launchers: launchers.length > 0 ? launchers : undefined,
 		dockerDangerouslySkipPermissions,
 		dockerAllowDangerouslySkipPermissions,
 		dockerIpcPrivate,
@@ -492,6 +499,7 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		notifications: config.notifications,
 		hooksDescriptions: config.hooksDescriptions,
 		launcher: config.launcher,
+		launchers: config.launchers ? [ ...config.launchers ].sort((a, b) => a.localeCompare(b)) : undefined,
 		dockerDangerouslySkipPermissions: config.dockerDangerouslySkipPermissions,
 		dockerAllowDangerouslySkipPermissions: config.dockerAllowDangerouslySkipPermissions,
 		dockerIpcPrivate: config.dockerIpcPrivate,

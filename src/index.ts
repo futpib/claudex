@@ -26,7 +26,7 @@ import { resolveLauncherDefinition, buildLauncherCommand, resolveLauncherOverrid
 import {
 	launcherRegistry,
 	effectiveSpecField, ensureAccountDirsForSpec,
-	getAccountPrimaryDir, resolveLauncherSpec,
+	getAccountPrimaryDir, resolveLauncherSpec, walkSpecWraps,
 	type LauncherSpec,
 } from './launchers/registry.js';
 
@@ -972,6 +972,20 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 
 	await ensureAccountDirsForSpec(earlySpec, account);
 
+	// Companion launchers: ensure their account dirs exist too, so docker bind
+	// mounts have something to mount. Skip names already in the primary's wraps
+	// chain (they share account dirs).
+	const earlyPrimaryNames = new Set(walkSpecWraps(earlySpec).map(s => s.name));
+	for (const name of earlyConfig.config.launchers ?? []) {
+		if (earlyPrimaryNames.has(name)) {
+			continue;
+		}
+
+		const compSpec = resolveLauncherSpec(name, earlyConfig.launcherDefinitions);
+		// eslint-disable-next-line no-await-in-loop
+		await ensureAccountDirsForSpec(compSpec, account);
+	}
+
 	if (account) {
 		console.error(`Account: ${account}`);
 	}
@@ -1102,6 +1116,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			profileVolumes,
 			launcherDef,
 			launcherName,
+			launcherDefinitions: earlyConfig.launcherDefinitions,
 			cliPackages,
 			cliVolumes,
 			cliEnv,

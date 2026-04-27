@@ -7,9 +7,9 @@ import {
 	type Volume, type ClaudexConfig, type LauncherDefinition,
 } from '../config/index.js';
 import {
-	buildAccountMountPlan, ensureAccountDirsForSpec,
+	buildAccountMountPlan, combineAccountMountPlans, ensureAccountDirsForSpec,
 	effectiveSpecField,
-	resolveLauncherSpec,
+	resolveLauncherSpec, walkSpecWraps,
 	type LauncherSpec,
 } from '../launchers/registry.js';
 import { resolveLauncherOverride } from '../launcher.js';
@@ -120,6 +120,7 @@ export async function runDockerContainer(parameters: {
 	profileVolumes: string[];
 	launcherDef: LauncherDefinition | undefined;
 	launcherName: string | undefined;
+	launcherDefinitions: Record<string, LauncherDefinition> | undefined;
 	cliPackages: string[];
 	cliVolumes: string[];
 	cliEnv: string[];
@@ -136,7 +137,7 @@ export async function runDockerContainer(parameters: {
 	cliInDockerPath: string;
 }): Promise<DockerRunResult> {
 	const {
-		cwd, account, profileVolumes, launcherDef, launcherName, cliPackages, cliVolumes, cliEnv, cliSshKeys,
+		cwd, account, profileVolumes, launcherDef, launcherName, launcherDefinitions, cliPackages, cliVolumes, cliEnv, cliSshKeys,
 		cliModel, dockerSudo, dockerInsecure, cliDockerArgs, useDockerShell, dockerPull, dockerNoCache, dockerSkipBuild, claudeArgs, cliInDockerPath,
 	} = parameters;
 	const config = { ...parameters.config };
@@ -215,6 +216,22 @@ export async function runDockerContainer(parameters: {
 		config.ssh.keys = [ ...(config.ssh.keys ?? []), ...cliSshKeys ];
 	}
 
+	// Resolve companion launchers (config.launchers): contribute packages and
+	// account-aware mounts only — never hooks/MCP/permissions, which belong to
+	// the primary. Skip names already in the primary's wraps chain so we don't
+	// reinstall packages or add overlapping mounts.
+	const primarySpec: LauncherSpec = resolveLauncherSpec(launcherName ?? 'claude', launcherDefinitions);
+	const primaryNames = new Set(walkSpecWraps(primarySpec).map(s => s.name));
+	const companionSpecs: LauncherSpec[] = (config.launchers ?? [])
+		.filter(name => !primaryNames.has(name))
+		.map(name => resolveLauncherSpec(name, launcherDefinitions));
+
+	for (const compSpec of companionSpecs) {
+		if (compSpec.packages?.length) {
+			config.packages = [ ...(config.packages ?? []), ...compSpec.packages ];
+		}
+	}
+
 	// Print packages
 	if (config.packages && config.packages.length > 0) {
 		console.error('Packages:');
@@ -237,7 +254,18 @@ export async function runDockerContainer(parameters: {
 	const containerName = `${getContainerPrefix(cwd)}${randomSuffix}`;
 	const spec: LauncherSpec = resolveLauncherSpec(launcherName ?? 'claude', undefined);
 	await ensureAccountDirsForSpec(spec, account);
-	const accountMountPlan = buildAccountMountPlan(spec, account);
+	const primaryMountPlan = buildAccountMountPlan(spec, account);
+
+	const companionMountPlans: Array<typeof primaryMountPlan> = [];
+	for (const compSpec of companionSpecs) {
+		// eslint-disable-next-line no-await-in-loop
+		await ensureAccountDirsForSpec(compSpec, account);
+		companionMountPlans.push(buildAccountMountPlan(compSpec, account));
+	}
+
+	const accountMountPlan = companionMountPlans.length > 0
+		? combineAccountMountPlans([ primaryMountPlan, ...companionMountPlans ])
+		: primaryMountPlan;
 
 	const dockerArgs = [
 		'run',
