@@ -30,8 +30,8 @@ test('extractCommandNames - does not detect cat in string argument', async t => 
 });
 
 test('extractCommandNames - does not detect cat in longer string argument', async t => {
-	const commands = await extractCommandNames('claudex-submit-co-authorship-proof "Modified code to allow cat with heredoc"');
-	t.deepEqual(commands, new Set([ 'claudex-submit-co-authorship-proof' ]));
+	const commands = await extractCommandNames('some-hyphenated-command "Modified code to allow cat with heredoc"');
+	t.deepEqual(commands, new Set([ 'some-hyphenated-command' ]));
 });
 
 test('extractCommandNames - detects cat inside command substitution', async t => {
