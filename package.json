@@ -24,6 +24,7 @@
   "devDependencies": {
     "@ava/typescript": "^6.0.0",
     "@types/diff": "^8.0.0",
+    "@types/fs-extra": "^11",
     "@types/iarna__toml": "^2.0.5",
     "@types/invariant": "^2.2.37",
     "@types/luxon": "^3.7.1",
@@ -50,6 +51,7 @@
     "diff": "^8.0.3",
     "env-paths": "^4.0.0",
     "execa": "^9.6.1",
+    "fs-extra": "^11.3.4",
     "invariant": "^2.2.4",
     "jose": "^6.2.1",
     "luxon": "^3.7.2",

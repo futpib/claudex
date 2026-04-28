@@ -4,6 +4,7 @@ import readline from 'node:readline';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import fs from 'node:fs/promises';
+import fsExtra from 'fs-extra';
 import { execa } from 'execa';
 import { DateTime } from 'luxon';
 import { Command } from 'commander';
@@ -864,7 +865,7 @@ async function runMv(source: string, destination: string, options: { account?: s
 
 	// Move the actual project directory first
 	try {
-		await fs.rename(resolvedSource, resolvedDestination);
+		await fsExtra.move(resolvedSource, resolvedDestination);
 		console.error(`Moved ${collapseHomedir(resolvedSource)} → ${collapseHomedir(resolvedDestination)}`);
 	} catch (error) {
 		if (isErrnoException(error) && error.code === 'ENOENT') {
@@ -902,7 +903,7 @@ async function runMv(source: string, destination: string, options: { account?: s
 	}
 
 	try {
-		await fs.rename(sourceDataDir, destinationDataDir);
+		await fsExtra.move(sourceDataDir, destinationDataDir);
 		console.error(`Moved ${collapseHomedir(sourceDataDir)} → ${collapseHomedir(destinationDataDir)}`);
 	} catch (error) {
 		if (isErrnoException(error) && error.code === 'ENOENT') {
