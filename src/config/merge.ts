@@ -1,4 +1,3 @@
-import process from 'node:process';
 import { expandTilde } from '../utils.js';
 import { getGitRoot, getGitWorktreeParentPath } from '../git.js';
 import { allConfigKeys } from '../hooks/rules/index.js';
@@ -97,32 +96,6 @@ function mergeLauncherOverrides(
 	}
 
 	return Object.keys(merged).length > 0 ? merged : undefined;
-}
-
-// Fold deprecated claudeArgs/claudeEnv into launcherOverrides.claude so downstream
-// only needs to read one shape. Legacy values act as a base, so explicit
-// launcherOverrides.claude.{args,env} wins for conflicting env keys.
-function foldLegacyLauncherFields(config: BaseConfig): BaseConfig {
-	const { claudeArgs, claudeEnv, launcherOverrides, ...rest } = config;
-	if (!claudeArgs && !claudeEnv) {
-		return config;
-	}
-
-	const existing = launcherOverrides?.claude;
-	const mergedClaude = mergeLauncherOverride(
-		{ args: claudeArgs, env: claudeEnv },
-		existing ?? {},
-	);
-
-	const nextOverrides: Record<string, LauncherOverride> = {
-		...launcherOverrides,
-		claude: mergedClaude,
-	};
-
-	return {
-		...rest,
-		launcherOverrides: nextOverrides,
-	};
 }
 
 function mergeHooksConfigs(base: HooksConfig | undefined, overlay: HooksConfig | undefined): HooksConfig | undefined {
@@ -264,18 +237,6 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 
 	const account = overlay.account ?? base.account;
 
-	// ClaudeArgs: concatenate preserving order (like init/startup commands)
-	const claudeArgs = [
-		...(base.claudeArgs ?? []),
-		...(overlay.claudeArgs ?? []),
-	];
-
-	// ClaudeEnv: shallow merge, overlay wins per-key (like env, minus PATH special-casing)
-	const claudeEnv = {
-		...base.claudeEnv,
-		...overlay.claudeEnv,
-	};
-
 	// ClaudeSettings: shallow merge, overlay wins per-key
 	const claudeSettings = {
 		...base.claudeSettings,
@@ -315,8 +276,6 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		dockerIpcPrivate,
 		dockerPidsLimit,
 		account,
-		claudeArgs: claudeArgs.length > 0 ? claudeArgs : undefined,
-		claudeEnv: Object.keys(claudeEnv).length > 0 ? claudeEnv : undefined,
 		claudeSettings: Object.keys(claudeSettings).length > 0 ? claudeSettings : undefined,
 		launcherOverrides,
 	};
@@ -505,8 +464,6 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		dockerIpcPrivate: config.dockerIpcPrivate,
 		dockerPidsLimit: config.dockerPidsLimit,
 		account: config.account,
-		claudeArgs: config.claudeArgs,
-		claudeEnv: config.claudeEnv ? sortEnv(config.claudeEnv) : undefined,
 		claudeSettings: config.claudeSettings ? sortRecord(config.claudeSettings) : undefined,
 		launcherOverrides: config.launcherOverrides ? sortLauncherOverrides(config.launcherOverrides) : undefined,
 		// Profiles references are consumed during resolution and not carried to final output
@@ -596,11 +553,6 @@ export type MergedConfigResult = {
 	account: string | undefined;
 };
 
-// Legacy function for backward compatibility - deprecated
-export async function readConfig(): Promise<MergedConfigResult> {
-	return getMergedConfig(process.cwd());
-}
-
 export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> {
 	const { config: rootConfig, configFiles } = await readRootConfig();
 
@@ -676,12 +628,9 @@ export async function getMergedConfig(cwd: string): Promise<MergedConfigResult> 
 		}
 	}
 
-	// Fold deprecated claudeArgs/claudeEnv into launcherOverrides.claude before sorting
-	const normalized = foldLegacyLauncherFields(merged);
-
 	// Sort for consistent Docker cache
 	return {
-		config: sortConfig(normalized),
+		config: sortConfig(merged),
 		configFiles,
 		profileVolumes,
 		launcherDefinitions: rootConfig.launcherDefinitions,

@@ -60,9 +60,6 @@ export const baseConfigSchema = z.object({
 	account: z.string().optional(),
 	launcherOverrides: z.record(z.string(), launcherOverrideSchema).optional(), // Per-launcher args/env, keyed by launcher name
 	claudeSettings: z.record(z.string(), z.unknown()).optional(), // Top-level entries merged into Claude's settings.json
-	// Deprecated: use launcherOverrides.claude.args / launcherOverrides.claude.env
-	claudeArgs: z.array(z.string()).optional(),
-	claudeEnv: z.record(z.string(), z.string()).optional(),
 });
 
 // Launcher definition schema - extends base config with launcher-specific fields
@@ -112,7 +109,7 @@ export const fixedSubKeyFields: Record<string, Set<string>> = {
 	ssh: new Set([ 'keys', 'hosts' ]),
 };
 
-export const recordFields = new Set([ 'env', 'extraHosts', 'claudeEnv', 'claudeSettings', 'launcherOverrides' ]);
+export const recordFields = new Set([ 'env', 'extraHosts', 'claudeSettings', 'launcherOverrides' ]);
 
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {
