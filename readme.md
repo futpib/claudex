@@ -217,7 +217,7 @@ The built-in `opencode` launcher definition mounts `~/.local/share/opencode` and
 
 #### Ollama
 
-The `ollama` launcher wraps Claude Code but routes it through a local [Ollama](https://ollama.ai/) instance. It automatically installs Ollama inside the container and exposes host port 11434 so the container can reach the host's Ollama service.
+The `ollama` launcher wraps Claude Code but routes it through a local [Ollama](https://ollama.com/) instance. It automatically installs Ollama inside the container and exposes host port 11434 so the container can reach the host's Ollama service.
 
 ```bash
 claudex --launcher ollama
@@ -225,7 +225,7 @@ claudex --launcher ollama
 
 #### Codex
 
-The `codex` launcher runs [OpenAI Codex CLI](https://github.com/openai/codex) inside the container. Hooks are wired via Codex's `hooks.json` mechanism. Account isolation is applied to `~/.codex`.
+The `codex` launcher runs OpenAI Codex CLI inside the container. Hooks are wired via Codex's `hooks.json` mechanism. Account isolation is applied to `~/.codex`.
 
 ```bash
 claudex --launcher codex
@@ -253,7 +253,7 @@ Define custom launchers in the root config under `launcherDefinitions`. Each def
 {
   "launcherDefinitions": {
     "my-codex": {
-      "command": ["codex", "--model", "o4-mini"],
+      "command": ["codex", "--model", "o3-mini"],
       "packages": ["openai-codex"]
     }
   }
