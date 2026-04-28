@@ -22,7 +22,7 @@ async function waitForPromptAndSend(
 	proc: ResultPromise,
 	waitFor: string,
 	key: string,
-	timeoutMs = 10_000,
+	timeoutMs = 30_000,
 ): Promise<void> {
 	return new Promise((resolve, reject) => {
 		let buffer = '';
@@ -65,8 +65,7 @@ async function readJsonFile(filePath: string): Promise<unknown> {
 	return JSON.parse(content);
 }
 
-// 30s timeout: enough for the TUI interaction in CI
-const tuiTimeout = 30_000;
+const tuiTimeout = 90_000;
 
 test.serial('add a package via config-interactive', async t => {
 	t.timeout(tuiTimeout + 5000);

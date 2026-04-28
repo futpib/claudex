@@ -18,6 +18,7 @@ type HookResult = {
 
 async function createHooksConfig(hooks: Record<string, boolean>) {
 	const configDir = await mkdtemp(path.join(tmpdir(), 'claudex-hook-test-'));
+	const dataDir = await mkdtemp(path.join(tmpdir(), 'claudex-hook-test-data-'));
 	const claudexDir = path.join(configDir, 'claudex');
 	await mkdir(claudexDir, { recursive: true });
 	await writeFile(
@@ -26,8 +27,10 @@ async function createHooksConfig(hooks: Record<string, boolean>) {
 	);
 	return {
 		configDir,
+		dataDir,
 		async [Symbol.asyncDispose]() {
 			await rm(configDir, { recursive: true });
+			await rm(dataDir, { recursive: true });
 		},
 	};
 }
@@ -84,8 +87,13 @@ function createMcpToolInput(toolName: string, permissionMode?: string): Record<s
 	};
 }
 
-function env(config: { configDir: string }) {
-	return { XDG_CONFIG_HOME: config.configDir }; // eslint-disable-line @typescript-eslint/naming-convention
+function env(config: { configDir: string; dataDir: string }) {
+	return {
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		XDG_CONFIG_HOME: config.configDir,
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		XDG_DATA_HOME: config.dataDir,
+	};
 }
 
 // --- gh api ---

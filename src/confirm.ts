@@ -5,19 +5,30 @@ import crypto from 'node:crypto';
 import * as jose from 'jose';
 import { paths } from './paths.js';
 
-const hostOnlyDir = path.join(paths.data, 'host-only');
-const secretPath = path.join(hostOnlyDir, 'confirm-secret');
-const confirmationsDir = path.join(paths.data, 'confirmations');
-const pendingDir = path.join(paths.data, 'pending-confirmations');
+function getHostOnlyDir(): string {
+	return path.join(paths.data, 'host-only');
+}
+
+function getSecretPath(): string {
+	return path.join(getHostOnlyDir(), 'confirm-secret');
+}
+
+function getConfirmationsDir(): string {
+	return path.join(paths.data, 'confirmations');
+}
+
+function getPendingDir(): string {
+	return path.join(paths.data, 'pending-confirmations');
+}
 
 export async function getOrCreateSecret(): Promise<Uint8Array> {
 	try {
-		const hex = await fs.readFile(secretPath, 'utf8');
+		const hex = await fs.readFile(getSecretPath(), 'utf8');
 		return Buffer.from(hex.trim(), 'hex');
 	} catch {
 		const secret = crypto.randomBytes(32);
-		await fs.mkdir(hostOnlyDir, { recursive: true });
-		await fs.writeFile(secretPath, secret.toString('hex'), { mode: 0o600 });
+		await fs.mkdir(getHostOnlyDir(), { recursive: true });
+		await fs.writeFile(getSecretPath(), secret.toString('hex'), { mode: 0o600 });
 		return secret;
 	}
 }
@@ -77,12 +88,14 @@ type PendingConfirmation = {
 };
 
 export async function storePendingConfirmation(shortId: string, token: string, command?: string): Promise<void> {
+	const pendingDir = getPendingDir();
 	await fs.mkdir(pendingDir, { recursive: true });
 	const data: PendingConfirmation = { token, command };
 	await fs.writeFile(path.join(pendingDir, `${shortId}.json`), JSON.stringify(data));
 }
 
 export async function loadPendingConfirmation(shortId: string): Promise<PendingConfirmation> {
+	const pendingDir = getPendingDir();
 	const filePath = path.join(pendingDir, `${shortId}.json`);
 	try {
 		const content = await fs.readFile(filePath, 'utf8');
@@ -103,6 +116,7 @@ type StoredConfirmation = {
 };
 
 export async function storeConfirmation(actionHash: string, sessionId: string, token: string, proof: string): Promise<void> {
+	const confirmationsDir = getConfirmationsDir();
 	await fs.mkdir(confirmationsDir, { recursive: true });
 	const key = confirmationKey(actionHash, sessionId);
 	const data: StoredConfirmation = {
@@ -119,6 +133,7 @@ export async function storeConfirmation(actionHash: string, sessionId: string, t
 }
 
 export async function hasConfirmation(actionHash: string, sessionId: string): Promise<boolean> {
+	const confirmationsDir = getConfirmationsDir();
 	const key = confirmationKey(actionHash, sessionId);
 	const filePath = path.join(confirmationsDir, `${key}.json`);
 	try {

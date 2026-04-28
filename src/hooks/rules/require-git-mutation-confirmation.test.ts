@@ -19,6 +19,7 @@ type HookResult = {
 
 async function createHooksConfig(hooks: Record<string, boolean>) {
 	const configDir = await mkdtemp(path.join(tmpdir(), 'claudex-hook-test-'));
+	const dataDir = await mkdtemp(path.join(tmpdir(), 'claudex-hook-test-data-'));
 	const claudexDir = path.join(configDir, 'claudex');
 	await mkdir(claudexDir, { recursive: true });
 	await writeFile(
@@ -27,8 +28,10 @@ async function createHooksConfig(hooks: Record<string, boolean>) {
 	);
 	return {
 		configDir,
+		dataDir,
 		async [Symbol.asyncDispose]() {
 			await rm(configDir, { recursive: true });
+			await rm(dataDir, { recursive: true });
 		},
 	};
 }
@@ -63,8 +66,13 @@ function createBashToolInput(command: string, permissionMode?: string): Record<s
 	};
 }
 
-function env(config: { configDir: string }) {
-	return { XDG_CONFIG_HOME: config.configDir }; // eslint-disable-line @typescript-eslint/naming-convention
+function env(config: { configDir: string; dataDir: string }) {
+	return {
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		XDG_CONFIG_HOME: config.configDir,
+		// eslint-disable-next-line @typescript-eslint/naming-convention
+		XDG_DATA_HOME: config.dataDir,
+	};
 }
 
 function assertBlocked(t: ExecutionContext, result: HookResult, pattern?: string) {
@@ -404,12 +412,23 @@ test('allows git pull', async t => {
 
 // --- after confirmation ---
 
-test('allows git commit after confirmation', async t => {
+test.serial('allows git commit after confirmation', async t => {
 	await using config = await createHooksConfig({ requireGitMutationConfirmation: true });
 	const command = 'git commit -m "confirmed test"';
 	const actionHash = hashAction(command);
-	const token = await createConfirmationToken(actionHash, 'test', '/tmp/test', 'test-session');
-	await storeConfirmation(actionHash, 'test-session', token, 'user approved');
+
+	const previousDataHome = process.env.XDG_DATA_HOME;
+	process.env.XDG_DATA_HOME = config.dataDir;
+	try {
+		const token = await createConfirmationToken(actionHash, 'test', '/tmp/test', 'test-session');
+		await storeConfirmation(actionHash, 'test-session', token, 'user approved');
+	} finally {
+		if (previousDataHome === undefined) {
+			delete process.env.XDG_DATA_HOME;
+		} else {
+			process.env.XDG_DATA_HOME = previousDataHome;
+		}
+	}
 
 	const result = await runHook(
 		createBashToolInput(command),
