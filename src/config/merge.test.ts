@@ -33,30 +33,6 @@ test('mergeBaseConfigs overlay overrides dockerAllowDangerouslySkipPermissions',
 	t.is(merged.dockerAllowDangerouslySkipPermissions, false);
 });
 
-// --- mergeBaseConfigs: claudeSettings ---
-
-test('mergeBaseConfigs merges claudeSettings from base and overlay', t => {
-	const base: BaseConfig = { claudeSettings: { showThinkingSummaries: true } };
-	const overlay: BaseConfig = { claudeSettings: { includeCoAuthoredBy: false } };
-	const merged = mergeBaseConfigs(base, overlay);
-	t.deepEqual(merged.claudeSettings, {
-		showThinkingSummaries: true,
-		includeCoAuthoredBy: false,
-	});
-});
-
-test('mergeBaseConfigs overlay claudeSettings key wins over base', t => {
-	const base: BaseConfig = { claudeSettings: { showThinkingSummaries: false } };
-	const overlay: BaseConfig = { claudeSettings: { showThinkingSummaries: true } };
-	const merged = mergeBaseConfigs(base, overlay);
-	t.deepEqual(merged.claudeSettings, { showThinkingSummaries: true });
-});
-
-test('mergeBaseConfigs leaves claudeSettings undefined when neither side sets it', t => {
-	const merged = mergeBaseConfigs({}, {});
-	t.is(merged.claudeSettings, undefined);
-});
-
 // --- mergeBaseConfigs: launcherOverrides ---
 
 test('mergeBaseConfigs concatenates launcherOverrides args per launcher', t => {
@@ -71,6 +47,23 @@ test('mergeBaseConfigs merges launcherOverrides env per launcher', t => {
 	const overlay: BaseConfig = { launcherOverrides: { codex: { env: { B: '2' } } } }; // eslint-disable-line @typescript-eslint/naming-convention
 	const merged = mergeBaseConfigs(base, overlay);
 	t.deepEqual(merged.launcherOverrides?.codex.env, { A: '1', B: '2' }); // eslint-disable-line @typescript-eslint/naming-convention
+});
+
+test('mergeBaseConfigs merges launcherOverrides settings per launcher', t => {
+	const base: BaseConfig = { launcherOverrides: { claude: { settings: { showThinkingSummaries: true } } } };
+	const overlay: BaseConfig = { launcherOverrides: { claude: { settings: { includeCoAuthoredBy: false } } } };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.deepEqual(merged.launcherOverrides?.claude.settings, {
+		showThinkingSummaries: true,
+		includeCoAuthoredBy: false,
+	});
+});
+
+test('mergeBaseConfigs overlay launcherOverrides settings key wins over base', t => {
+	const base: BaseConfig = { launcherOverrides: { claude: { settings: { showThinkingSummaries: false } } } };
+	const overlay: BaseConfig = { launcherOverrides: { claude: { settings: { showThinkingSummaries: true } } } };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.deepEqual(merged.launcherOverrides?.claude.settings, { showThinkingSummaries: true });
 });
 
 test('mergeBaseConfigs combines launchers across base and overlay', t => {

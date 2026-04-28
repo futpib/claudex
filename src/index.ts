@@ -1090,7 +1090,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	const earlyHookStrategy = effectiveSpecField(earlySpec, 'hookStrategy');
 	if (earlyHookStrategy === 'claude-settings') {
 		const claudeDir = getAccountPrimaryDir(launcherRegistry.claude, account);
-		await ensureHookSetup(claudeDir, earlyConfig.config.claudeSettings);
+		await ensureHookSetup(claudeDir, earlyConfig.config.launcherOverrides?.claude?.settings);
 	}
 
 	if (earlyHookStrategy === 'opencode-plugin') {

@@ -20,7 +20,7 @@ async function readSettings(claudeDir: string): Promise<Record<string, unknown>>
 	return JSON.parse(content) as Record<string, unknown>;
 }
 
-test('ensureHookSetup writes claudeSettings overlay into settings.json', async t => {
+test('ensureHookSetup writes settings overlay into settings.json', async t => {
 	const claudeDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(claudeDir, { recursive: true }));
 
@@ -65,7 +65,7 @@ test('ensureHookSetup writes per-account settings.json independently', async t =
 	t.is(b.showThinkingSummaries, false);
 });
 
-test('ensureHookSetup ignores hooks key in claudeSettings overlay', async t => {
+test('ensureHookSetup ignores hooks key in settings overlay', async t => {
 	const claudeDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(claudeDir, { recursive: true }));
 

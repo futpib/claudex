@@ -71,9 +71,11 @@ function dedupeVolumes(volumes: Volume[]): Volume[] {
 function mergeLauncherOverride(base: LauncherOverride, overlay: LauncherOverride): LauncherOverride {
 	const args = [ ...(base.args ?? []), ...(overlay.args ?? []) ];
 	const env = { ...base.env, ...overlay.env };
+	const settings = { ...base.settings, ...overlay.settings };
 	return {
 		args: args.length > 0 ? args : undefined,
 		env: Object.keys(env).length > 0 ? env : undefined,
+		settings: Object.keys(settings).length > 0 ? settings : undefined,
 	};
 }
 
@@ -237,12 +239,6 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 
 	const account = overlay.account ?? base.account;
 
-	// ClaudeSettings: shallow merge, overlay wins per-key
-	const claudeSettings = {
-		...base.claudeSettings,
-		...overlay.claudeSettings,
-	};
-
 	const launcherOverrides = mergeLauncherOverrides(base.launcherOverrides, overlay.launcherOverrides);
 
 	return {
@@ -276,7 +272,6 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		dockerIpcPrivate,
 		dockerPidsLimit,
 		account,
-		claudeSettings: Object.keys(claudeSettings).length > 0 ? claudeSettings : undefined,
 		launcherOverrides,
 	};
 }
@@ -464,7 +459,6 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		dockerIpcPrivate: config.dockerIpcPrivate,
 		dockerPidsLimit: config.dockerPidsLimit,
 		account: config.account,
-		claudeSettings: config.claudeSettings ? sortRecord(config.claudeSettings) : undefined,
 		launcherOverrides: config.launcherOverrides ? sortLauncherOverrides(config.launcherOverrides) : undefined,
 		// Profiles references are consumed during resolution and not carried to final output
 	};
@@ -478,6 +472,7 @@ function sortLauncherOverrides(overrides: Record<string, LauncherOverride>): Rec
 		sorted[key] = {
 			args: entry.args,
 			env: entry.env ? sortEnv(entry.env) : undefined,
+			settings: entry.settings ? sortRecord(entry.settings) : undefined,
 		};
 	}
 

@@ -365,9 +365,7 @@ claudex config <action> [scope flags] [key] [value]
 | `dockerPidsLimit` | boolean | set, unset |
 | `launcherOverrides.<launcher>.args` | string[] | set, unset |
 | `launcherOverrides.<launcher>.env.<KEY>` | string | set, unset |
-| `claudeSettings` | object | set, unset |
-| `claudeArgs` *(deprecated)* | string[] | add, unset |
-| `claudeEnv.<KEY>` *(deprecated)* | string | set, unset |
+| `launcherOverrides.<launcher>.settings.<KEY>` | any | set, unset |
 
 ### Profiles
 

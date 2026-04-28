@@ -271,15 +271,6 @@ const numberCoercionFields = new Set(Object.entries(baseConfigSchema.shape)
 	.map(([ key ]) => key));
 
 function coerceValue(field: string, value: string): unknown {
-	// ClaudeSettings holds arbitrary JSON values (booleans, numbers, objects, arrays, strings)
-	if (field === 'claudeSettings') {
-		try {
-			return JSON.parse(value) as unknown;
-		} catch {
-			return value;
-		}
-	}
-
 	if (numberCoercionFields.has(field)) {
 		const number_ = Number(value);
 		if (!Number.isInteger(number_) || number_ <= 0) {
@@ -944,7 +935,6 @@ export function getKeyEntries(): KeyEntry[] {
 		notifications: 'boolean',
 		hooksDescriptions: 'boolean',
 		profiles: 'string[]',
-		claudeSettings: 'record',
 		launcherOverrides: 'record',
 	};
 
@@ -959,13 +949,12 @@ export function getKeyEntries(): KeyEntry[] {
 				break;
 			}
 
-			case 'claudeSettings': {
-				entries.push({ key: 'claudeSettings.<KEY>', type: 'any' });
-				break;
-			}
-
 			case 'launcherOverrides': {
-				entries.push({ key: 'launcherOverrides.<launcher>.args', type: 'string[]' }, { key: 'launcherOverrides.<launcher>.env.<KEY>', type: 'string' });
+				entries.push(
+					{ key: 'launcherOverrides.<launcher>.args', type: 'string[]' },
+					{ key: 'launcherOverrides.<launcher>.env.<KEY>', type: 'string' },
+					{ key: 'launcherOverrides.<launcher>.settings.<KEY>', type: 'any' },
+				);
 				break;
 			}
 

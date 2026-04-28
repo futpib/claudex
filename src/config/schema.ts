@@ -19,10 +19,11 @@ const hooksDetailConfigSchema = z.object(Object.fromEntries(allConfigKeys.map(ke
 
 const hooksConfigSchema = z.union([ z.literal(true), hooksDetailConfigSchema ]);
 
-// Per-launcher overrides: launcher-specific args and env. Keyed by launcher name.
+// Per-launcher overrides: launcher-specific args, env, and settings. Keyed by launcher name.
 const launcherOverrideSchema = z.object({
 	args: z.array(z.string()).optional(),
 	env: z.record(z.string(), z.string()).optional(),
+	settings: z.record(z.string(), z.unknown()).optional(), // Top-level entries merged into the launcher's settings file (claude only, currently)
 });
 
 const mcpServersDetailConfigSchema = z.object({
@@ -58,8 +59,7 @@ export const baseConfigSchema = z.object({
 	dockerIpcPrivate: z.boolean().optional(), // Default true - use --ipc=private for IPC namespace isolation
 	dockerPidsLimit: z.boolean().optional(), // Default true - limit container PIDs to host pid_max / 16
 	account: z.string().optional(),
-	launcherOverrides: z.record(z.string(), launcherOverrideSchema).optional(), // Per-launcher args/env, keyed by launcher name
-	claudeSettings: z.record(z.string(), z.unknown()).optional(), // Top-level entries merged into Claude's settings.json
+	launcherOverrides: z.record(z.string(), launcherOverrideSchema).optional(), // Per-launcher args/env/settings, keyed by launcher name
 });
 
 // Launcher definition schema - extends base config with launcher-specific fields
@@ -109,7 +109,7 @@ export const fixedSubKeyFields: Record<string, Set<string>> = {
 	ssh: new Set([ 'keys', 'hosts' ]),
 };
 
-export const recordFields = new Set([ 'env', 'extraHosts', 'claudeSettings', 'launcherOverrides' ]);
+export const recordFields = new Set([ 'env', 'extraHosts', 'launcherOverrides' ]);
 
 export function resolveHooks(hooks: HooksConfig | undefined): Required<HooksDetail> {
 	if (hooks === true) {
