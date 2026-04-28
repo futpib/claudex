@@ -17,9 +17,11 @@ A CLI wrapper and hook management system for Anthropic's Claude Code that adds D
 - **MCP Server**: Built-in requirements tracking tool for Claude Code sessions
 - **Multi-Scope Configuration**: Layered config system with global, project, group, and profile scopes
 - **Accounts**: Isolated Claude configurations per named account (`--account <name>`)
-- **OpenCode Integration**: Use OpenCode as an alternative AI launcher via `--launcher opencode`
+- **Multiple Launchers**: Built-in support for `claude`, `opencode`, `ollama`, and `codex` with extensible custom launcher definitions
+- **Companion Launchers**: Co-mount multiple launchers' packages and account directories via the `launchers` config key
 - **Host Port Proxying**: Automatically forward host-side ports into Docker containers via socat
 - **Startup Commands**: Run custom init and startup commands inside Docker containers at build or start time
+- **Session Portability**: Automatically copies session files across projects when resuming a session with `--resume`
 
 ## Installation
 
@@ -76,6 +78,7 @@ claudex exec --root
 | `--launcher <name>` | Select launcher by name (e.g. `ollama`, `opencode`, `codex`) |
 | `--model <name>` | Override the launcher's default model |
 | `--account <name>` | Use a specific claudex account (isolated Claude config) |
+| `--no-account` | Ignore configured account and use default paths |
 
 ### Docker Safety
 
@@ -194,7 +197,11 @@ claudex --account work
 claudex config set account work
 ```
 
-### OpenCode Integration
+### Alternative Launchers
+
+Claudex supports multiple AI launchers via the `--launcher` flag or the `launcher` config key. All launchers benefit from Docker containerization, SSH forwarding, hook management, and account isolation.
+
+#### OpenCode
 
 Claudex supports [OpenCode](https://opencode.ai/) as an alternative launcher. When selected, the OpenCode plugin (`opencode-plugin.ts`) is automatically registered and bridges OpenCode hook events (tool calls, stop, user prompts) to claudex hook executables.
 
@@ -207,6 +214,62 @@ claudex config set launcher opencode
 ```
 
 The built-in `opencode` launcher definition mounts `~/.local/share/opencode` and `~/.config/opencode` into the container automatically.
+
+#### Ollama
+
+The `ollama` launcher wraps Claude Code but routes it through a local [Ollama](https://ollama.com/) instance. It automatically installs Ollama inside the container and exposes host port 11434 so the container can reach the host's Ollama service.
+
+```bash
+claudex --launcher ollama
+```
+
+#### Codex
+
+The `codex` launcher runs OpenAI Codex CLI inside the container. Hooks are wired via Codex's `hooks.json` mechanism. Account isolation is applied to `~/.codex`.
+
+```bash
+claudex --launcher codex
+```
+
+#### Co-mounting Multiple Launchers
+
+Use the `launchers` config key to co-mount additional launchers alongside the primary one. This installs their packages and mounts their account directories so you can switch between launchers without leaving the container.
+
+```bash
+# Co-mount codex alongside the default claude launcher
+claudex config add launchers codex
+
+# Co-mount opencode as well
+claudex config add launchers opencode
+```
+
+The primary launcher (set via `launcher`) determines which process is actually started; `launchers` only adds infrastructure (packages, volumes).
+
+#### Custom Launcher Definitions
+
+Define custom launchers in the root config under `launcherDefinitions`. Each definition can override the command, model, packages, volumes, and host ports of any built-in launcher, or define a brand-new launcher entirely.
+
+```jsonc
+{
+  "launcherDefinitions": {
+    "my-codex": {
+      "command": ["codex", "--model", "o3-mini"],
+      "packages": ["openai-codex"]
+    }
+  }
+}
+```
+
+Then use it with `--launcher my-codex` or `claudex config set launcher my-codex`.
+
+### Session Portability
+
+When resuming a Claude Code session with `--resume <session-id>`, claudex automatically finds and copies the session transcript into the current project directory if it was recorded under a different project. This makes it easy to resume sessions even after moving or renaming a project.
+
+```bash
+# Resume a session — claudex finds it automatically even if it lives in another project dir
+claudex --resume <session-id>
+```
 
 ### Host Port Proxying
 
@@ -291,6 +354,7 @@ claudex config <action> [scope flags] [key] [value]
 | `group` | string (project only) | set, unset |
 | `account` | string | set, unset |
 | `launcher` | string | set, unset |
+| `launchers` | string[] | add, unset |
 | `rootInitCommands` | string[] | add, unset |
 | `userInitCommands` | string[] | add, unset |
 | `rootStartupCommands` | string[] | add, unset |
@@ -302,6 +366,8 @@ claudex config <action> [scope flags] [key] [value]
 | `launcherOverrides.<launcher>.args` | string[] | set, unset |
 | `launcherOverrides.<launcher>.env.<KEY>` | string | set, unset |
 | `claudeSettings` | object | set, unset |
+| `claudeArgs` *(deprecated)* | string[] | add, unset |
+| `claudeEnv.<KEY>` *(deprecated)* | string | set, unset |
 
 ### Profiles
 
@@ -421,6 +487,19 @@ claudex install --container claudex-myproject-abc123 nodejs
 
 Packages are installed with pacman and persisted to the project config by default (use `--no-save` to skip).
 
+Remove packages from a running container with `claudex uninstall`:
+
+```bash
+# Uninstall packages and remove from project config
+claudex uninstall ripgrep
+
+# Uninstall without updating config
+claudex uninstall --no-save jq
+
+# Target a specific container
+claudex uninstall --container claudex-myproject-abc123 nodejs
+```
+
 ## Container Management
 
 ### Listing Containers
@@ -456,6 +535,21 @@ claudex exec claudex-myproject-abc123
 claudex exec --root
 ```
 
+### Pruning Orphaned Containers
+
+Remove stopped or detached containers that are no longer in use:
+
+```bash
+# Prune orphaned containers for the current project
+claudex prune
+
+# Prune orphaned containers across all projects
+claudex prune --all
+
+# Skip confirmation prompt
+claudex prune --force
+```
+
 ### Moving a Project
 
 Move a project directory along with its Claude session data and config references:
@@ -470,6 +564,9 @@ Some hook rules (e.g. `requireGitMutationConfirmation`, `requireCoAuthorshipProo
 
 ```bash
 claudex confirm <id> '<verbatim quote from the user>'
+
+# Immediately execute the confirmed command after storing the confirmation
+claudex confirm <id> '<verbatim quote>' --exec
 ```
 
 ## Configuration
@@ -548,6 +645,18 @@ Or in `config.json`:
 
 Setting `hooks: true` enables all recommended checks and registers hooks in `~/.claude/settings.json`. Setting `hooks: { ... }` enables only listed checks; any truthy value triggers hook registration. When `hooks` is not set (default), all recommended checks are enabled.
 
+### MCP Server Tools
+
+When the `claudex` MCP server is registered, it exposes these tools to the AI during a session:
+
+| Tool | Description |
+|---|---|
+| `requirements_add` | Add a requirement that must be satisfied for the task to be complete |
+| `requirements_remove` | Remove a requirement by its 1-based index |
+| `requirements_list` | List all current requirements |
+
+Requirements are stored in-memory and reset when the claudex session ends. They are useful for Claude to track what still needs to be done within a single session.
+
 ### Hook Registration
 
 Claudex automatically registers all hooks in `~/.claude/settings.json` on startup.
@@ -622,6 +731,7 @@ All functionality is provided through a single `claudex` binary with subcommands
 - `claudex hook user-prompt-submit` - User prompt event handler
 - `claudex hook notification` - Notification event handler (desktop notifications)
 - `claudex hook stop` - Stop event handler (task completion notifications)
+- `claudex hook session-start` - Session-start event handler (used by codex launcher)
 
 ## Contributing
 
