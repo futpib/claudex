@@ -41,7 +41,6 @@ export const banFileOperationCommands: Rule = {
 					'  - Read tool: for reading files (supports offset/limit for specific line ranges)',
 					'  - Edit tool: for editing files (instead of sed/awk)',
 					'  - Write tool: for creating files (instead of cat/echo redirection)',
-					'  - Grep tool: for searching file contents (instead of grep)',
 					'Exceptions: cat with heredoc (cat <<EOF), tail with negative offset and filename only (tail -100 file)',
 				],
 			};

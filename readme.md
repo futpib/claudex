@@ -619,7 +619,7 @@ Or in `config.json`:
 | `banPipeToFilter` | Ban piping to filter commands (grep, head, tail, etc.) |
 | `banFileOperationCommands` | Ban cat, sed, head, tail, awk (use dedicated tools) |
 | `banFindCommand` | Ban `find` for file searching (use the builtin Glob tool) |
-| `banFindDelete` | Ban `find -delete` (use Glob to find files then remove explicitly) |
+| `banFindDelete` | Ban `find -delete` (list matches first, then remove with rm) |
 | `banFindExec` | Ban `find -exec` / `-execdir` (use dedicated tools) |
 | `banGrepCommand` | Ban `grep`/`rg` to search file contents (use the builtin Grep tool) |
 | `banLsCommand` | Ban `ls` to list files (use the builtin Glob tool) |

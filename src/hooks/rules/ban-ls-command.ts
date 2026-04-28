@@ -14,7 +14,7 @@ export const banLsCommand: Rule = {
 	meta: {
 		name: 'ban-ls-command',
 		configKey: 'banLsCommand',
-		recommended: true,
+		recommended: false,
 		phase: 'main',
 		description: 'Do not use ls to list files; use the builtin Glob tool instead',
 	},

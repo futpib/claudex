@@ -6,7 +6,7 @@ export const banFindDelete: Rule = {
 		configKey: 'banFindDelete',
 		recommended: true,
 		phase: 'main',
-		description: 'Do not use find -delete; use Glob to find files and remove them explicitly',
+		description: 'Do not use find -delete; list matches first, review them, then remove with rm',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
@@ -23,7 +23,7 @@ export const banFindDelete: Rule = {
 				type: 'violation',
 				messages: [
 					'❌ find -delete is not allowed',
-					'Use the Glob tool to find files by pattern, then remove them explicitly with rm.',
+					'Run find without -delete first, review the matched files, then remove them explicitly with rm.',
 				],
 			};
 		}

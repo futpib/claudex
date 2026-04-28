@@ -20,8 +20,8 @@ export const banPipeToFilter: Rule = {
 				messages: [
 					`❌ Piping output to ${pipedFilter} is not allowed`,
 					`Banned filter commands: ${[ ...context.helpers.filterCommands ].join(', ')}.`,
-					'Run the command first, then search its output file using the Read or Grep tools.',
-					'For long output, the command result will include an output file path you can search.',
+					'Run the command first, then read its output file using the Read tool.',
+					'For long output, the command result will include an output file path you can read.',
 				],
 			};
 		}

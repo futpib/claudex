@@ -6,7 +6,7 @@ export const banFindExec: Rule = {
 		configKey: 'banFindExec',
 		recommended: true,
 		phase: 'main',
-		description: 'Do not use find -exec; use Glob to find files and Grep to search file contents',
+		description: 'Do not use find -exec; list matches first, then operate on them with explicit commands (use rg for search)',
 	},
 	async fn(context) {
 		if (context.toolName !== 'Bash' || !context.command) {
@@ -20,7 +20,7 @@ export const banFindExec: Rule = {
 					type: 'violation',
 					messages: [
 						'❌ find -exec grep is not allowed',
-						'Use rg (ripgrep) or the Grep tool instead, which recursively search directories by default.',
+						'Use rg (ripgrep) directly instead — it recursively searches directories by default.',
 					],
 				};
 			}
@@ -29,7 +29,7 @@ export const banFindExec: Rule = {
 				type: 'violation',
 				messages: [
 					'❌ find -exec is not allowed',
-					'Use the Glob tool to find files by pattern, and the Grep tool to search file contents.',
+					'Run find without -exec to list matching files, then operate on them with explicit commands.',
 				],
 			};
 		}

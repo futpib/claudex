@@ -109,7 +109,7 @@ export const banGrepCommand: Rule = {
 	meta: {
 		name: 'ban-grep-command',
 		configKey: 'banGrepCommand',
-		recommended: true,
+		recommended: false,
 		phase: 'main',
 		description: 'Do not use grep or rg to search file contents; use the builtin Grep tool instead',
 	},

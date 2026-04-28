@@ -51,7 +51,7 @@ export const banFindCommand: Rule = {
 	meta: {
 		name: 'ban-find-command',
 		configKey: 'banFindCommand',
-		recommended: true,
+		recommended: false,
 		phase: 'main',
 		description: 'Do not use find to search for files by name; use the builtin Glob tool instead',
 	},
