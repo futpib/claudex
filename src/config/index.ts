@@ -16,7 +16,7 @@ export {
 
 export {
 	mergeBaseConfigs, mergeRootConfigs,
-	readConfig, getMergedConfig,
+	getMergedConfig,
 	type MergedConfigResult,
 } from './merge.js';
 

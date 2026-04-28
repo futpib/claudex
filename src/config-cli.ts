@@ -944,8 +944,6 @@ export function getKeyEntries(): KeyEntry[] {
 		notifications: 'boolean',
 		hooksDescriptions: 'boolean',
 		profiles: 'string[]',
-		claudeArgs: 'string[]',
-		claudeEnv: 'record',
 		claudeSettings: 'record',
 		launcherOverrides: 'record',
 	};
@@ -955,8 +953,7 @@ export function getKeyEntries(): KeyEntry[] {
 
 		switch (field) {
 			case 'env':
-			case 'extraHosts':
-			case 'claudeEnv': {
+			case 'extraHosts': {
 				const placeholder = field === 'extraHosts' ? '<HOST>' : '<KEY>';
 				entries.push({ key: `${field}.${placeholder}`, type: 'string' });
 				break;
