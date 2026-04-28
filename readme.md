@@ -13,7 +13,7 @@ A CLI wrapper and hook management system for Anthropic's Claude Code that adds D
 - **Session Tracking**: Comprehensive logging of tool usage and user interactions
 - **Memory Management**: Modular CLAUDE.md file generation from organized configuration directory
 - **SSH Forwarding**: Automatic SSH agent setup and forwarding into Docker containers
-- **Hook System**: Extensible pre-tool-use, user-prompt-submit, notification, and stop hooks
+- **Hook System**: Extensible pre-tool-use, post-tool-use, user-prompt-submit, notification, and stop hooks
 - **MCP Server**: Built-in requirements tracking tool for Claude Code sessions
 - **Multi-Scope Configuration**: Layered config system with global, project, group, and profile scopes
 - **Accounts**: Isolated Claude configurations per named account (`--account <name>`)
@@ -156,6 +156,7 @@ Logs user prompts with session context for tracking and debugging.
        └─► claude (inside container or on host)
            │
            ├─► PreToolUse hook validates operations
+           ├─► PostToolUse hook (extensible stub)
            ├─► UserPromptSubmit hook logs interactions
            ├─► Stop hook sends "task completed" notification
            └─► Notification hook forwards attention-needed alerts
@@ -609,15 +610,18 @@ The project uses XO for strict linting with TypeScript support:
 npx xo
 ```
 
-## Binaries
+## Subcommands
+
+All functionality is provided through a single `claudex` binary with subcommands:
 
 - `claudex` - Main CLI wrapper
-- `claudex-in-docker` - Docker container entry point
-- `claudex-mcp` - MCP server for requirements tracking
-- `claudex-hook-pre-tool-use` - Pre-tool-use hook handler
-- `claudex-hook-user-prompt-submit` - User prompt event handler
-- `claudex-hook-notification` - Notification event handler (desktop notifications)
-- `claudex-hook-stop` - Stop event handler (task completion notifications)
+- `claudex in-docker` - Docker container entry point
+- `claudex mcp` - MCP server for requirements tracking
+- `claudex hook pre-tool-use` - Pre-tool-use hook handler
+- `claudex hook post-tool-use` - Post-tool-use hook handler (extensible stub)
+- `claudex hook user-prompt-submit` - User prompt event handler
+- `claudex hook notification` - Notification event handler (desktop notifications)
+- `claudex hook stop` - Stop event handler (task completion notifications)
 
 ## Contributing
 
