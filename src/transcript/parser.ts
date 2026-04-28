@@ -284,7 +284,7 @@ function * extractFromQueueOperationEntry(
 		return;
 	}
 
-	const content = entry.content;
+	const { content } = entry;
 	if (typeof content === 'string') {
 		yield {
 			target: 'queue-operation', text: content, sessionId: context.sessionId, timestamp: context.timestamp,

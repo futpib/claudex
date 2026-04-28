@@ -965,8 +965,7 @@ export function getKeyEntries(): KeyEntry[] {
 			}
 
 			case 'launcherOverrides': {
-				entries.push({ key: 'launcherOverrides.<launcher>.args', type: 'string[]' });
-				entries.push({ key: 'launcherOverrides.<launcher>.env.<KEY>', type: 'string' });
+				entries.push({ key: 'launcherOverrides.<launcher>.args', type: 'string[]' }, { key: 'launcherOverrides.<launcher>.env.<KEY>', type: 'string' });
 				break;
 			}
 

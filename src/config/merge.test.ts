@@ -67,10 +67,10 @@ test('mergeBaseConfigs concatenates launcherOverrides args per launcher', t => {
 });
 
 test('mergeBaseConfigs merges launcherOverrides env per launcher', t => {
-	const base: BaseConfig = { launcherOverrides: { codex: { env: { A: '1' } } } };
-	const overlay: BaseConfig = { launcherOverrides: { codex: { env: { B: '2' } } } };
+	const base: BaseConfig = { launcherOverrides: { codex: { env: { A: '1' } } } }; // eslint-disable-line @typescript-eslint/naming-convention
+	const overlay: BaseConfig = { launcherOverrides: { codex: { env: { B: '2' } } } }; // eslint-disable-line @typescript-eslint/naming-convention
 	const merged = mergeBaseConfigs(base, overlay);
-	t.deepEqual(merged.launcherOverrides?.codex.env, { A: '1', B: '2' });
+	t.deepEqual(merged.launcherOverrides?.codex.env, { A: '1', B: '2' }); // eslint-disable-line @typescript-eslint/naming-convention
 });
 
 test('mergeBaseConfigs combines launchers across base and overlay', t => {

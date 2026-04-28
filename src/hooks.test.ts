@@ -11,7 +11,7 @@ import {
 	ensureOpencodeMcpConfig,
 } from './hooks.js';
 
-async function mkTempDir(): Promise<string> {
+async function mkTemporaryDir(): Promise<string> {
 	return fs.mkdtemp(path.join(tmpdir(), 'claudex-hooks-test-'));
 }
 
@@ -21,7 +21,7 @@ async function readSettings(claudeDir: string): Promise<Record<string, unknown>>
 }
 
 test('ensureHookSetup writes claudeSettings overlay into settings.json', async t => {
-	const claudeDir = await mkTempDir();
+	const claudeDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(claudeDir, { recursive: true }));
 
 	await ensureHookSetup(claudeDir, {
@@ -35,7 +35,7 @@ test('ensureHookSetup writes claudeSettings overlay into settings.json', async t
 });
 
 test('ensureHookSetup preserves pre-existing unknown keys in settings.json', async t => {
-	const claudeDir = await mkTempDir();
+	const claudeDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(claudeDir, { recursive: true }));
 
 	await fs.writeFile(
@@ -51,8 +51,8 @@ test('ensureHookSetup preserves pre-existing unknown keys in settings.json', asy
 });
 
 test('ensureHookSetup writes per-account settings.json independently', async t => {
-	const accountA = await mkTempDir();
-	const accountB = await mkTempDir();
+	const accountA = await mkTemporaryDir();
+	const accountB = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(accountA, { recursive: true }));
 	t.teardown(async () => fs.rm(accountB, { recursive: true }));
 
@@ -66,7 +66,7 @@ test('ensureHookSetup writes per-account settings.json independently', async t =
 });
 
 test('ensureHookSetup ignores hooks key in claudeSettings overlay', async t => {
-	const claudeDir = await mkTempDir();
+	const claudeDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(claudeDir, { recursive: true }));
 
 	await ensureHookSetup(claudeDir, {
@@ -84,7 +84,7 @@ test('ensureHookSetup ignores hooks key in claudeSettings overlay', async t => {
 });
 
 test('ensureHookSetup writes PostToolUse alongside the other four events', async t => {
-	const claudeDir = await mkTempDir();
+	const claudeDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(claudeDir, { recursive: true }));
 
 	await ensureHookSetup(claudeDir);
@@ -100,7 +100,7 @@ test('ensureHookSetup writes PostToolUse alongside the other four events', async
 });
 
 test('ensureCodexHookSetup writes hooks.json with all six events and flips feature flag', async t => {
-	const codexDir = await mkTempDir();
+	const codexDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(codexDir, { recursive: true }));
 
 	await ensureCodexHookSetup(codexDir);
@@ -120,7 +120,7 @@ test('ensureCodexHookSetup writes hooks.json with all six events and flips featu
 });
 
 test('ensureCodexHookSetup preserves user-added hook entries and unrelated config.toml keys', async t => {
-	const codexDir = await mkTempDir();
+	const codexDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(codexDir, { recursive: true }));
 
 	await fs.writeFile(
@@ -155,7 +155,7 @@ test('ensureCodexHookSetup preserves user-added hook entries and unrelated confi
 });
 
 test('ensureOpencodeMcpConfig merges without clobbering existing opencode.json keys', async t => {
-	const configDir = await mkTempDir();
+	const configDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(configDir, { recursive: true }));
 
 	await fs.writeFile(
@@ -181,7 +181,7 @@ test('ensureOpencodeMcpConfig merges without clobbering existing opencode.json k
 });
 
 test('ensureCodexMcpConfig preserves other mcp_servers tables and unrelated sections', async t => {
-	const codexDir = await mkTempDir();
+	const codexDir = await mkTemporaryDir();
 	t.teardown(async () => fs.rm(codexDir, { recursive: true }));
 
 	await fs.writeFile(

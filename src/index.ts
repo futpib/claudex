@@ -624,10 +624,14 @@ function watchAttachEvents(containerName: string): {
 	let outcome: AttachOutcome = 'unknown';
 	const child = execa('docker', [
 		'events',
-		'--filter', `container=${containerName}`,
-		'--filter', 'event=die',
-		'--filter', 'event=detach',
-		'--format', '{{.Status}}',
+		'--filter',
+		`container=${containerName}`,
+		'--filter',
+		'event=die',
+		'--filter',
+		'event=detach',
+		'--format',
+		'{{.Status}}',
 	]);
 
 	child.stdout?.setEncoding('utf8');
@@ -641,6 +645,7 @@ function watchAttachEvents(containerName: string): {
 			}
 		}
 	});
+	// eslint-disable-next-line promise/prefer-await-to-then -- fire-and-forget on long-running subprocess; the function returns a stop handle
 	child.catch(() => {
 		// Killing the events subscription throws; ignore
 	});
@@ -667,7 +672,7 @@ async function cleanupOrDetachPrimary(containerName: string, outcome: AttachOutc
 		return;
 	}
 
-	// outcome === 'die' or 'unknown' — if unknown, fall back to state check
+	// Outcome === 'die' or 'unknown' — if unknown, fall back to state check
 	if (outcome === 'unknown' && await isContainerRunning(containerName)) {
 		console.error(`Detached from ${containerName}. Re-attach with: claudex attach ${containerName}`);
 		return;
@@ -774,7 +779,7 @@ async function runAttach(options: { container?: string }) {
 			stderr: process.stderr,
 		});
 	} catch {
-		// docker attach exits 1 on clean detach (Ctrl+P Ctrl+Q); defer to event check
+		// Docker attach exits 1 on clean detach (Ctrl+P Ctrl+Q); defer to event check
 	}
 
 	const outcome = await events.stop();
@@ -1285,7 +1290,7 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 	try {
 		await claudeChildProcess;
 	} catch {
-		// docker attach exits non-zero on clean detach (Ctrl+P Ctrl+Q); defer to event check
+		// Docker attach exits non-zero on clean detach (Ctrl+P Ctrl+Q); defer to event check
 	} finally {
 		// If the user detached, leave the container for re-attach.
 		// If the entrypoint exited, remove the container.

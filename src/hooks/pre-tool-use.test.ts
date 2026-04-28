@@ -36,7 +36,7 @@ async function runHook(input: Record<string, unknown>, cwd?: string, env?: Recor
 		input: JSON.stringify(input),
 		cwd,
 		reject: false,
-		// eslint-disable-next-line n/prefer-global/process
+
 		env: { ...process.env, ...env },
 	});
 	return {

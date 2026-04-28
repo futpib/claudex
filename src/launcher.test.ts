@@ -1,6 +1,8 @@
 import test from 'ava';
 import { type LauncherDefinition } from './config/index.js';
-import { buildLauncherCommand, resolveLauncherDefinition, isClaudeCodeLauncher, isClaudeCodeSpec, resolveLauncherOverride } from './launcher.js';
+import {
+	buildLauncherCommand, resolveLauncherDefinition, isClaudeCodeLauncher, isClaudeCodeSpec, resolveLauncherOverride,
+} from './launcher.js';
 import { launcherRegistry } from './launchers/registry.js';
 
 // --- buildLauncherCommand ---
@@ -129,29 +131,29 @@ test('resolveLauncherOverride returns empty when overrides undefined', t => {
 
 test('resolveLauncherOverride picks overrides by active launcher name', t => {
 	const overrides = {
-		claude: { args: [ '--a' ], env: { A: '1' } },
-		codex: { args: [ '--b' ], env: { B: '2' } },
+		claude: { args: [ '--a' ], env: { A: '1' } }, // eslint-disable-line @typescript-eslint/naming-convention
+		codex: { args: [ '--b' ], env: { B: '2' } }, // eslint-disable-line @typescript-eslint/naming-convention
 	};
 	const result = resolveLauncherOverride(overrides, 'codex', { command: [ 'codex' ] });
 	t.deepEqual(result.args, [ '--b' ]);
-	t.deepEqual(result.env, { B: '2' });
+	t.deepEqual(result.env, { B: '2' }); // eslint-disable-line @typescript-eslint/naming-convention
 });
 
 test('resolveLauncherOverride uses claude entry when launcher name undefined', t => {
-	const overrides = { claude: { args: [ '--a' ], env: { A: '1' } } };
+	const overrides = { claude: { args: [ '--a' ], env: { A: '1' } } }; // eslint-disable-line @typescript-eslint/naming-convention
 	const result = resolveLauncherOverride(overrides, undefined, undefined);
 	t.deepEqual(result.args, [ '--a' ]);
-	t.deepEqual(result.env, { A: '1' });
+	t.deepEqual(result.env, { A: '1' }); // eslint-disable-line @typescript-eslint/naming-convention
 });
 
 test('resolveLauncherOverride layers claude base under ollama wrapper', t => {
 	const overrides = {
-		claude: { args: [ '--effort', 'max' ], env: { CCD: '1' } },
-		ollama: { args: [ '--extra' ], env: { O: '2' } },
+		claude: { args: [ '--effort', 'max' ], env: { CCD: '1' } }, // eslint-disable-line @typescript-eslint/naming-convention
+		ollama: { args: [ '--extra' ], env: { O: '2' } }, // eslint-disable-line @typescript-eslint/naming-convention
 	};
 	const result = resolveLauncherOverride(overrides, 'ollama', { command: [ 'ollama', 'launch', 'claude' ] });
 	t.deepEqual(result.args, [ '--effort', 'max', '--extra' ]);
-	t.deepEqual(result.env, { CCD: '1', O: '2' });
+	t.deepEqual(result.env, { CCD: '1', O: '2' }); // eslint-disable-line @typescript-eslint/naming-convention
 });
 
 test('resolveLauncherOverride does not layer claude base under codex', t => {

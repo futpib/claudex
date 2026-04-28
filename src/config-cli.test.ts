@@ -1586,7 +1586,7 @@ test('remove redirects to group when group has value and project does not', asyn
 		projects: Record<string, { group: string; packages?: string[] }>;
 	};
 
-	// gcc should be removed from the group
+	// Gcc should be removed from the group
 	t.deepEqual(typed.groupDefinitions.mygroup.packages, [ 'mold' ]);
 	t.is(typed.projects[project.dir]?.packages, undefined);
 });
@@ -1703,7 +1703,7 @@ test('unset redirects to group when group has value and project does not', async
 		projects: Record<string, { group: string; settingSources?: string }>;
 	};
 
-	// settingSources should be removed from the group
+	// SettingSources should be removed from the group
 	t.is(typed.groupDefinitions.mygroup.settingSources, undefined);
 	t.is(typed.projects[project.dir]?.settingSources, undefined);
 });
