@@ -2,14 +2,13 @@
 
 [![Coverage Status](https://coveralls.io/repos/github/futpib/claudex/badge.svg?branch=master)](https://coveralls.io/github/futpib/claudex?branch=master)
 
-A CLI wrapper and hook management system for Anthropic's Claude Code that adds Docker containerization, safety guardrails, desktop notifications, and co-authorship tracking.
+A CLI wrapper and hook management system for Anthropic's Claude Code that adds Docker containerization, safety guardrails, desktop notifications, and session tracking.
 
 ## Features
 
 - **Docker Containerization**: Run Claude Code in an isolated Docker container with automatic image building, volume mounting, and security hardening
 - **Safety Layer**: Prevents dangerous git operations (bypassing hooks, amending other developers' commits) and rejects unsafe working directories
 - **Desktop Notifications**: Get notified via `notify-send` when tasks complete or need attention, with host socket forwarding for Docker
-- **Co-Authorship Verification**: Cryptographic proof system to validate Claude's actual contributions to commits
 - **Session Tracking**: Comprehensive logging of tool usage and user interactions
 - **Memory Management**: Modular CLAUDE.md file generation from organized configuration directory
 - **SSH Forwarding**: Automatic SSH agent setup and forwarding into Docker containers
@@ -95,17 +94,6 @@ claudex --docker-arg --cap-add --docker-arg SYS_ADMIN
 claudex --docker-args='--cap-add SYS_ADMIN --cap-add SYS_PTRACE --security-opt seccomp=unconfined'
 ```
 
-### Co-Authorship Proof System
-
-When Claude attempts a `git commit` with `Co-authored-by:`, the `requireCoAuthorshipProof` hook intercepts it and requires explicit confirmation:
-
-```bash
-# After claudex shows a confirmation ID, confirm the co-authorship with a verbatim quote
-claudex confirm <id> '<verbatim quote from user that requested this commit>'
-```
-
-The hook checks that Claude actually contributed to the code being committed, blocking the commit until the proof is confirmed.
-
 ### Memory Management
 
 Organize your Claude Code context in `~/.config/claudex/CLAUDE.md.d/`:
@@ -131,10 +119,6 @@ Located in `src/hooks/pre-tool-use.ts`, this hook intercepts all Claude Code too
 - **Block dangerous git operations**:
   - `git commit --amend` (prevents amending other developers' commits)
   - `git commit --no-verify` (prevents bypassing pre-commit hooks)
-
-- **Validate co-authorship claims**:
-  - Requires valid SHA256 proof PIN when `Co-authored-by: Claude Code` is used
-  - Ensures Claude actually contributed to the code being committed
 
 - **Log tool usage**:
   - Records session IDs, transcript locations, and tool parameters
@@ -558,7 +542,7 @@ claudex mv ~/code/old-name ~/code/new-name
 
 ### Confirming Pending Actions
 
-Some hook rules (e.g. `requireGitMutationConfirmation`, `requireCoAuthorshipProof`) block an action and emit a short confirmation ID. Confirm with a verbatim quote from the user that authorized the action:
+Some hook rules (e.g. `requireGitMutationConfirmation`, `banWriteOperations`) block an action and emit a short confirmation ID. Confirm with a verbatim quote from the user that authorized the action:
 
 ```bash
 claudex confirm <id> '<verbatim quote from the user>'
@@ -629,7 +613,6 @@ Or in `config.json`:
 | `preferLocalGithubRepo` | Block fetching files from GitHub when the repo is already cloned locally as a sibling directory |
 | `preferGhx` | Use `ghx` instead of `gh` when `ghx` is available |
 | `suggestCommandSubstitute` | When a command is not found but an equivalent is available, suggest it (e.g. pip → uv) |
-| `requireCoAuthorshipProof` | Require co-authorship confirmation before `git commit` with `Co-authored-by:` |
 | `requireGitMutationConfirmation` | Require explicit user confirmation before git mutations (commit, push, merge, etc.) |
 | `logToolUse` | Log non-read-only tool usage |
 | `logReadOnlyToolUse` | Log read-only tool usage |

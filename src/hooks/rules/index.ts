@@ -23,7 +23,6 @@ import { banWrongPackageManager } from './ban-wrong-package-manager.js';
 import { banAbsolutePaths } from './ban-absolute-paths.js';
 import { banHomeDirAbsolutePaths } from './ban-home-dir-absolute-paths.js';
 import { preferLocalGithubRepo } from './prefer-local-github-repo.js';
-import { requireCoAuthorshipProof } from './require-co-authorship-proof.js';
 import { requireGitMutationConfirmation } from './require-git-mutation-confirmation.js';
 import { logToolUse } from './log-tool-use.js';
 import { banWriteOperations } from './ban-write-operations.js';
@@ -93,7 +92,6 @@ export const allRules: Rule[] = [
 	banWrongPackageManager,
 	preferLocalGithubRepo,
 	banWriteOperations,
-	requireCoAuthorshipProof,
 	requireGitMutationConfirmation,
 	suggestCommandSubstitute,
 	preferGhx,
