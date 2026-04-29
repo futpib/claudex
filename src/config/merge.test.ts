@@ -99,3 +99,45 @@ test('mergeBaseConfigs leaves launchers undefined when neither side sets it', t 
 	const merged = mergeBaseConfigs({}, {});
 	t.is(merged.launchers, undefined);
 });
+
+// --- mergeBaseConfigs: envFile / envFiles / envMode ---
+
+test('mergeBaseConfigs overlay envFile wins over base', t => {
+	const base: BaseConfig = { envFile: true };
+	const overlay: BaseConfig = { envFile: 'custom.env' };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.is(merged.envFile, 'custom.env');
+});
+
+test('mergeBaseConfigs inherits envFile from base when overlay omits it', t => {
+	const base: BaseConfig = { envFile: true };
+	const overlay: BaseConfig = {};
+	const merged = mergeBaseConfigs(base, overlay);
+	t.is(merged.envFile, true);
+});
+
+test('mergeBaseConfigs concatenates and dedupes envFiles', t => {
+	const base: BaseConfig = { envFiles: [ 'a.env' ] };
+	const overlay: BaseConfig = { envFiles: [ 'a.env', 'b.env' ] };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.deepEqual(merged.envFiles, [ 'a.env', 'b.env' ]);
+});
+
+test('mergeBaseConfigs leaves envFiles undefined when neither side sets it', t => {
+	const merged = mergeBaseConfigs({}, {});
+	t.is(merged.envFiles, undefined);
+});
+
+test('mergeBaseConfigs overlay envMode wins over base', t => {
+	const base: BaseConfig = { envMode: 'all' };
+	const overlay: BaseConfig = { envMode: 'explicit' };
+	const merged = mergeBaseConfigs(base, overlay);
+	t.is(merged.envMode, 'explicit');
+});
+
+test('mergeBaseConfigs inherits envMode from base when overlay omits it', t => {
+	const base: BaseConfig = { envMode: 'all' };
+	const overlay: BaseConfig = {};
+	const merged = mergeBaseConfigs(base, overlay);
+	t.is(merged.envMode, 'all');
+});

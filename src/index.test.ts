@@ -32,6 +32,8 @@ test('--help exits 0 and lists all options', async t => {
 		'--package',
 		'--volume',
 		'--env',
+		'--env-file',
+		'--env-mode',
 		'--ssh-key',
 		'--launcher',
 		'--model',

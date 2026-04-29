@@ -271,6 +271,19 @@ const numberCoercionFields = new Set(Object.entries(baseConfigSchema.shape)
 	.map(([ key ]) => key));
 
 function coerceValue(field: string, value: string): unknown {
+	// envFile accepts boolean (true → auto-load .env/.env.*) or string (path).
+	if (field === 'envFile') {
+		if (value === 'true') {
+			return true;
+		}
+
+		if (value === 'false') {
+			return false;
+		}
+
+		return value;
+	}
+
 	if (numberCoercionFields.has(field)) {
 		const number_ = Number(value);
 		if (!Number.isInteger(number_) || number_ <= 0) {
@@ -936,6 +949,9 @@ export function getKeyEntries(): KeyEntry[] {
 		hooksDescriptions: 'boolean',
 		profiles: 'string[]',
 		launcherOverrides: 'record',
+		envFile: 'boolean | string',
+		envFiles: 'string[]',
+		envMode: 'string ("all" | "explicit")',
 	};
 
 	for (const field of validTopLevelKeys) {

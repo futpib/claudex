@@ -8,11 +8,17 @@ export {
 	type McpServersDetail, type McpServersConfig,
 	type BaseConfig, type ProjectConfig, type RootConfig,
 	type LauncherDefinition, type LauncherOverride, type ClaudexConfig,
+	type EnvMode,
 } from './schema.js';
 
 export {
 	expandEnvVars, expandPathEnv, expandEnvValues, expandVolumePaths,
 } from './expand.js';
+
+export {
+	resolveEnvFileSources, loadEnvFileSources,
+	type EnvFileSource,
+} from './env-files.js';
 
 export {
 	mergeBaseConfigs, mergeRootConfigs,

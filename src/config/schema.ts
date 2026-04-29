@@ -32,11 +32,16 @@ const mcpServersDetailConfigSchema = z.object({
 
 const mcpServersConfigSchema = z.union([ z.literal(true), mcpServersDetailConfigSchema ]);
 
+const envModeSchema = z.enum([ 'all', 'explicit' ]);
+
 // Base config schema - can appear at both root and project level
 export const baseConfigSchema = z.object({
 	packages: z.array(z.string()).optional(),
 	volumes: z.array(volumeSchema).optional(),
 	env: z.record(z.string(), z.string()).optional(),
+	envFile: z.union([ z.boolean(), z.string() ]).optional(), // true → auto-load .env and .env.*; string → single dotenv-format file path
+	envFiles: z.array(z.string()).optional(), // Additional dotenv-format file paths
+	envMode: envModeSchema.optional(), // 'explicit' (default) → only env: {...} entries reach the container; 'all' → also pass every env-file var
 	ssh: sshConfigSchema.optional(),
 	hostPorts: z.array(z.number().int().positive()).optional(),
 	extraHosts: z.record(z.string(), z.string()).optional(),
@@ -88,6 +93,7 @@ export type HooksDetail = z.infer<typeof hooksDetailConfigSchema>;
 export type HooksConfig = z.infer<typeof hooksConfigSchema>;
 export type McpServersDetail = z.infer<typeof mcpServersDetailConfigSchema>;
 export type McpServersConfig = z.infer<typeof mcpServersConfigSchema>;
+export type EnvMode = z.infer<typeof envModeSchema>;
 export type BaseConfig = z.infer<typeof baseConfigSchema>;
 export type ProjectConfig = z.infer<typeof projectConfigSchema>;
 export type RootConfig = z.infer<typeof rootConfigSchema>;

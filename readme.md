@@ -73,6 +73,8 @@ claudex exec --root
 | `--package <name>` | Install pacman package in Docker (repeatable) |
 | `--volume <spec>` | Mount volume: `path` or `host:container` (repeatable) |
 | `--env <spec>` | Set env var: `KEY=value` or `KEY` for passthrough (repeatable) |
+| `--env-file <path>` | Load env vars from a dotenv-format file (repeatable) |
+| `--env-mode <mode>` | How env-file vars reach the container: `explicit` (default) or `all` |
 | `--ssh-key <path>` | Add SSH key to agent (repeatable) |
 | `--launcher <name>` | Select launcher by name (e.g. `ollama`, `opencode`, `codex`) |
 | `--model <name>` | Override the launcher's default model |
@@ -159,6 +161,34 @@ In Docker mode, notifications are delivered through a Unix domain socket mounted
 # Disable notifications
 claudex config set --global notifications false
 ```
+
+### Env Files
+
+Claudex can load dotenv-format files at startup. Loaded values feed `${VAR}` substitutions in `env: {...}` and, when `envMode` is `all`, are forwarded into the container as-is. Default behavior (no env files) is unchanged.
+
+```bash
+# Auto-load .env and any .env.* file (except templates: .env.example/sample/template/dist)
+claudex config set envFile true
+
+# Or point at a specific file
+claudex config set envFile path/to/.env
+
+# Add additional explicit files (paths relative to cwd; tilde-expanded)
+claudex config add envFiles ~/secrets/shared.env
+
+# Or pass at runtime
+claudex --env-file path/to/.env --env-file path/to/other.env
+```
+
+By default (`envMode: "explicit"`), env-file values are only available for `${VAR}` resolution from `env: {...}`. To pass every loaded variable straight into the container, use `all`:
+
+```bash
+claudex config set envMode all
+# or once
+claudex --env-mode all
+```
+
+Loaded values are run through `gitleaks` (when available) and shielded as `****` in startup logs. Last-loaded source wins for conflicting keys; explicit `env: {...}` and `--env` entries win over file-loaded values.
 
 ### SSH Forwarding
 
@@ -321,6 +351,9 @@ claudex config <action> [scope flags] [key] [value]
 | `packages` | string[] | add, unset |
 | `volumes` | string[] | add, unset |
 | `env.<KEY>` | string | set, unset |
+| `envFile` | boolean \| string | set, unset |
+| `envFiles` | string[] | add, unset |
+| `envMode` | `"all"` \| `"explicit"` | set, unset |
 | `ssh.keys` | string[] | add, unset |
 | `ssh.hosts` | string[] | add, unset |
 | `hostPorts` | number[] | add, unset |

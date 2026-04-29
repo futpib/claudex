@@ -117,8 +117,8 @@ test.serial('set a boolean via config-interactive', async t => {
 		},
 	});
 
-	// Navigate to shareVolumes: 6 downs from packages(0)
-	const downKeys = keys.down.repeat(6);
+	// Navigate to shareVolumes: 9 downs from packages(0)
+	const downKeys = keys.down.repeat(9);
 	await waitForPromptAndSend(proc, 'Select a configuration key:', downKeys + keys.enter); // Select "shareVolumes"
 	await waitForPromptAndSend(proc, 'Action for shareVolumes', keys.enter); // Select "Set to true"
 	await waitForPromptAndSend(proc, 'Where should this change be written?', keys.down + keys.enter); // Skip "Project" → "Global"

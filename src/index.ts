@@ -15,6 +15,7 @@ import {
 	resolveHooks, type ClaudexConfig,
 	type LauncherDefinition,
 	readAllConfigFiles, writeSingleConfigFile,
+	resolveEnvFileSources, loadEnvFileSources,
 } from './config/index.js';
 import {
 	configMain, configMainFromArgv, type Scope, type ParsedArgs,
@@ -81,6 +82,8 @@ type MainOptions = {
 	package: string[];
 	volume: string[];
 	env: string[];
+	envFile: string[];
+	envMode: string | undefined;
 	sshKey: string[];
 	dockerArg: string[];
 	dockerArgs: string | undefined;
@@ -106,6 +109,8 @@ export async function main() {
 		.option('--volume <spec>', 'Add volume mount: path or host:container (repeatable)', collect, [])
 	// eslint-disable-next-line no-template-curly-in-string
 		.option('--env <spec>', 'Add env var: KEY=value or KEY for KEY=${KEY} (repeatable)', collect, [])
+		.option('--env-file <path>', 'Load env vars from a dotenv-format file (repeatable)', collect, [])
+		.option('--env-mode <mode>', 'How env-file vars reach the container: "explicit" (default; only env: {...} entries) or "all" (every loaded var)')
 		.option('--ssh-key <path>', 'Add SSH key to agent (repeatable)', collect, [])
 		.option('--launcher <name>', 'Select launcher by name (e.g. "ollama", "codex")')
 		.option('--model <name>', 'Override the launcher\'s default model')
@@ -1044,6 +1049,8 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		package: cliPackages,
 		volume: cliVolumes,
 		env: cliEnv,
+		envFile: cliEnvFiles,
+		envMode: cliEnvModeRaw,
 		sshKey: cliSshKeys,
 		dockerArg: cliDockerArg,
 		dockerArgs: cliDockerArgsString,
@@ -1052,6 +1059,13 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		account: cliAccount,
 		noAccount,
 	} = options;
+
+	let cliEnvMode: 'all' | 'explicit' | undefined;
+	if (cliEnvModeRaw === 'all' || cliEnvModeRaw === 'explicit') {
+		cliEnvMode = cliEnvModeRaw;
+	} else if (cliEnvModeRaw !== undefined) {
+		throw new Error(`Invalid --env-mode value: ${cliEnvModeRaw}. Expected 'all' or 'explicit'.`);
+	}
 
 	const cliDockerArgs = [ ...cliDockerArg, ...(cliDockerArgsString ? cliDockerArgsString.split(' ') : []) ];
 
@@ -1220,6 +1234,8 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			cliPackages,
 			cliVolumes,
 			cliEnv,
+			cliEnvFiles,
+			cliEnvMode,
 			cliSshKeys,
 			cliModel,
 			dockerSudo,
@@ -1242,6 +1258,46 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 		const spec = resolveLauncherSpec(launcherName ?? 'claude', earlyConfig.launcherDefinitions);
 		const cliFeatures = effectiveSpecField(spec, 'cliFeatures');
 
+		// Load env-file values for non-Docker mode. In 'all' mode every loaded var is
+		// added to the child env; in 'explicit' mode they only feed ${VAR} resolution.
+		const envFileSources = await resolveEnvFileSources({
+			envFile: config.envFile,
+			envFiles: config.envFiles,
+			cliEnvFiles,
+			cwd,
+		});
+		if (envFileSources.length > 0) {
+			console.error('Env files:');
+			for (const source of envFileSources) {
+				console.error(`  ${source.path}${source.optional ? ' (optional)' : ''}`);
+			}
+		}
+
+		const envFileValues = await loadEnvFileSources(envFileSources);
+		const envMode = cliEnvMode ?? config.envMode ?? 'explicit';
+		const childEnv: Record<string, string | undefined> = { ...process.env };
+		if (envMode === 'all') {
+			Object.assign(childEnv, envFileValues);
+		}
+
+		const envLookup: Record<string, string | undefined> = { ...process.env, ...envFileValues };
+
+		// Resolve config.env entries against the file-augmented lookup so ${VAR}
+		// references can pick up values from env files.
+		if (config.env) {
+			for (const [ key, value ] of Object.entries(config.env)) {
+				const match = /^\${(.+)}$/.exec(value);
+				if (match) {
+					const looked = envLookup[match[1]];
+					if (looked !== undefined) {
+						childEnv[key] = looked;
+					}
+				} else {
+					childEnv[key] = value;
+				}
+			}
+		}
+
 		const claudeFullArgs: string[] = [];
 		if (cliFeatures?.settingSources) {
 			const settingSources = config.settingSources ?? 'user,local';
@@ -1259,6 +1315,20 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 			claudeFullArgs.push(...launcherOverride.args);
 		}
 
+		if (launcherOverride.env) {
+			for (const [ key, value ] of Object.entries(launcherOverride.env)) {
+				const match = /^\${(.+)}$/.exec(value);
+				if (match) {
+					const looked = envLookup[match[1]];
+					if (looked !== undefined) {
+						childEnv[key] = looked;
+					}
+				} else {
+					childEnv[key] = value;
+				}
+			}
+		}
+
 		claudeFullArgs.push(...claudeArgs);
 
 		if (launcherDef) {
@@ -1267,12 +1337,14 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 				stdin: process.stdin,
 				stdout: process.stdout,
 				stderr: process.stderr,
+				env: childEnv,
 			});
 		} else {
 			claudeChildProcess = execa('claude', claudeFullArgs, {
 				stdin: process.stdin,
 				stdout: process.stdout,
 				stderr: process.stderr,
+				env: childEnv,
 			});
 		}
 	}

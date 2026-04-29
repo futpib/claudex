@@ -4,6 +4,7 @@ import fs from 'node:fs/promises';
 import { execa, type ResultPromise } from 'execa';
 import {
 	expandVolumePaths, expandPathEnv,
+	resolveEnvFileSources, loadEnvFileSources,
 	type Volume, type ClaudexConfig, type LauncherDefinition,
 } from '../config/index.js';
 import {
@@ -124,6 +125,8 @@ export async function runDockerContainer(parameters: {
 	cliPackages: string[];
 	cliVolumes: string[];
 	cliEnv: string[];
+	cliEnvFiles: string[];
+	cliEnvMode: 'all' | 'explicit' | undefined;
 	cliSshKeys: string[];
 	cliModel: string | undefined;
 	dockerSudo: boolean;
@@ -137,7 +140,7 @@ export async function runDockerContainer(parameters: {
 	cliInDockerPath: string;
 }): Promise<DockerRunResult> {
 	const {
-		cwd, account, profileVolumes, launcherDef, launcherName, launcherDefinitions, cliPackages, cliVolumes, cliEnv, cliSshKeys,
+		cwd, account, profileVolumes, launcherDef, launcherName, launcherDefinitions, cliPackages, cliVolumes, cliEnv, cliEnvFiles, cliEnvMode, cliSshKeys,
 		cliModel, dockerSudo, dockerInsecure, cliDockerArgs, useDockerShell, dockerPull, dockerNoCache, dockerSkipBuild, claudeArgs, cliInDockerPath,
 	} = parameters;
 	const config = { ...parameters.config };
@@ -308,18 +311,47 @@ export async function runDockerContainer(parameters: {
 		}
 	}
 
+	// Load env-file values; these override process.env for ${VAR} resolution.
+	const envFileSources = await resolveEnvFileSources({
+		envFile: config.envFile,
+		envFiles: config.envFiles,
+		cliEnvFiles,
+		cwd,
+	});
+
+	if (envFileSources.length > 0) {
+		console.error('Env files:');
+		for (const source of envFileSources) {
+			console.error(`  ${source.path}${source.optional ? ' (optional)' : ''}`);
+		}
+	}
+
+	const envFileValues = await loadEnvFileSources(envFileSources);
+	const envLookup: Record<string, string | undefined> = { ...process.env, ...envFileValues };
+
 	function resolveEnvEntry(key: string, value: string): string | undefined {
 		const match = /^\${(.+)}$/.exec(value);
 		if (match) {
 			const hostVarName = match[1];
-			return process.env[hostVarName];
+			return envLookup[hostVarName];
 		}
 
 		return key === 'PATH' ? expandPathEnv(value) : value;
 	}
 
+	const envMode = cliEnvMode ?? config.envMode ?? 'explicit';
+
 	// Resolve environment variables from config
 	const resolvedEnv: Record<string, string> = {};
+
+	// In 'all' mode, every env-file value gets passed to the container as a
+	// baseline; explicit config.env / launcherOverride.env entries layer on top.
+	if (envMode === 'all') {
+		for (const [ key, value ] of Object.entries(envFileValues)) {
+			resolvedEnv[key] = key === 'PATH' ? expandPathEnv(value) : value;
+		}
+	}
+
 	if (config.env) {
 		for (const [ key, value ] of Object.entries(config.env)) {
 			const resolved = resolveEnvEntry(key, value);

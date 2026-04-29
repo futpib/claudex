@@ -154,6 +154,18 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 
 	const env = mergeEnv(base.env ?? {}, overlay.env ?? {});
 
+	// EnvFile: overlay wins (boolean or string)
+	const envFile = overlay.envFile ?? base.envFile;
+
+	// EnvFiles: concat + dedupe
+	const envFiles = dedupeStrings([
+		...(base.envFiles ?? []),
+		...(overlay.envFiles ?? []),
+	]);
+
+	// EnvMode: overlay wins
+	const envMode = overlay.envMode ?? base.envMode;
+
 	const sshKeys = dedupeStrings([
 		...(base.ssh?.keys ?? []),
 		...(overlay.ssh?.keys ?? []),
@@ -246,6 +258,9 @@ export function mergeBaseConfigs(base: BaseConfig, overlay: BaseConfig): BaseCon
 		packages: packages.length > 0 ? packages : undefined,
 		volumes: volumes.length > 0 ? volumes : undefined,
 		env: Object.keys(env).length > 0 ? env : undefined,
+		envFile,
+		envFiles: envFiles.length > 0 ? envFiles : undefined,
+		envMode,
 		ssh: hasSsh
 			? {
 				keys: sshKeys.length > 0 ? sshKeys : undefined,
@@ -440,6 +455,9 @@ function sortConfig(config: ClaudexConfig): ClaudexConfig {
 		packages: config.packages ? [ ...config.packages ].sort((a, b) => a.localeCompare(b)) : undefined,
 		volumes: config.volumes ? sortVolumes(config.volumes) : undefined,
 		env: config.env ? sortEnv(config.env) : undefined,
+		envFile: config.envFile,
+		envFiles: config.envFiles ? [ ...config.envFiles ] : undefined,
+		envMode: config.envMode,
 		ssh: config.ssh,
 		hostPorts: config.hostPorts ? [ ...config.hostPorts ].sort((a, b) => a - b) : undefined,
 		extraHosts: config.extraHosts ? sortEnv(config.extraHosts) : undefined,

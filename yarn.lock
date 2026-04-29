@@ -1887,6 +1887,7 @@ __metadata:
     commander: "npm:^14.0.3"
     coveralls: "npm:^3.1.1"
     diff: "npm:^8.0.3"
+    dotenv: "npm:^17.4.2"
     env-paths: "npm:^4.0.0"
     eslint-config-xo-typescript-overrides: "npm:^2.0.3"
     execa: "npm:^9.6.1"
@@ -2314,6 +2315,13 @@ __metadata:
   dependencies:
     esutils: "npm:^2.0.2"
   checksum: 10/555684f77e791b17173ea86e2eea45ef26c22219cb64670669c4f4bebd26dbc95cd90ec1f4159e9349a6bb9eb892ce4dde8cd0139e77bedd8bf4518238618474
+  languageName: node
+  linkType: hard
+
+"dotenv@npm:^17.4.2":
+  version: 17.4.2
+  resolution: "dotenv@npm:17.4.2"
+  checksum: 10/ca1b6f54d58e39914901e1518958e86083aca8deb5aa2e7f2a51acd53291d97852479b0ab26ed949b6a45a0e9adcc7b0d1c3c72375e8ea670f7005e341c6daba
   languageName: node
   linkType: hard
 
