@@ -1161,6 +1161,84 @@ test('allows ls when hooks not configured', async t => {
 	t.is(result.exitCode, 0);
 });
 
+// --- ban-pkill-f ---
+
+test('rejects pkill -f', async t => {
+	await using config = await createHooksConfig({ banPkillF: true });
+
+	const result = await runHook(
+		createBashToolInput('pkill -f my-script.js'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 2);
+	t.true(result.stderr.includes('pkill -f'));
+});
+
+test('rejects pkill --full', async t => {
+	await using config = await createHooksConfig({ banPkillF: true });
+
+	const result = await runHook(
+		createBashToolInput('pkill --full my-script.js'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 2);
+});
+
+test('rejects pkill with combined short flags including f', async t => {
+	await using config = await createHooksConfig({ banPkillF: true });
+
+	const result = await runHook(
+		createBashToolInput('pkill -af my-script.js'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 2);
+});
+
+test('allows pkill without -f', async t => {
+	await using config = await createHooksConfig({ banPkillF: true });
+
+	const result = await runHook(
+		createBashToolInput('pkill node'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.not(result.exitCode, 2);
+});
+
+test('allows pkill -f when hooks not configured', async t => {
+	await using config = await createHooksConfig({});
+
+	const result = await runHook(
+		createBashToolInput('pkill -f my-script.js'),
+		undefined,
+		{
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			XDG_CONFIG_HOME: config.configDir,
+		},
+	);
+
+	t.is(result.exitCode, 0);
+});
+
 // --- ban-grep-command ---
 
 test('rejects grep command', async t => {
