@@ -18,6 +18,7 @@ import { getGitWorktreeParentPath } from '../git.js';
 import { getSshKeys, getSshHosts, getFilteredKnownHosts } from '../ssh/known-hosts.js';
 import { shieldEnvVars } from '../secrets.js';
 import { paths } from '../paths.js';
+import { collapseHomedir, findSubsumingPaths } from '../utils.js';
 import { startHostSocketServer } from '../host-socket/server.js';
 import { type SshAgentInfo, startSshAgent } from '../ssh/agent.js';
 import { startHostPortProxies } from '../port-proxy/host.js';
@@ -85,6 +86,23 @@ export async function buildAddDirArgs(config: ClaudexConfig, cwd: string, projec
 		'--allowedTools',
 		`Read(${dir}/**)`,
 	]);
+}
+
+function extractHostPathsFromDockerArgs(dockerArgs: string[]): string[] {
+	const paths: string[] = [];
+	for (let i = 0; i < dockerArgs.length - 1; i++) {
+		if (dockerArgs[i] !== '-v') {
+			continue;
+		}
+
+		const spec = dockerArgs[i + 1];
+		const colonIndex = spec.indexOf(':');
+		if (colonIndex !== -1) {
+			paths.push(spec.slice(0, colonIndex));
+		}
+	}
+
+	return paths;
 }
 
 function parseVolumeSpec(spec: string): Volume {
@@ -308,6 +326,22 @@ export async function runDockerContainer(parameters: {
 				: `${expandedVolume.host}:${expandedVolume.container}`;
 			console.error(`  ${volumeSpec}`);
 			dockerArgs.push('-v', `${expandedVolume.host}:${expandedVolume.container}`);
+		}
+	}
+
+	// `paths.config` always-subsumes account dirs by design (account mounts live
+	// under the config dir but are bind-mounted separately so each launcher's
+	// env var resolves to a stable host path). Suppress that case so the warning
+	// only flags actionable subsumptions from user config.
+	const subsuming = findSubsumingPaths(extractHostPathsFromDockerArgs(dockerArgs))
+		.filter(entry => entry.ancestor !== paths.config && entry.ancestor !== paths.data);
+	if (subsuming.length > 0) {
+		console.error('Warning: bind-mount paths subsume others (the descendants are redundant or hidden by the ancestor):');
+		for (const { ancestor, descendants } of subsuming) {
+			console.error(`  ${collapseHomedir(ancestor)} contains:`);
+			for (const descendant of descendants) {
+				console.error(`    ${collapseHomedir(descendant)}`);
+			}
 		}
 	}
 

@@ -25,3 +25,49 @@ export function collapseHomedir(value: string): string {
 
 	return value;
 }
+
+// Strip trailing slashes (except for root "/") so two paths that differ only
+// by a trailing slash compare equal.
+function normalizeMountPath(value: string): string {
+	if (value === '/') {
+		return value;
+	}
+
+	return value.replace(/\/+$/, '');
+}
+
+export type SubsumingPaths = {
+	ancestor: string;
+	descendants: string[];
+};
+
+// Find paths in `paths` that are strict ancestors of other paths in the same
+// list. Returns one entry per ancestor with all of its descendants. Useful for
+// detecting redundant bind mounts: mounting "/home/x" alongside
+// "/home/x/foo" makes the second mount mostly meaningless.
+export function findSubsumingPaths(paths: string[]): SubsumingPaths[] {
+	const normalized = [ ...new Set(paths.map(p => normalizeMountPath(p))) ];
+
+	const ancestors = new Map<string, string[]>();
+	for (const a of normalized) {
+		const prefix = a === '/' ? '/' : a + '/';
+		for (const b of normalized) {
+			if (a === b) {
+				continue;
+			}
+
+			if (b.startsWith(prefix)) {
+				const list = ancestors.get(a);
+				if (list) {
+					list.push(b);
+				} else {
+					ancestors.set(a, [ b ]);
+				}
+			}
+		}
+	}
+
+	return [ ...ancestors.entries() ]
+		.map(([ ancestor, descendants ]) => ({ ancestor, descendants: descendants.sort((x, y) => x.localeCompare(y)) }))
+		.sort((x, y) => x.ancestor.localeCompare(y.ancestor));
+}
