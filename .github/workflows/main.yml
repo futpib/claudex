@@ -21,6 +21,12 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: ${{ matrix.node-version }}
+      - name: Install gitleaks
+        run: |
+          gh release download --repo gitleaks/gitleaks --pattern 'gitleaks_*_linux_x64.tar.gz' --dir /tmp
+          tar -xzf /tmp/gitleaks_*_linux_x64.tar.gz -C /usr/local/bin gitleaks
+        env:
+          GH_TOKEN: ${{ github.token }}
       - run: yarn install
       - run: yarn build
       - run: yarn test
