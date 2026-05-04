@@ -271,7 +271,7 @@ const numberCoercionFields = new Set(Object.entries(baseConfigSchema.shape)
 	.map(([ key ]) => key));
 
 function coerceValue(field: string, value: string): unknown {
-	// EnvFile accepts boolean (true → auto-load .env/.env.*) or string (path).
+	// `envFile` accepts boolean (true → auto-load .env/.env.*) or string (path).
 	if (field === 'envFile') {
 		if (value === 'true') {
 			return true;
