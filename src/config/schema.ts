@@ -39,7 +39,7 @@ export const baseConfigSchema = z.object({
 	packages: z.array(z.string()).optional(),
 	volumes: z.array(volumeSchema).optional(),
 	env: z.record(z.string(), z.string()).optional(),
-	envFile: z.union([ z.boolean(), z.string() ]).optional(), // true → auto-load .env and .env.*; string → single dotenv-format file path
+	envFile: z.union([ z.boolean(), z.string() ]).optional(), // True → auto-load .env and .env.*; string → single dotenv-format file path
 	envFiles: z.array(z.string()).optional(), // Additional dotenv-format file paths
 	envMode: envModeSchema.optional(), // 'explicit' (default) → only env: {...} entries reach the container; 'all' → also pass every env-file var
 	ssh: sshConfigSchema.optional(),

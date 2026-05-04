@@ -89,6 +89,7 @@ test('loadEnvFileSources merges files with last-wins precedence', async t => {
 			{ path: path.join(cwd, 'b.env'), optional: false },
 		]);
 
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		t.deepEqual(values, { X: '2', Y: 'a', Z: 'b' });
 	} finally {
 		await fs.rm(cwd, { recursive: true, force: true });
@@ -121,6 +122,7 @@ test('loadEnvFileSources warns and continues on missing required files', async t
 			{ path: path.join(cwd, 'missing.env'), optional: false },
 			{ path: path.join(cwd, 'present.env'), optional: false },
 		]);
+		// eslint-disable-next-line @typescript-eslint/naming-convention
 		t.deepEqual(values, { KEEP: '1' });
 		t.true(messages.some(m => m.includes('missing.env')));
 	} finally {
