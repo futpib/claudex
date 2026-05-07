@@ -280,9 +280,14 @@ Then use it with `--launcher my-codex` or `claudex config set launcher my-codex`
 
 When resuming a Claude Code session with `--resume <session-id>`, claudex automatically finds and copies the session transcript into the current project directory if it was recorded under a different project. This makes it easy to resume sessions even after moving or renaming a project.
 
+A short hex prefix is accepted in place of the full session id on `--resume`, `-r`, and `--session-id`, and is expanded to the matching UUID when it is unambiguous across all accounts; an ambiguous prefix is reported and left untouched.
+
 ```bash
 # Resume a session — claudex finds it automatically even if it lives in another project dir
 claudex --resume <session-id>
+
+# Or by an unambiguous prefix (works for --resume, -r, and --session-id)
+claudex --resume 0a7589e7
 ```
 
 ### Host Port Proxying

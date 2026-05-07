@@ -9,27 +9,74 @@ import {
 
 export const sessionIdPattern = /^[\da-f]{8}(?:-[\da-f]{4}){3}-[\da-f]{12}$/i;
 
+// Anything that could be a leading slice of a UUID: hex chars and dashes only,
+// no longer than a full UUID, with no consecutive or trailing dashes.
+export const sessionIdOrPrefixPattern = /^[\da-f]+(?:-[\da-f]+)*$/i;
+
 export function encodeProjectPath(projectPath: string): string {
 	return projectPath.replaceAll(/[/.]/g, '-');
 }
 
-export function extractResumeSessionId(args: string[]): string | undefined {
+export type SessionArgFlag = '--resume' | '-r' | '--session-id';
+const sessionArgFlags: readonly SessionArgFlag[] = [ '--resume', '-r', '--session-id' ];
+
+export type SessionArgLocation = {
+	value: string;
+	argIndex: number;
+	inline: boolean;
+	flag: SessionArgFlag;
+};
+
+export function extractSessionArgLocation(args: string[]): SessionArgLocation | undefined {
 	for (let i = 0; i < args.length; i++) {
 		const arg = args[i];
-		if (arg === '--resume' || arg === '-r') {
+
+		const matchedFlag = sessionArgFlags.find(f => arg === f);
+		if (matchedFlag) {
 			const next = args[i + 1];
-			if (next && sessionIdPattern.test(next)) {
-				return next;
+			if (next && next.length <= 36 && sessionIdOrPrefixPattern.test(next)) {
+				return {
+					value: next, argIndex: i + 1, inline: false, flag: matchedFlag,
+				};
 			}
-		} else if (arg.startsWith('--resume=')) {
-			const value = arg.slice('--resume='.length);
-			if (sessionIdPattern.test(value)) {
-				return value;
+
+			continue;
+		}
+
+		// Inline `--flag=value` form is only standard for long flags.
+		for (const flag of sessionArgFlags) {
+			if (!flag.startsWith('--')) {
+				continue;
+			}
+
+			const prefix = `${flag}=`;
+			if (arg.startsWith(prefix)) {
+				const value = arg.slice(prefix.length);
+				if (value.length <= 36 && sessionIdOrPrefixPattern.test(value)) {
+					return {
+						value, argIndex: i, inline: true, flag,
+					};
+				}
+
+				break;
 			}
 		}
 	}
 
 	return undefined;
+}
+
+export function extractResumeSessionId(args: string[]): string | undefined {
+	const location = extractSessionArgLocation(args);
+	if (!location || !sessionIdPattern.test(location.value)) {
+		return undefined;
+	}
+
+	return location.value;
+}
+
+export function replaceSessionArgValue(args: string[], location: SessionArgLocation, fullId: string): void {
+	args[location.argIndex] = location.inline ? `${location.flag}=${fullId}` : fullId;
 }
 
 export async function collectClaudeProjectsDirs(): Promise<string[]> {
@@ -88,6 +135,74 @@ export async function findSessionFilesInDirs(
 	return matches;
 }
 
+export async function findSessionIdsByPrefix(
+	prefix: string,
+	projectsDirs: string[],
+): Promise<Set<string>> {
+	const ids = new Set<string>();
+	const lowerPrefix = prefix.toLowerCase();
+
+	for (const projectsDir of projectsDirs) {
+		let entries: string[];
+		try {
+			// eslint-disable-next-line no-await-in-loop
+			entries = await fs.readdir(projectsDir);
+		} catch {
+			continue;
+		}
+
+		for (const entry of entries) {
+			const projectDir = path.join(projectsDir, entry);
+			let files: string[];
+			try {
+				// eslint-disable-next-line no-await-in-loop
+				files = await fs.readdir(projectDir);
+			} catch {
+				continue;
+			}
+
+			for (const file of files) {
+				if (!file.endsWith('.jsonl')) {
+					continue;
+				}
+
+				const id = file.slice(0, -'.jsonl'.length);
+				if (sessionIdPattern.test(id) && id.toLowerCase().startsWith(lowerPrefix)) {
+					ids.add(id);
+				}
+			}
+		}
+	}
+
+	return ids;
+}
+
+async function expandSessionPrefix(
+	claudeArgs: string[],
+	location: SessionArgLocation,
+	projectsDirs: string[],
+): Promise<string | undefined> {
+	if (sessionIdPattern.test(location.value)) {
+		return location.value;
+	}
+
+	const matchedIds = await findSessionIdsByPrefix(location.value, projectsDirs);
+	if (matchedIds.size === 0) {
+		return undefined;
+	}
+
+	if (matchedIds.size > 1) {
+		const formatted = [ ...matchedIds ].sort().map(id => `  ${id}`).join('\n');
+		console.error(`Cannot resolve session: prefix ${location.value} matches multiple sessions:\n${formatted}`);
+		return undefined;
+	}
+
+	const [ fullId ] = matchedIds;
+	replaceSessionArgValue(claudeArgs, location, fullId);
+	console.error(`Expanded session prefix ${location.value} → ${fullId}`);
+	return fullId;
+}
+
 export async function copyResumeSessionIfElsewhere(
 	claudeArgs: string[],
 	cwd: string,
@@ -98,13 +213,19 @@ export async function copyResumeSessionIfElsewhere(
 		return;
 	}
 
-	const sessionId = extractResumeSessionId(claudeArgs);
-	if (!sessionId) {
+	const location = extractSessionArgLocation(claudeArgs);
+	if (!location) {
 		return;
 	}
 
 	const claudeConfigDir = getAccountPrimaryDir(launcherRegistry.claude, account);
 	if (!claudeConfigDir) {
+		return;
+	}
+
+	const projectsDirs = await collectClaudeProjectsDirs();
+	const sessionId = await expandSessionPrefix(claudeArgs, location, projectsDirs);
+	if (!sessionId) {
 		return;
 	}
 
@@ -118,7 +239,6 @@ export async function copyResumeSessionIfElsewhere(
 		// Not in current project dir — search across all accounts
 	}
 
-	const projectsDirs = await collectClaudeProjectsDirs();
 	const matches = await findSessionFilesInDirs(sessionId, projectsDirs);
 	if (matches.length === 0) {
 		return;

@@ -55,17 +55,19 @@ type ProbeResult = {
 	stderr: string;
 };
 
-async function runCopyProbe(env: Env, cwd: string, account: string | undefined): Promise<ProbeResult> {
+async function runCopyProbe(env: Env, cwd: string, account: string | undefined, args: string[] = [ '--resume', SESSION_ID ]): Promise<ProbeResult & { args: string[] }> {
 	const accountLiteral = account === undefined ? 'undefined' : JSON.stringify(account);
 	const probe = `
 		import { copyResumeSessionIfElsewhere } from ${JSON.stringify(builtResumeUrl)};
 		import { launcherRegistry } from ${JSON.stringify(builtRegistryUrl)};
+		const args = ${JSON.stringify(args)};
 		await copyResumeSessionIfElsewhere(
-			${JSON.stringify([ '--resume', SESSION_ID ])},
+			args,
 			${JSON.stringify(cwd)},
 			launcherRegistry.claude,
 			${accountLiteral},
 		);
+		process.stdout.write(JSON.stringify(args));
 	`;
 	const result = await execa('node', [ '--input-type=module', '-e', probe ], {
 		env: {
@@ -77,9 +79,18 @@ async function runCopyProbe(env: Env, cwd: string, account: string | undefined):
 		},
 		reject: false,
 	});
+	const stdout = String(result.stdout ?? '');
+	let mutatedArgs: string[] = args;
+	try {
+		mutatedArgs = JSON.parse(stdout) as string[];
+	} catch {
+		// If the probe failed before writing, fall back to the input.
+	}
+
 	return {
 		exitCode: typeof result.exitCode === 'number' ? result.exitCode : -1,
 		stderr: String(result.stderr ?? ''),
+		args: mutatedArgs,
 	};
 }
 
@@ -199,5 +210,109 @@ test('copyResumeSessionIfElsewhere is silent when no matching session exists any
 		t.false(await fileExists(target));
 		t.notRegex(probe.stderr, /Copied session/);
 		t.notRegex(probe.stderr, /multiple matching/);
+	});
+});
+
+test('copyResumeSessionIfElsewhere expands an unambiguous prefix and copies the session', async t => {
+	await withFreshEnv(async env => {
+		const cwd = '/home/claude/archive';
+		await createTranscript(
+			namedAccountProjectsDir(env, 'vm-10.60.10.58'),
+			'-home-claude-archive',
+			SESSION_ID,
+			'{"type":"user","msg":"from-named"}\n',
+		);
+
+		const prefix = SESSION_ID.slice(0, 8);
+		const probe = await runCopyProbe(env, cwd, undefined, [ '--resume', prefix ]);
+		t.is(probe.exitCode, 0, `${probe.stderr}`);
+
+		t.deepEqual(probe.args, [ '--resume', SESSION_ID ], 'args should be mutated to use the full id');
+
+		const target = path.join(defaultClaudeProjectsDir(env), '-home-claude-archive', `${SESSION_ID}.jsonl`);
+		t.true(await fileExists(target));
+		t.regex(probe.stderr, new RegExp(`Expanded session prefix ${prefix}`));
+		t.regex(probe.stderr, /Copied session 0a7589e7/);
+	});
+});
+
+test('copyResumeSessionIfElsewhere expands prefix in --resume=<prefix> form', async t => {
+	await withFreshEnv(async env => {
+		const cwd = '/home/claude/archive';
+		await createTranscript(
+			namedAccountProjectsDir(env, 'work'),
+			'-home-claude-archive',
+			SESSION_ID,
+			'{"type":"user","msg":"from-work"}\n',
+		);
+
+		const prefix = SESSION_ID.slice(0, 4);
+		const probe = await runCopyProbe(env, cwd, undefined, [ `--resume=${prefix}` ]);
+		t.is(probe.exitCode, 0, `${probe.stderr}`);
+
+		t.deepEqual(probe.args, [ `--resume=${SESSION_ID}` ]);
+	});
+});
+
+test('copyResumeSessionIfElsewhere refuses to expand an ambiguous prefix', async t => {
+	await withFreshEnv(async env => {
+		const cwd = '/home/claude/archive';
+		const idA = '0a000000-0000-0000-0000-000000000001';
+		const idB = '0a000000-0000-0000-0000-000000000002';
+		await createTranscript(
+			namedAccountProjectsDir(env, 'acct-a'),
+			'-home-claude-archive',
+			idA,
+			'{"src":"a"}\n',
+		);
+		await createTranscript(
+			namedAccountProjectsDir(env, 'acct-b'),
+			'-home-claude-archive',
+			idB,
+			'{"src":"b"}\n',
+		);
+
+		const probe = await runCopyProbe(env, cwd, undefined, [ '--resume', '0a' ]);
+		t.is(probe.exitCode, 0, `${probe.stderr}`);
+
+		t.deepEqual(probe.args, [ '--resume', '0a' ], 'args left untouched on ambiguity');
+		t.regex(probe.stderr, /matches multiple sessions/);
+		t.notRegex(probe.stderr, /Copied session/);
+	});
+});
+
+test('copyResumeSessionIfElsewhere leaves the prefix alone when no session matches', async t => {
+	await withFreshEnv(async env => {
+		const cwd = '/home/claude/archive';
+		await createTranscript(
+			namedAccountProjectsDir(env, 'work'),
+			'-home-other',
+			OTHER_ID,
+			'{"src":"unrelated"}\n',
+		);
+
+		const probe = await runCopyProbe(env, cwd, undefined, [ '--resume', 'deadbeef' ]);
+		t.is(probe.exitCode, 0, `${probe.stderr}`);
+
+		t.deepEqual(probe.args, [ '--resume', 'deadbeef' ]);
+		t.notRegex(probe.stderr, /Expanded session prefix/);
+	});
+});
+
+test('copyResumeSessionIfElsewhere expands a --session-id <prefix>', async t => {
+	await withFreshEnv(async env => {
+		const cwd = '/home/claude/archive';
+		await createTranscript(
+			namedAccountProjectsDir(env, 'work'),
+			'-home-claude-archive',
+			SESSION_ID,
+			'{"type":"user","msg":"from-work"}\n',
+		);
+
+		const prefix = SESSION_ID.slice(0, 8);
+		const probe = await runCopyProbe(env, cwd, undefined, [ '--session-id', prefix ]);
+		t.is(probe.exitCode, 0, `${probe.stderr}`);
+
+		t.deepEqual(probe.args, [ '--session-id', SESSION_ID ]);
 	});
 });
