@@ -1,24 +1,33 @@
 import process from 'node:process';
 import test from 'ava';
 import sinon from 'sinon';
-import { handleNotify, notifyAndFocus, type ExecaFn } from './dispatch.js';
+import {
+	handleNotify,
+	notifyAndFocus,
+	type ExecaFn,
+	type ReadPpidFn,
+} from './dispatch.js';
 
 function createExecaStub(stdout = '') {
 	return sinon.stub<Parameters<ExecaFn>, ReturnType<ExecaFn>>()
 		.resolves({ stdout });
 }
 
-function withWindowId<T>(windowId: string | undefined, fn: () => T): T {
+function withEnv<T>(windowId: string | undefined, tmux: string | undefined, fn: () => T): T {
 	const savedWindowId = process.env.WINDOWID;
 	const savedTmux = process.env.TMUX;
+
 	if (windowId === undefined) {
 		delete process.env.WINDOWID;
 	} else {
 		process.env.WINDOWID = windowId;
 	}
 
-	// Prevent resolveWindowId from calling tmux during tests
-	delete process.env.TMUX;
+	if (tmux === undefined) {
+		delete process.env.TMUX;
+	} else {
+		process.env.TMUX = tmux;
+	}
 
 	try {
 		return fn();
@@ -35,6 +44,14 @@ function withWindowId<T>(windowId: string | undefined, fn: () => T): T {
 			process.env.TMUX = savedTmux;
 		}
 	}
+}
+
+function withWindowId<T>(windowId: string | undefined, fn: () => T): T {
+	return withEnv(windowId, undefined, fn);
+}
+
+function withTmux<T>(windowId: string | undefined, fn: () => T): T {
+	return withEnv(windowId, '/tmp/tmux-1000/default,1234,0', fn);
 }
 
 test('handleNotify calls notify-send with summary', async t => {
@@ -142,6 +159,65 @@ test.serial('notifyAndFocus silently handles canceled errors', async t => {
 	} finally {
 		warn.restore();
 	}
+});
+
+test.serial('handleNotify resolves window via tmux client and walks parents', async t => {
+	const execa = sinon.stub<Parameters<ExecaFn>, ReturnType<ExecaFn>>();
+	execa.withArgs('tmux', [ 'display', '-p', '#{client_pid}' ]).resolves({ stdout: '5000' });
+	execa.withArgs('xdotool', [ 'search', '--pid', '5000' ]).resolves({ stdout: '' });
+	execa.withArgs('xdotool', [ 'search', '--pid', '4000' ]).resolves({ stdout: '67890' });
+	execa.withArgs('xdotool', [ 'getactivewindow' ]).resolves({ stdout: '99999' });
+	execa.resolves({ stdout: '' });
+
+	const readPpid = sinon.stub<Parameters<ReadPpidFn>, ReturnType<ReadPpidFn>>();
+	readPpid.withArgs('5000').resolves('4000');
+
+	await withTmux('11111', async () => handleNotify({ type: 'notify', summary: 'Hello' }, execa, readPpid));
+	await new Promise(resolve => {
+		setTimeout(resolve, 0);
+	});
+
+	const notifyCall = execa.getCalls().find(c => c.args[0] === 'notify-send');
+	t.truthy(notifyCall);
+	t.deepEqual(notifyCall?.args[1], [ '--app-name', 'claudex', '--action', 'default=Focus', 'Hello' ]);
+	t.true(execa.calledWith('xdotool', [ 'search', '--pid', '5000' ]));
+	t.true(execa.calledWith('xdotool', [ 'search', '--pid', '4000' ]));
+	t.true(readPpid.calledOnceWith('5000'));
+});
+
+test.serial('handleNotify uses tmux client window directly when found on first try', async t => {
+	const execa = sinon.stub<Parameters<ExecaFn>, ReturnType<ExecaFn>>();
+	execa.withArgs('tmux', [ 'display', '-p', '#{client_pid}' ]).resolves({ stdout: '5000' });
+	execa.withArgs('xdotool', [ 'search', '--pid', '5000' ]).resolves({ stdout: '67890' });
+	execa.withArgs('xdotool', [ 'getactivewindow' ]).resolves({ stdout: '67890' });
+	execa.resolves({ stdout: '' });
+
+	const readPpid = sinon.stub<Parameters<ReadPpidFn>, ReturnType<ReadPpidFn>>();
+
+	await withTmux(undefined, async () => handleNotify({ type: 'notify', summary: 'Hello' }, execa, readPpid));
+
+	const notifyCall = execa.getCalls().find(c => c.args[0] === 'notify-send');
+	t.falsy(notifyCall);
+	t.is(readPpid.callCount, 0);
+});
+
+test.serial('handleNotify falls back to env WINDOWID when tmux walk yields no window', async t => {
+	const execa = sinon.stub<Parameters<ExecaFn>, ReturnType<ExecaFn>>();
+	execa.withArgs('tmux', [ 'display', '-p', '#{client_pid}' ]).resolves({ stdout: '5000' });
+	execa.withArgs('xdotool', [ 'search', '--pid', sinon.match.any ]).resolves({ stdout: '' });
+	execa.withArgs('xdotool', [ 'getactivewindow' ]).resolves({ stdout: '99999' });
+	execa.resolves({ stdout: '' });
+
+	const readPpid = sinon.stub<Parameters<ReadPpidFn>, ReturnType<ReadPpidFn>>().resolves(undefined);
+
+	await withTmux('11111', async () => handleNotify({ type: 'notify', summary: 'Hello' }, execa, readPpid));
+	await new Promise(resolve => {
+		setTimeout(resolve, 0);
+	});
+
+	const notifyCall = execa.getCalls().find(c => c.args[0] === 'notify-send');
+	t.truthy(notifyCall);
+	t.deepEqual(notifyCall?.args[1], [ '--app-name', 'claudex', '--action', 'default=Focus', 'Hello' ]);
 });
 
 test.serial('notifyAndFocus logs debug on non-canceled errors', async t => {

@@ -1,34 +1,79 @@
 import process from 'node:process';
+import fs from 'node:fs/promises';
 import { execa as defaultExeca } from 'execa';
 import { type HostMessage, type NotifyMessage, type JournalMessage } from './protocol.js';
 
 const notifyWaitTimeoutMs = 60_000;
+const maxParentWalkDepth = 16;
 
 export type ExecaFn = (command: string, args: string[], options?: Record<string, unknown>) => Promise<{ stdout?: string }>;
+export type ReadPpidFn = (pid: string) => Promise<string | undefined>;
 
-async function resolveWindowId(execa: ExecaFn): Promise<string | undefined> {
-	if (process.env.TMUX) {
-		try {
-			const result = await execa('tmux', [ 'show-environment', 'WINDOWID' ]);
-			const match = /^WINDOWID=(.+)$/.exec(result.stdout?.trim() ?? '');
-			if (match) {
-				return match[1];
-			}
-		} catch {
-			// Tmux not available or no WINDOWID in session environment
+async function defaultReadPpid(pid: string): Promise<string | undefined> {
+	try {
+		const status = await fs.readFile(`/proc/${pid}/status`, 'utf8');
+		const match = /^PPid:\s+(\d+)$/m.exec(status);
+		const parent = match?.[1];
+		return parent && parent !== '0' ? parent : undefined;
+	} catch {
+		return undefined;
+	}
+}
+
+async function findWindowForPid(pid: string, execa: ExecaFn): Promise<string | undefined> {
+	try {
+		const result = await execa('xdotool', [ 'search', '--pid', pid ]);
+		const windows = result.stdout?.trim().split('\n').filter(Boolean) ?? [];
+		return windows[0];
+	} catch {
+		return undefined;
+	}
+}
+
+async function resolveTmuxClientWindowId(execa: ExecaFn, readPpid: ReadPpidFn): Promise<string | undefined> {
+	let pid: string | undefined;
+	try {
+		const clientResult = await execa('tmux', [ 'display', '-p', '#{client_pid}' ]);
+		pid = clientResult.stdout?.trim();
+	} catch {
+		return undefined;
+	}
+
+	for (let i = 0; i < maxParentWalkDepth && pid; i++) {
+		// eslint-disable-next-line no-await-in-loop
+		const window = await findWindowForPid(pid, execa);
+		if (window) {
+			return window;
+		}
+
+		// eslint-disable-next-line no-await-in-loop
+		pid = await readPpid(pid);
+	}
+
+	return undefined;
+}
+
+async function resolveWindowId(execa: ExecaFn, readPpid: ReadPpidFn): Promise<string | undefined> {
+	const tmuxSocket = process.env.TMUX;
+	const envWindowId = process.env.WINDOWID;
+
+	if (tmuxSocket) {
+		const fromTmux = await resolveTmuxClientWindowId(execa, readPpid);
+		if (fromTmux) {
+			return fromTmux;
 		}
 	}
 
-	return process.env.WINDOWID;
+	return envWindowId;
 }
 
-export async function handleNotify(message: NotifyMessage, execa: ExecaFn = defaultExeca): Promise<void> {
+export async function handleNotify(message: NotifyMessage, execa: ExecaFn = defaultExeca, readPpid: ReadPpidFn = defaultReadPpid): Promise<void> {
 	const args: string[] = [ '--app-name', 'claudex' ];
 	if (message.urgency) {
 		args.push('-u', message.urgency);
 	}
 
-	const windowId = await resolveWindowId(execa);
+	const windowId = await resolveWindowId(execa, readPpid);
 
 	// Skip notification if the window is already focused
 	if (windowId) {
