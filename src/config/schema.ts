@@ -2,13 +2,26 @@ import { z } from 'zod';
 import { allRules, allConfigKeys, extraConfigEntries } from '../hooks/rules/index.js';
 
 // Volume can be a simple string (same path for host and container)
-// or an object with different paths
+// or an object with different paths. The "host:container" shorthand is NOT
+// accepted here — only via the CLI -v flag — because a config-file string
+// containing ':' is otherwise indistinguishable from a same-path mount.
 const volumeMountSchema = z.object({
 	host: z.string(),
 	container: z.string(),
 });
 
-const volumeSchema = z.union([ z.string(), volumeMountSchema ]);
+const volumeStringSchema = z.string().refine(
+	value => !value.includes(':'),
+	{
+		error: issue => (
+			`Volume "${String(issue.input)}" uses the host:container shorthand, `
+			+ 'which is only supported on the CLI (-v). '
+			+ 'In config files, use { "host": "...", "container": "..." } instead.'
+		),
+	},
+);
+
+const volumeSchema = z.union([ volumeStringSchema, volumeMountSchema ]);
 
 const sshConfigSchema = z.object({
 	keys: z.array(z.string()).optional(),
