@@ -383,7 +383,7 @@ export async function main() {
 				let found = false;
 
 				for await (const content of extractContent(transcriptPath, toolUseMap, {
-					targets: new Set([ 'user', 'queue-operation' ] as const),
+					targets: new Set([ 'user', 'queue-operation', 'ask-user-answer' ] as const),
 					sessionId,
 				})) {
 					if (content.text.includes(proof)) {

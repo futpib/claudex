@@ -1,4 +1,4 @@
-export type SearchTarget = 'user' | 'assistant' | 'bash-command' | 'bash-output' | 'tool-use' | 'tool-result' | 'subagent-prompt' | 'compact-summary' | 'queue-operation';
+export type SearchTarget = 'user' | 'assistant' | 'bash-command' | 'bash-output' | 'tool-use' | 'tool-result' | 'subagent-prompt' | 'compact-summary' | 'queue-operation' | 'ask-user-answer';
 
 export type ExtractedContent = {
 	target: SearchTarget;

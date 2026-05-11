@@ -176,24 +176,59 @@ function * extractFromUserEntry(
 
 	if (Array.isArray(content)) {
 		for (const block of content as Array<Record<string, unknown>>) {
-			if (block.type === 'tool_result' && typeof block.tool_use_id === 'string') {
-				const toolName = toolUseMap.get(block.tool_use_id);
-				const isBash = toolName === 'Bash';
-				const target: SearchTarget = isBash ? 'bash-output' : 'tool-result';
-
-				if (!targets.has(target)) {
-					continue;
-				}
-
-				const resultText = extractToolResultText(block);
-				if (resultText) {
-					yield {
-						target, text: resultText, toolName: toolName ?? 'unknown', sessionId, timestamp,
-					};
-				}
-			}
+			yield * extractFromToolResultBlock(block, entry, context);
 		}
 	}
+}
+
+function * extractFromToolResultBlock(
+	block: Record<string, unknown>,
+	entry: Record<string, unknown>,
+	context: ExtractContext,
+): Generator<ExtractedContent> {
+	if (block.type !== 'tool_result' || typeof block.tool_use_id !== 'string') {
+		return;
+	}
+
+	const { toolUseMap, targets, sessionId, timestamp } = context;
+	const toolName = toolUseMap.get(block.tool_use_id);
+	const isBash = toolName === 'Bash';
+	const target: SearchTarget = isBash ? 'bash-output' : 'tool-result';
+
+	if (targets.has(target)) {
+		const resultText = extractToolResultText(block);
+		if (resultText) {
+			yield {
+				target, text: resultText, toolName: toolName ?? 'unknown', sessionId, timestamp,
+			};
+		}
+	}
+
+	if (toolName === 'AskUserQuestion' && targets.has('ask-user-answer')) {
+		for (const answer of extractAskUserAnswers(entry)) {
+			yield {
+				target: 'ask-user-answer',
+				text: answer,
+				toolName: 'AskUserQuestion',
+				sessionId,
+				timestamp,
+			};
+		}
+	}
+}
+
+function extractAskUserAnswers(entry: Record<string, unknown>): string[] {
+	const toolUseResult = entry.toolUseResult as Record<string, unknown> | undefined;
+	if (!toolUseResult || typeof toolUseResult !== 'object') {
+		return [];
+	}
+
+	const answers = toolUseResult.answers as Record<string, unknown> | undefined;
+	if (!answers || typeof answers !== 'object') {
+		return [];
+	}
+
+	return Object.values(answers).filter((v): v is string => typeof v === 'string');
 }
 
 function extractToolResultText(block: Record<string, unknown>): string | undefined {
