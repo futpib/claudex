@@ -16,6 +16,7 @@ import {
 	type LauncherDefinition,
 	readAllConfigFiles, writeSingleConfigFile,
 	resolveEnvFileSources, loadEnvFileSources,
+	expandPathEnv, expandEnvVars,
 } from './config/index.js';
 import {
 	configMain, configMainFromArgv, type Scope, type ParsedArgs,
@@ -1199,7 +1200,8 @@ async function runMain(claudeArgs: string[], options: MainOptions) {
 						childEnv[key] = looked;
 					}
 				} else {
-					childEnv[key] = value;
+					const expanded = expandEnvVars(value);
+					childEnv[key] = key === 'PATH' ? expandPathEnv(expanded) : expanded;
 				}
 			}
 		}
