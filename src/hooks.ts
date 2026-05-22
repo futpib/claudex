@@ -321,7 +321,10 @@ export async function ensureCodexHookSetup(codexDir: string) {
 
 	await upsertCodexConfigToml(codexDir, config => {
 		const features = (config.features ?? {}) as Record<string, unknown>;
-		features.codex_hooks = true;
+		features.hooks = true;
+		// `codex_hooks` was renamed to `hooks`; drop the deprecated key so
+		// Codex stops emitting a deprecation warning on every launch.
+		delete features.codex_hooks;
 		config.features = features;
 	});
 }

@@ -115,8 +115,8 @@ test('ensureCodexHookSetup writes hooks.json with all six events and flips featu
 	}
 
 	const tomlContent = await fs.readFile(path.join(codexDir, 'config.toml'), 'utf8');
-	const config = toml.parse(tomlContent) as { features?: { codex_hooks?: boolean } };
-	t.is(config.features?.codex_hooks, true);
+	const config = toml.parse(tomlContent) as { features?: { hooks?: boolean } };
+	t.is(config.features?.hooks, true);
 });
 
 test('ensureCodexHookSetup preserves user-added hook entries and unrelated config.toml keys', async t => {
@@ -147,11 +147,29 @@ test('ensureCodexHookSetup preserves user-added hook entries and unrelated confi
 
 	const config = toml.parse(await fs.readFile(path.join(codexDir, 'config.toml'), 'utf8')) as {
 		model?: string;
-		features?: { codex_hooks?: boolean; another_flag?: boolean };
+		features?: { hooks?: boolean; another_flag?: boolean };
 	};
 	t.is(config.model, 'gpt-5');
 	t.is(config.features?.another_flag, true);
-	t.is(config.features?.codex_hooks, true);
+	t.is(config.features?.hooks, true);
+});
+
+test('ensureCodexHookSetup migrates deprecated codex_hooks flag to hooks', async t => {
+	const codexDir = await mkTemporaryDir();
+	t.teardown(async () => fs.rm(codexDir, { recursive: true }));
+
+	await fs.writeFile(
+		path.join(codexDir, 'config.toml'),
+		'[features]\ncodex_hooks = true\n',
+	);
+
+	await ensureCodexHookSetup(codexDir);
+
+	const config = toml.parse(await fs.readFile(path.join(codexDir, 'config.toml'), 'utf8')) as {
+		features?: { hooks?: boolean; codex_hooks?: boolean };
+	};
+	t.is(config.features?.hooks, true);
+	t.is(config.features?.codex_hooks, undefined);
 });
 
 test('ensureOpencodeMcpConfig merges without clobbering existing opencode.json keys', async t => {
