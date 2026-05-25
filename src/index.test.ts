@@ -190,6 +190,94 @@ test.serial('confirm accepts AskUserQuestion answer as proof', async t => {
 	});
 });
 
+test.serial('confirm accepts user_message from codex rollout as proof', async t => {
+	await withTemporaryDataDir(async () => {
+		const sessionId = 'codex-confirm-session';
+		const transcriptDir = await mkdtemp(path.join(tmpdir(), 'claudex-confirm-test-codex-'));
+		const transcriptPath = path.join(transcriptDir, 'rollout.jsonl');
+		const entries = [
+			{
+				timestamp: '2026-05-25T10:00:00Z',
+				type: 'session_meta',
+				payload: {
+					id: sessionId,
+					timestamp: '2026-05-25T10:00:00Z',
+					cwd: '/tmp/project',
+					// eslint-disable-next-line @typescript-eslint/naming-convention
+					cli_version: '0.131.0',
+				},
+			},
+			{
+				timestamp: '2026-05-25T10:00:01Z',
+				type: 'event_msg',
+				payload: {
+					type: 'user_message',
+					message: 'please push the branch to origin',
+				},
+			},
+		];
+		await writeFile(transcriptPath, entries.map(line => JSON.stringify(line)).join('\n') + '\n');
+
+		try {
+			const command = 'git push origin master';
+			const actionHash = hashAction(command);
+			const token = await createConfirmationToken(actionHash, 'test', transcriptPath, sessionId);
+			const shortId = generateShortId();
+			await storePendingConfirmation(shortId, token, command);
+
+			const result = await runCli(
+				[ 'confirm', shortId, 'please push the branch to origin' ],
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				{ XDG_DATA_HOME: process.env.XDG_DATA_HOME! },
+			);
+			t.is(result.exitCode, 0, `expected success, got stderr: ${result.stderr}`);
+			t.regex(result.stdout, /Confirmation stored/);
+		} finally {
+			await rm(transcriptDir, { recursive: true });
+		}
+	});
+});
+
+test.serial('confirm rejects proof absent from codex rollout', async t => {
+	await withTemporaryDataDir(async () => {
+		const sessionId = 'codex-confirm-reject-session';
+		const transcriptDir = await mkdtemp(path.join(tmpdir(), 'claudex-confirm-test-codex-'));
+		const transcriptPath = path.join(transcriptDir, 'rollout.jsonl');
+		const entries = [
+			{
+				timestamp: '2026-05-25T10:00:00Z',
+				type: 'session_meta',
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				payload: { id: sessionId, cli_version: '0.131.0' },
+			},
+			{
+				timestamp: '2026-05-25T10:00:01Z',
+				type: 'event_msg',
+				payload: { type: 'user_message', message: 'look at the diff' },
+			},
+		];
+		await writeFile(transcriptPath, entries.map(line => JSON.stringify(line)).join('\n') + '\n');
+
+		try {
+			const command = 'git push origin master';
+			const actionHash = hashAction(command);
+			const token = await createConfirmationToken(actionHash, 'test', transcriptPath, sessionId);
+			const shortId = generateShortId();
+			await storePendingConfirmation(shortId, token, command);
+
+			const result = await runCli(
+				[ 'confirm', shortId, 'push the branch' ],
+				// eslint-disable-next-line @typescript-eslint/naming-convention
+				{ XDG_DATA_HOME: process.env.XDG_DATA_HOME! },
+			);
+			t.is(result.exitCode, 1);
+			t.regex(result.stderr, /Proof quote not found/);
+		} finally {
+			await rm(transcriptDir, { recursive: true });
+		}
+	});
+});
+
 test.serial('confirm rejects proof not present in any user-visible field', async t => {
 	await withTemporaryDataDir(async () => {
 		const sessionId = 'aq-confirm-reject-session';

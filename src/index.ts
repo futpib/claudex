@@ -355,7 +355,8 @@ export async function main() {
 			const {
 				loadPendingConfirmation, verifyConfirmationToken, storeConfirmation,
 			} = await import('./confirm.js');
-			const { buildToolUseMap, extractContent } = await import('./transcript/parser.js');
+			const { buildToolUseMap, extractContent, detectTranscriptFormat } = await import('./transcript/parser.js');
+			const { extractCodexContent } = await import('./transcript/codex-parser.js');
 
 			let pending;
 			try {
@@ -380,16 +381,29 @@ export async function main() {
 			const { actionHash, sessionId, transcriptPath } = payload;
 
 			try {
-				const toolUseMap = await buildToolUseMap(transcriptPath);
+				const format = await detectTranscriptFormat(transcriptPath);
 				let found = false;
 
-				for await (const content of extractContent(transcriptPath, toolUseMap, {
-					targets: new Set([ 'user', 'queue-operation', 'ask-user-answer' ] as const),
-					sessionId,
-				})) {
-					if (content.text.includes(proof)) {
-						found = true;
-						break;
+				if (format === 'codex') {
+					for await (const content of extractCodexContent(transcriptPath, {
+						targets: new Set([ 'user' ] as const),
+						sessionId,
+					})) {
+						if (content.text.includes(proof)) {
+							found = true;
+							break;
+						}
+					}
+				} else {
+					const toolUseMap = await buildToolUseMap(transcriptPath);
+					for await (const content of extractContent(transcriptPath, toolUseMap, {
+						targets: new Set([ 'user', 'queue-operation', 'ask-user-answer' ] as const),
+						sessionId,
+					})) {
+						if (content.text.includes(proof)) {
+							found = true;
+							break;
+						}
 					}
 				}
 

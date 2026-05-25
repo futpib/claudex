@@ -4,11 +4,49 @@ import type { ExtractedContent, SearchTarget } from './types.js';
 
 type ToolUseMap = Map<string, string>;
 
+export type TranscriptFormat = 'claude' | 'codex';
+
+const codexTopLevelTypes = new Set([
+	'session_meta',
+	'response_item',
+	'event_msg',
+	'turn_context',
+	'compacted',
+]);
+
 function createReadlineInterface(filePath: string): readline.Interface {
 	return readline.createInterface({
 		input: fs.createReadStream(filePath, { encoding: 'utf8' }),
 		crlfDelay: Number.POSITIVE_INFINITY,
 	});
+}
+
+export async function detectTranscriptFormat(filePath: string): Promise<TranscriptFormat> {
+	const rl = createReadlineInterface(filePath);
+	try {
+		for await (const line of rl) {
+			if (!line) {
+				continue;
+			}
+
+			let entry: Record<string, unknown>;
+			try {
+				entry = JSON.parse(line) as Record<string, unknown>;
+			} catch {
+				continue;
+			}
+
+			if (typeof entry.type === 'string' && codexTopLevelTypes.has(entry.type)) {
+				return 'codex';
+			}
+
+			return 'claude';
+		}
+	} finally {
+		rl.close();
+	}
+
+	return 'claude';
 }
 
 export async function buildToolUseMap(filePath: string): Promise<ToolUseMap> {

@@ -4,7 +4,7 @@ import {
 } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import test from 'ava';
-import { buildToolUseMap, extractContent } from './parser.js';
+import { buildToolUseMap, detectTranscriptFormat, extractContent } from './parser.js';
 import type { ExtractedContent, SearchTarget } from './types.js';
 
 async function writeTranscript(lines: Array<Record<string, unknown>>): Promise<{ filePath: string; dispose: () => Promise<void> }> {
@@ -119,6 +119,63 @@ test('yields one ask-user-answer per answer for multi-question polls', async t =
 		t.deepEqual(texts, [ 'answer one', 'answer two' ]);
 	} finally {
 		await fixture.dispose();
+	}
+});
+
+test('detectTranscriptFormat returns codex for session_meta first line', async t => {
+	const fixture = await writeTranscript([
+		{
+			timestamp: '2026-05-25T10:00:00Z',
+			type: 'session_meta',
+			// eslint-disable-next-line @typescript-eslint/naming-convention
+			payload: { id: 'codex-abc', cli_version: '0.131.0' },
+		},
+	]);
+	try {
+		t.is(await detectTranscriptFormat(fixture.filePath), 'codex');
+	} finally {
+		await fixture.dispose();
+	}
+});
+
+test('detectTranscriptFormat returns codex for event_msg first line', async t => {
+	const fixture = await writeTranscript([
+		{
+			timestamp: '2026-05-25T10:00:00Z',
+			type: 'event_msg',
+			payload: { type: 'user_message', message: 'hi' },
+		},
+	]);
+	try {
+		t.is(await detectTranscriptFormat(fixture.filePath), 'codex');
+	} finally {
+		await fixture.dispose();
+	}
+});
+
+test('detectTranscriptFormat returns claude for typical Claude transcript', async t => {
+	const fixture = await writeTranscript([
+		{
+			type: 'user',
+			sessionId: 'claude-sess',
+			message: { role: 'user', content: 'hello' },
+		},
+	]);
+	try {
+		t.is(await detectTranscriptFormat(fixture.filePath), 'claude');
+	} finally {
+		await fixture.dispose();
+	}
+});
+
+test('detectTranscriptFormat returns claude for empty file', async t => {
+	const dir = await mkdtemp(path.join(tmpdir(), 'claudex-parser-test-'));
+	const filePath = path.join(dir, 'transcript.jsonl');
+	await writeFile(filePath, '');
+	try {
+		t.is(await detectTranscriptFormat(filePath), 'claude');
+	} finally {
+		await rm(dir, { recursive: true });
 	}
 });
 
