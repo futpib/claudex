@@ -85,7 +85,7 @@ INIT_SCRIPT
 # Create non-root user WITHOUT sudo access
 RUN set -xe; \
 	useradd -m -u ${USER_ID} ${USERNAME}; \
-	mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share; \
+	mkdir -p /home/${USERNAME}/.config /home/${USERNAME}/.cache /home/${USERNAME}/.local/bin /home/${USERNAME}/.local/share /home/${USERNAME}/.local/state; \
 	chown -R ${USERNAME}:${USERNAME} /home/${USERNAME}
 
 # Switch to non-root user (no sudo from this point)
