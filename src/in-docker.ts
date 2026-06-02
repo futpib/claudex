@@ -20,8 +20,75 @@ const settingsSchema = z.object({
 
 type Settings = z.infer<typeof settingsSchema>;
 
-async function setupHookSymlinks() {
-	const claudeDir = process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude');
+// A claudex-managed hook command always has the shape
+// "<path-to-claudex> hook <event>" (see hookCommand() in hooks.ts), so its
+// leading token is an absolute path whose basename is "claudex". Any other
+// command (e.g. "slopctl hook PreToolUse") belongs to a different tool and
+// must be left strictly alone — its binary is not ours to recreate, and an
+// absolute foreign path would otherwise get its real binary overwritten.
+function claudexHookBinPath(hookCommand: string): string | undefined {
+	const bin = hookCommand.split(' ')[0];
+	if (!path.isAbsolute(bin) || path.basename(bin) !== 'claudex') {
+		return undefined;
+	}
+
+	return bin;
+}
+
+// The distinct claudex binary paths referenced by hook commands. Non-claudex
+// commands are dropped here so we never touch their binaries.
+function collectClaudexBins(hooks: NonNullable<Settings['hooks']>): Set<string> {
+	const bins = new Set<string>();
+	const commands = Object.values(hooks)
+		.flatMap(groups => groups.flatMap(group => group.hooks))
+		.filter(hook => hook.type === 'command' && hook.command)
+		.map(hook => hook.command);
+
+	for (const command of commands) {
+		const bin = claudexHookBinPath(command);
+		if (bin) {
+			bins.add(bin);
+		}
+	}
+
+	return bins;
+}
+
+// Make `claudexBin` resolve to a wrapper that runs the in-container CLI. The
+// path `which claudex` produced on the host usually doesn't exist inside the
+// container, so we create it there — but never clobber a file that isn't
+// already our wrapper: a real claudex on PATH can service the hook itself, and
+// an unrelated file at this path must not be destroyed.
+async function ensureClaudexWrapper(claudexBin: string, cliPath: string, wrapperContent: string): Promise<void> {
+	let existing: string | undefined;
+	try {
+		existing = await fs.readFile(claudexBin, 'utf8');
+	} catch (error) {
+		if (!isErrnoException(error) || error.code !== 'ENOENT') {
+			throw error;
+		}
+		// ENOENT — nothing there yet, safe to create.
+	}
+
+	if (existing !== undefined && !existing.includes(cliPath)) {
+		console.warn(`Warning: refusing to overwrite existing non-claudex file at ${claudexBin}`);
+		return;
+	}
+
+	await fs.mkdir(path.dirname(claudexBin), { recursive: true });
+
+	// Replace any stale wrapper, then (re)write the current one.
+	try {
+		await fs.unlink(claudexBin);
+	} catch {
+		// Ignore if file doesn't exist
+	}
+
+	await fs.writeFile(claudexBin, wrapperContent, { mode: 0o755 });
+}
+
+export async function setupHookSymlinks(claudeConfigDir?: string) {
+	const claudeDir = claudeConfigDir ?? process.env.CLAUDE_CONFIG_DIR ?? path.join(os.homedir(), '.claude');
 	const settingsPath = path.join(claudeDir, 'settings.json');
 
 	try {
@@ -37,48 +104,16 @@ async function setupHookSymlinks() {
 		const currentFilePath = fileURLToPath(currentFileUrl);
 		const buildDir = path.dirname(currentFilePath);
 		const cliPath = path.join(buildDir, 'cli.js');
+		const wrapperContent = `#!/bin/sh\nexec node ${cliPath} "$@"\n`;
 
-		// Collect all hook commands from settings
-		const hookCommands = new Set<string>();
-		for (const hookType of Object.values(settings.hooks)) {
-			for (const matcher of hookType) {
-				for (const hook of matcher.hooks) {
-					if (hook.type === 'command' && hook.command) {
-						hookCommands.add(hook.command);
-					}
-				}
-			}
-		}
-
-		// Create symlinks for claudex binary references in hook commands
-		for (const hookCommand of hookCommands) {
+		for (const claudexBin of collectClaudexBins(settings.hooks)) {
 			try {
-				// Hook commands are now "claudex hook <name>" or "/path/to/claudex hook <name>"
-				// We need to ensure the claudex binary path is available
-				const parts = hookCommand.split(' ');
-				const claudexBin = parts[0];
-
-				// Create parent directories if they don't exist
-				const hookDir = path.dirname(claudexBin);
 				// eslint-disable-next-line no-await-in-loop
-				await fs.mkdir(hookDir, { recursive: true });
-
-				// Remove existing symlink/file if it exists
-				try {
-					// eslint-disable-next-line no-await-in-loop
-					await fs.unlink(claudexBin);
-				} catch {
-					// Ignore if file doesn't exist
-				}
-
-				// Create a wrapper script that invokes node with the CLI entry point
-				const wrapperContent = `#!/bin/sh\nexec node ${cliPath} "$@"\n`;
-				// eslint-disable-next-line no-await-in-loop
-				await fs.writeFile(claudexBin, wrapperContent, { mode: 0o755 });
+				await ensureClaudexWrapper(claudexBin, cliPath, wrapperContent);
 			} catch (error) {
 				// Skip this hook if we can't create it (e.g., permission denied)
 				if (error instanceof Error) {
-					console.warn(`Warning: Could not create hook wrapper at ${hookCommand}: ${error.message}`);
+					console.warn(`Warning: Could not create hook wrapper at ${claudexBin}: ${error.message}`);
 				}
 			}
 		}
